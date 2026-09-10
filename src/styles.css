@@ -1,0 +1,110 @@
+@import '@fontsource-variable/inter';
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--app-background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --app-background: oklch(0.975 0.004 255);
+  --sidebar: oklch(0.22 0.025 258);
+  --sidebar-text: oklch(0.91 0.01 255);
+  --sidebar-muted: oklch(0.68 0.02 255);
+  --surface: oklch(1 0 0);
+  --surface-subtle: oklch(0.96 0.006 255);
+  --surface-raised: oklch(0.99 0.003 255);
+  --text: oklch(0.25 0.025 258);
+  --text-secondary: oklch(0.47 0.025 258);
+  --text-muted: oklch(0.61 0.018 258);
+  --border: oklch(0.9 0.01 255);
+  --border-strong: oklch(0.82 0.015 255);
+  --accent: oklch(0.53 0.16 256);
+  --accent-hover: oklch(0.47 0.16 256);
+  --accent-contrast: oklch(0.99 0.005 255);
+  --focus: oklch(0.67 0.16 248);
+  --success: oklch(0.42 0.1 158);
+  --success-soft: oklch(0.95 0.04 158);
+  --success-border: oklch(0.82 0.08 158);
+  --warning: oklch(0.46 0.11 67);
+  --warning-soft: oklch(0.96 0.045 80);
+  --warning-border: oklch(0.84 0.09 76);
+  --danger: oklch(0.54 0.2 27);
+  --danger-soft: oklch(0.96 0.035 25);
+  --danger-border: oklch(0.83 0.09 25);
+  --info: oklch(0.47 0.13 250);
+  --info-soft: oklch(0.95 0.035 250);
+  --info-border: oklch(0.82 0.08 250);
+  --shadow-card: 0 1px 2px oklch(0.25 0.02 258 / 0.05), 0 8px 28px oklch(0.25 0.02 258 / 0.05);
+  --radius-card: 0.875rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --app-background: oklch(0.18 0.018 258);
+  --sidebar: oklch(0.14 0.02 258);
+  --sidebar-text: oklch(0.9 0.012 255);
+  --sidebar-muted: oklch(0.65 0.02 255);
+  --surface: oklch(0.23 0.02 258);
+  --surface-subtle: oklch(0.27 0.02 258);
+  --surface-raised: oklch(0.25 0.02 258);
+  --text: oklch(0.92 0.01 255);
+  --text-secondary: oklch(0.72 0.02 255);
+  --text-muted: oklch(0.62 0.018 255);
+  --border: oklch(0.34 0.02 258);
+  --border-strong: oklch(0.43 0.025 258);
+  --accent: oklch(0.68 0.16 250);
+  --accent-hover: oklch(0.73 0.14 250);
+  --accent-contrast: oklch(0.16 0.02 258);
+  --success: oklch(0.76 0.12 157);
+  --success-soft: oklch(0.28 0.05 157);
+  --success-border: oklch(0.42 0.07 157);
+  --warning: oklch(0.8 0.13 77);
+  --warning-soft: oklch(0.29 0.045 70);
+  --warning-border: oklch(0.44 0.08 74);
+  --danger: oklch(0.72 0.17 25);
+  --danger-soft: oklch(0.28 0.055 25);
+  --danger-border: oklch(0.43 0.09 25);
+  --info: oklch(0.73 0.13 247);
+  --info-soft: oklch(0.28 0.05 250);
+  --info-border: oklch(0.42 0.08 250);
+  --shadow-card: 0 1px 2px oklch(0.05 0 0 / 0.2), 0 10px 30px oklch(0.05 0 0 / 0.18);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 1180px; min-height: 100vh; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+
+::selection { background: var(--info-border); }
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.eyebrow {
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tab-trigger[data-state='active'] {
+  color: var(--accent);
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+.select-content, .dialog-content { animation: enter 120ms ease-out; }
+@keyframes enter { from { opacity: 0; transform: translateY(-4px) scale(.99); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
