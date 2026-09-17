@@ -20,7 +20,7 @@ const standardPath: PipelineStatus[] = [
 
 const legalBasis = 'Exemplu demonstrativ — bază legală nevalidată'
 
-const ruleReferences: Record<RuleCategory, LineClassification['rule']> = {
+const ruleReferences: Partial<Record<RuleCategory, LineClassification['rule']>> = {
   ACCOUNT: { ruleId: 'rule-account-global', reference: 'REG-DEMO-CONT-01', version: 2, origin: 'GLOBAL' },
   VAT: { ruleId: 'rule-vat-global', reference: 'REG-DEMO-TVA-01', version: 1, origin: 'GLOBAL' },
   DEDUCTIBILITY: { ruleId: 'rule-deductibility-global', reference: 'REG-DEMO-DED-01', version: 1, origin: 'GLOBAL' },

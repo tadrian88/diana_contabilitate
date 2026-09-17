@@ -1,5 +1,6 @@
+import {emptyCompany,type ClientDetail,type ClientWrite,type ReadinessSection} from '../domain/client-management'
 import type { ClientScope, Invoice, PipelineStatus } from '../domain/invoice'
-import type { InvoiceRepository } from '../repositories/invoiceRepository'
+import type { ContractDocument, InvoiceRepository, ReviewedContract, SPVConnection } from '../repositories/invoiceRepository'
 import { mockClients, mockContracts, mockInvoices, mockRules } from './scenarios'
 import type { CreateClientOverrideInput, CreateRuleVersionInput } from '../repositories/invoiceRepository'
 
@@ -16,12 +17,62 @@ const activityFor = (invoice: Invoice, label: string, detail: string, before?: s
 })
 
 export class MockInvoiceRepository implements InvoiceRepository {
+  readonly runtimeAuthority = 'MOCK' as const
   private invoices = new Map(mockInvoices.map((invoice) => [invoice.id, clone(invoice)]))
   private contracts = new Map(mockContracts.map((contract) => [contract.id, clone(contract)]))
   private rules = new Map(mockRules.map((rule) => [rule.id, clone(rule)]))
+  private spvConnections = new Map<string, SPVConnection>([
+    ['client-alfa', { status: 'NOT_CONNECTED', lastSyncStatus: 'NEVER', importAutomatic: false, configurationReady: true, identityValidation: 'NOT_AVAILABLE' }],
+    ['client-beta', { status: 'CONNECTED', environment: 'TEST', connectedAt: '2026-09-14T09:00:00.000Z', lastSyncAt: '2026-09-14T10:00:00.000Z', lastSuccessfulSyncAt: '2026-09-14T10:00:00.000Z', lastSyncStatus: 'SUCCEEDED', importAutomatic: true, configurationReady: true, identityValidation: 'NOT_AVAILABLE' }],
+  ])
+  private clientDetails = new Map<string,ClientDetail>()
+  private clientCommands = new Map<string,{payload:string;clientId:string}>()
+  private contractDocuments = new Map<string, ContractDocument>()
+  private contractDocumentFiles = new Map<string,File>()
 
   async listClients() {
-    return clone(mockClients)
+    return clone([...mockClients.filter(c=>!this.clientDetails.has(c.id)),...this.clientDetails.values()].map(c=>'client' in c?c.client:c))
+  }
+
+  async getClientDetail(clientId:string):Promise<ClientDetail>{
+    let d=this.clientDetails.get(clientId)
+    if(!d){const client=mockClients.find(c=>c.id===clientId);if(!client)throw new Error('Client inexistent');d={client:{...client,company:{...emptyCompany,name:client.name,cui:client.cui},status:'ACTIVE',revision:1},profiles:[],sagaEnabled:false,history:[],onboarding:{} as ClientDetail['onboarding']};this.clientDetails.set(clientId,d)}
+    const section=(status:ReadinessSection['status'],explanation:string,target:string):ReadinessSection=>({status,explanation,target,nextAction:'Vezi configurarea'})
+    const date=new Date().toISOString().slice(0,10);const current=d.profiles.find(p=>p.effectiveFrom<=date&&(!p.effectiveTo||p.effectiveTo>=date));const spv=await this.getSPVConnection(clientId)
+    d.onboarding={company:section('READY','Identitatea companiei este salvată.','company'),accountingProfile:section(current?.approval?.actor?'READY':d.profiles.length?'INCOMPLETE':'NOT_STARTED',current?.approval?.actor?'Profil aplicabil aprobat.':'Profil configurat sau aprobare necesară.','accounting-profile'),anaf:section(spv.status==='CONNECTED'?'READY':spv.status==='NOT_CONNECTED'?'NOT_STARTED':'ACTION_REQUIRED','Certificatul rămâne în browser/token; OAuth nu confirmă acoperirea CUI.','anaf-spv'),saga:section(d.sagaEnabled?'READY':'NOT_STARTED',d.sagaEnabled?'Export SAGA configurat; validare în așteptare.':'Export XML neconfigurat.','saga-setup'),classification:section('NOT_STARTED','Reguli de producție neconfigurate. Facturile pot fi importate și trimise la revizuire.','classification-status'),overall:'CONFIGURATION_INCOMPLETE',blockers:['Reguli de producție neconfigurate'],currentProfileId:current?.id,sagaConfigurationReady:d.sagaEnabled,sagaMappingApproved:false,sagaValidation:'VALIDATION_PENDING'}
+    if(current?.approval?.actor&&spv.status==='CONNECTED'&&d.sagaEnabled)d.onboarding.overall='CORE_CONFIGURED_AUTOMATION_PENDING'
+    if(d.client.status==='INACTIVE')d.onboarding.overall='INACTIVE'
+    return clone(d)
+  }
+  private clientWriteQueue:Promise<unknown>=Promise.resolve()
+  writeClient(input:ClientWrite,key:string):Promise<ClientDetail>{const pending=this.clientWriteQueue.then(()=>this.executeClientWrite(input,key));this.clientWriteQueue=pending.catch(()=>undefined);return pending}
+  private async executeClientWrite(input:ClientWrite,key:string):Promise<ClientDetail>{
+    const payload=JSON.stringify(input);const prior=this.clientCommands.get(key);if(prior){if(prior.payload!==payload)throw new Error('Comandă reutilizată');return this.getClientDetail(prior.clientId)}
+    const id=input.kind==='create'?`client-created-${this.clientDetails.size+1}`:input.clientId
+    if(input.kind==='create'||input.kind==='company'){
+      const c=input.company;const normalized=c.country==='RO'?c.cui.toUpperCase().replace(/^RO\s*/,'').trim():c.cui.toUpperCase().trim()
+      const existing=await this.listClients()
+      if(!c.name.trim()||!c.cui.trim()||(c.country==='RO'&&!/^[1-9][0-9]{1,9}$/.test(normalized)))throw new Error('Identitate invalidă')
+      if(existing.some(v=>v.id!==id&&(v.company?.country??'RO')===c.country&&v.cui.toUpperCase().replace(/^RO\s*/,'').trim()===normalized))throw new Error('Companie duplicată')
+      if(input.kind==='create')this.clientDetails.set(id,{client:{id,name:c.name,cui:c.cui,company:clone(c),status:'ONBOARDING',revision:1,normalizedIdentifier:normalized},profiles:[],history:[],sagaEnabled:false,onboarding:{} as ClientDetail['onboarding']})
+    }
+    const d=await this.getClientDetail(id)
+    if(input.kind!=='create'&&input.expectedRevision!==d.client.revision)throw new Error('Revizie învechită')
+    let label='Client creat'
+    if(input.kind==='company'){
+      if(input.company.cui!==d.client.cui&&(d.profiles.length||this.invoices.size&&[...this.invoices.values()].some(i=>i.clientId===id)||d.client.cui.startsWith('RO-DEMO')))throw new Error('Identitate protejată')
+      d.client={...d.client,name:input.company.name,cui:input.company.cui,company:clone(input.company)};label='Date companie actualizate'
+    }
+    if(input.kind==='lifecycle'){d.client.status=input.status;label=input.status==='INACTIVE'?'Client dezactivat':'Client reactivat'}
+    if(input.kind==='saga-configuration'){d.sagaEnabled=input.sagaEnabled;label='Configurație export SAGA actualizată'}
+    if(input.kind==='accounting-profiles'){
+      if(input.expectedProfileVersion!==(d.profiles[0]?.version??0)||input.profile.effectiveTo&&input.profile.effectiveTo<input.profile.effectiveFrom)throw new Error('Versiune sau perioadă invalidă')
+      if(input.approve&&(!input.evidence.length||d.profiles.some(p=>p.approval?.actor&&(!p.effectiveTo||input.profile.effectiveFrom<=p.effectiveTo)&&(!input.profile.effectiveTo||p.effectiveFrom<=input.profile.effectiveTo))))throw new Error('Dovezi sau suprapunere invalidă')
+      d.profiles.unshift({...clone(input.profile),id:`profile-${id}-${d.profiles.length+1}`,clientId:id,version:d.profiles.length+1,testOnly:false,approval:input.approve?{actor:'Contabil demo',at:new Date().toISOString(),evidence:input.evidence}:undefined});label=input.approve?'Versiune profil aprobată':'Versiune profil configurată'
+    }
+    if(input.kind!=='create')d.client.revision=(d.client.revision??1)+1
+    d.history.unshift({id:`history-${id}-${d.history.length+1}`,label,actor:'Contabil demo',timestamp:new Date().toISOString(),detail:label});this.clientDetails.set(id,d)
+    const detail=await this.getClientDetail(id);this.clientCommands.set(key,{payload,clientId:id});return detail
   }
 
   async listInvoices(scope: ClientScope) {
@@ -34,6 +85,15 @@ export class MockInvoiceRepository implements InvoiceRepository {
     return invoice ? clone(invoice) : undefined
   }
 
+  async listValidationTasks(scope: ClientScope) {
+    const invoices = [...this.invoices.values()].filter((invoice) => invoice.task && (scope === 'all' || invoice.clientId === scope))
+    return clone(invoices.map((invoice) => ({
+      task: invoice.task!,
+      invoice,
+      client: mockClients.find((client) => client.id === invoice.clientId),
+    })))
+  }
+
   async listContracts(scope: ClientScope) {
     const contracts = [...this.contracts.values()]
     return clone(scope === 'all' ? contracts : contracts.filter((contract) => contract.clientId === scope))
@@ -43,6 +103,17 @@ export class MockInvoiceRepository implements InvoiceRepository {
     const contract = this.contracts.get(id)
     return contract ? clone(contract) : undefined
   }
+
+  async listContractInvoices(contractId: string) {
+    return clone([...this.invoices.values()].filter((invoice) => invoice.selectedContractId === contractId))
+  }
+
+  async listContractDocuments(clientId:string){return clone([...this.contractDocuments.values()].filter(item=>item.clientId===clientId))}
+  async getContractDocument(clientId:string,documentId:string){const item=this.contractDocuments.get(documentId);return item?.clientId===clientId?clone(item):undefined}
+async uploadContractDocument(clientId:string,file:File){const id=`contract-document-${this.contractDocuments.size+1}`;const field=(value:string|null,page:number|null=1)=>({value,status:value?'PRESENT' as const:'MISSING' as const,confidence:value?'HIGH' as const:'UNKNOWN' as const,evidence:{page,snippet:value??''},alternatives:[]});const item:ContractDocument={id,clientId,originalFilename:file.name,mimeType:'application/pdf',sizeBytes:file.size,sha256:`mock-${id}`,status:'READY_FOR_REVIEW',lifecycleState:'ACTIVE',revision:2,uploadedAt:new Date().toISOString(),uploadedBy:'Contabil demo',buyerMismatch:false,extraction:{id:`extraction-${id}`,provider:'DETERMINISTIC_DEMO',model:'fake-contract-extractor',schemaVersion:'CONTRACT_EXTRACTION_V1',promptVersion:'CONTRACT_EXTRACTION_PROMPT_V1',status:'SUCCEEDED',startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),proposal:{supplierName:field('Furnizor extras SRL'),supplierCui:field('RO12345678'),reference:field('CTR-2026-01'),effectiveFrom:field('2026-01-01'),effectiveTo:field('2027-12-31',2),totalValue:field('125000.00',3),currency:field('RON',3),unitType:field('servicii'),paymentTerms:field('30 zile'),buyerCui:field('RO10000000')}}};this.contractDocumentFiles.set(id,file);this.contractDocuments.set(id,item);return clone(item)}
+  async confirmContractDocument(clientId:string,document:ContractDocument,input:ReviewedContract){const item=this.contractDocuments.get(document.id);if(!item||item.clientId!==clientId||item.revision!==document.revision)throw new Error('Extragerea s-a modificat.');item.status='CONFIRMED';item.revision++;item.confirmedValues=clone(input);item.confirmedContractId=`contract-confirmed-${document.id}`;item.confirmedAt=new Date().toISOString();item.confirmedBy='Contabil demo';this.contracts.set(item.confirmedContractId,{id:item.confirmedContractId,clientId,reference:input.reference,supplierName:input.supplierName,period:`${input.effectiveFrom} — ${input.effectiveTo}`,value:{amount:Number(input.totalValue),currency:input.currency},currency:input.currency,unitType:input.unitType,paymentTerms:input.paymentTerms,sourceReference:item.originalFilename,sourceMetadata:item.extraction?.schemaVersion,sourceDocumentId:item.id});return {contractId:item.confirmedContractId,changed:true}}
+  async getContractDocumentFile(clientId:string,documentId:string){const item=this.contractDocuments.get(documentId);if(item?.clientId!==clientId)throw new Error('Documentul nu există.');return this.contractDocumentFiles.get(documentId)??new Blob(['%PDF-1.4\n%%EOF'],{type:'application/pdf'})}
+  async retryContractExtraction(clientId:string,documentId:string,revision:number){const item=this.contractDocuments.get(documentId);if(!item||item.clientId!==clientId||item.revision!==revision)throw new Error('Extragerea s-a modificat.');item.status='READY_FOR_REVIEW';item.revision++}
 
   async listRules(scope: ClientScope) {
     const rules = [...this.rules.values()]
@@ -153,6 +224,44 @@ export class MockInvoiceRepository implements InvoiceRepository {
     }
     return clone(invoice)
   }
+
+  async getSPVConnection(clientId: string): Promise<SPVConnection> {
+    const fallback: SPVConnection = { status: 'NOT_CONNECTED', lastSyncStatus: 'NEVER', importAutomatic: false, configurationReady: true, identityValidation: 'NOT_AVAILABLE' }
+    return clone(this.spvConnections.get(clientId) ?? fallback)
+  }
+
+  async startSPVOAuth(clientId: string) {
+    return `https://anaf.example/authorize?state=demo-${encodeURIComponent(clientId)}`
+  }
+
+  async requestSPVSync(clientId: string) {
+    const connection = this.spvConnections.get(clientId)
+    if (!connection || connection.status !== 'CONNECTED') throw new Error('Conexiunea ANAF necesită reconectare.')
+    connection.lastSyncStatus = 'RUNNING'
+    return clone(connection)
+  }
+
+	async disconnectSPV(clientId: string) {
+    const connection = this.spvConnections.get(clientId)
+    if (!connection || connection.status === 'NOT_CONNECTED') throw new Error('Conexiunea ANAF nu există.')
+    connection.status = 'DISABLED'; connection.importAutomatic = false
+    return clone(connection)
+	}
+
+	async downloadSagaArtifact(_clientId: string, invoiceId: string) {
+		const invoice = this.requireInvoice(invoiceId)
+		if (invoice.sagaExport?.artifactStatus !== 'GENERATED') throw new Error('Fișierul SAGA nu este disponibil.')
+		return { blob: new Blob(['<Facturi/>'], { type: 'application/xml' }), filename: invoice.sagaExport.filename ?? `saga-${invoiceId}.xml` }
+	}
+
+	async confirmSagaImport(clientId: string, invoiceId: string, attemptId: string) {
+		const invoice = this.requireInvoice(invoiceId)
+		if (invoice.clientId !== clientId || invoice.sagaExport?.attemptId !== attemptId || invoice.pipelineStatus !== 'EXPORTING') throw new Error('Exportul SAGA nu poate fi confirmat.')
+		invoice.pipelineStatus = 'EXPORTED'; invoice.sagaStatus = 'EXPORTED'; invoice.autoRun = false
+		invoice.sagaExport.confirmedAt = '2026-09-14T12:00:00.000Z'; invoice.sagaExport.confirmedBy = 'Contabil demo'; invoice.sagaExport.confirmationType = 'HUMAN'
+		invoice.activity.push(activityFor(invoice, 'Import SAGA confirmat manual', 'Importul fișierului în SAGA a fost confirmat de contabil.', 'EXPORTING', 'EXPORTED'))
+		return clone(invoice)
+	}
 
   private requireInvoice(id: string) {
     const invoice = this.invoices.get(id)

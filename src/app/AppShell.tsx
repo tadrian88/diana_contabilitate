@@ -1,5 +1,5 @@
 import * as Select from '@radix-ui/react-select'
-import { Building2, Check, ChevronDown, ClipboardCheck, FileText, Gauge, Moon, Scale, ScrollText, Sun } from 'lucide-react'
+import { Building2, Check, ChevronDown, ClipboardCheck, FileText, Gauge, LogOut, Moon, Scale, ScrollText, Sun, UserRound } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Button } from '../components/ui/button'
@@ -7,6 +7,8 @@ import { useClients } from '../features/invoices/invoice-hooks'
 import { useClientScope } from './scope-context'
 import { useInvoiceRepository } from './repository-context'
 import { useTheme } from './theme-context'
+import { useAuth } from '../features/auth/AuthContext'
+import { AutomaticWorkflowRunner } from './AutomaticWorkflowRunner'
 
 const navItems = [
   { label: 'Dashboard', icon: Gauge, to: '/', enabled: true },
@@ -24,6 +26,7 @@ export function AppShell() {
   const { data: clients = [] } = useClients()
   const { scope, setScope } = useClientScope()
   const { theme, toggleTheme } = useTheme()
+  const auth = useAuth()
   const activeClient = clients.find((client) => client.id === scope)
   const pageTitle = location.pathname.startsWith('/invoices/') ? 'Detaliu factură' : location.pathname === '/invoices' ? 'Facturi' : location.pathname.startsWith('/contracts/') ? 'Detaliu contract' : location.pathname === '/contracts' ? 'Contracte' : location.pathname.startsWith('/rules/') ? 'Detaliu regulă' : location.pathname === '/rules' ? 'Reguli' : location.pathname.startsWith('/clients/') ? 'Context client' : location.pathname === '/clients' ? 'Clienți' : location.pathname === '/tasks' ? 'Task Inbox' : 'Dashboard operațional'
 
@@ -31,11 +34,13 @@ export function AppShell() {
     let destination: string | undefined
     if (nextScope !== 'all') {
       const invoiceId = matchDetailId(location.pathname, 'invoices')
-      const contractId = matchDetailId(location.pathname, 'contracts')
+      const contractId = location.pathname==='/contracts/upload'?undefined:matchDetailId(location.pathname, 'contracts')
       const ruleId = matchDetailId(location.pathname, 'rules')
       const clientId = matchDetailId(location.pathname, 'clients')
       if (invoiceId && (await repository.getInvoice(invoiceId))?.clientId !== nextScope) destination = '/invoices'
       if (contractId && (await repository.getContract(contractId))?.clientId !== nextScope) destination = '/contracts'
+      const documentClientId=location.pathname.match(/^\/contracts\/documents\/([^/]+)\//)?.[1]
+      if(documentClientId&&documentClientId!==nextScope)destination='/contracts'
       const rule = ruleId ? await repository.getRule(ruleId) : undefined
       if (rule?.scope === 'CLIENT_OVERRIDE' && rule.clientId !== nextScope) destination = '/rules'
       if (clientId && clientId !== nextScope) destination = `/clients/${nextScope}`
@@ -46,6 +51,7 @@ export function AppShell() {
 
   return (
     <div className="grid min-h-screen grid-cols-[236px_1fr] bg-[var(--app-background)]">
+      <AutomaticWorkflowRunner />
       <aside className="sticky top-0 flex h-screen flex-col bg-[var(--sidebar)] px-4 py-5 text-[var(--sidebar-text)]">
         <div className="mb-8 flex items-center gap-3 px-2">
           <div className="grid size-9 place-items-center rounded-xl bg-white/10 ring-1 ring-white/15">
@@ -70,8 +76,8 @@ export function AppShell() {
         </nav>
 
         <div className="mt-auto rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="text-xs font-semibold">Frontend · Demo controlat</div>
-          <div className="mt-1 text-[11px] leading-4 text-[var(--sidebar-muted)]">Date fictive · fără conexiuni SPV sau SAGA reale</div>
+          <div className="text-xs font-semibold">{import.meta.env.VITE_ENVIRONMENT_LABEL ?? 'Frontend · Demo controlat'}</div>
+          <div className="mt-1 text-[11px] leading-4 text-[var(--sidebar-muted)]">{import.meta.env.VITE_BACKEND_READS_ENABLED === 'true' ? 'Date persistate · integrare ANAF configurată pe server' : 'Date fictive · fără conexiuni SPV sau SAGA reale'}</div>
         </div>
       </aside>
 
@@ -103,6 +109,11 @@ export function AppShell() {
             <Button variant="secondary" size="icon" onClick={toggleTheme} aria-label={theme === 'light' ? 'Activează tema întunecată' : 'Activează tema luminoasă'}>
               {theme === 'light' ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />}
             </Button>
+            <div className="ml-1 flex items-center gap-2 border-l border-[var(--border)] pl-3">
+              <UserRound className="size-4 text-[var(--text-muted)]" aria-hidden="true" />
+              <span className="max-w-52 truncate text-xs font-semibold">{auth.user?.email}</span>
+              <Button variant="secondary" size="icon" onClick={() => void auth.logout()} aria-label="Deconectare"><LogOut className="size-[18px]" /></Button>
+            </div>
           </div>
         </header>
         <main className="mx-auto max-w-[1480px] p-8"><Outlet /></main>

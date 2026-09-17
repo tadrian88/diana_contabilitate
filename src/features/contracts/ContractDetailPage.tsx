@@ -1,15 +1,15 @@
 import { ArrowLeft, Building2, CalendarRange, FileText, Landmark, ReceiptText } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/ui/badge'
-import { useClients, useInvoice, useInvoices } from '../invoices/invoice-hooks'
+import { useClients, useInvoice } from '../invoices/invoice-hooks'
 import { AttentionBadge, PipelineBadge } from '../invoices/InvoiceStatusBadges'
-import { useContract } from './contract-hooks'
+import { useContract, useContractInvoices } from './contract-hooks'
 
 export function ContractDetailPage() {
   const { contractId = '' } = useParams()
   const [params] = useSearchParams()
   const { data: contract, isLoading, isError } = useContract(contractId)
-  const { data: invoices = [] } = useInvoices('all')
+  const { data: associatedInvoices = [] } = useContractInvoices(contractId)
   const { data: clients = [] } = useClients()
   const contextInvoiceId = params.get('invoiceId') ?? ''
   const { data: contextInvoice } = useInvoice(contextInvoiceId)
@@ -17,18 +17,18 @@ export function ContractDetailPage() {
   const returnTo = requestedReturn?.startsWith('/invoices/') || requestedReturn?.startsWith('/contracts') ? requestedReturn : '/contracts'
 
   if (isLoading) return <div className="card h-96 animate-pulse bg-[var(--surface-subtle)]" aria-label="Se încarcă detaliul contractului" />
-  if (isError) return <div className="card p-10 text-center"><h2 className="font-bold">Contractul nu a putut fi încărcat</h2><p className="mt-2 text-sm text-[var(--text-secondary)]">Repository-ul demonstrativ a returnat o eroare.</p></div>
+  if (isError) return <div className="card p-10 text-center"><h2 className="font-bold">Contractul nu a putut fi încărcat</h2><p className="mt-2 text-sm text-[var(--text-secondary)]">Serviciul de date nu este disponibil. Verifică starea API-ului.</p></div>
   if (!contract) return <div className="card p-10 text-center"><h2 className="text-lg font-bold">Contractul nu a fost găsit</h2><Link to="/contracts" className="mt-4 inline-block text-sm font-semibold text-[var(--accent)]">Înapoi la Contracte</Link></div>
 
   const client = clients.find((candidate) => candidate.id === contract.clientId)
-  const associatedInvoices = invoices.filter((invoice) => invoice.selectedContractId === contract.id)
   const matchCandidate = contextInvoice?.task?.type === 'CONTRACT_MATCH' ? contextInvoice.task.contractCandidates?.find((candidate) => candidate.id === contract.id) : undefined
   const detailReturn = `/contracts/${contract.id}${params.toString() ? `?${params.toString()}` : ''}`
 
   return <div className="space-y-5">
     <Link to={returnTo} className="inline-flex items-center gap-2 rounded text-sm font-semibold text-[var(--text-secondary)] outline-none hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><ArrowLeft className="size-4" />{returnTo.startsWith('/invoices/') ? 'Înapoi la revizuirea facturii' : 'Înapoi la lista contractelor'}</Link>
-    <section className="flex items-end justify-between gap-8"><div><div className="flex items-center gap-2"><Badge tone="neutral">Contract demonstrativ</Badge>{matchCandidate?.recommended && <Badge tone="info">Recomandat pentru revizuire</Badge>}</div><h2 className="mt-3 text-2xl font-bold tracking-tight">{contract.reference}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{contract.supplierName}</p></div><div className="text-right"><div className="eyebrow">Client</div><div className="mt-1 flex items-center gap-2 font-semibold"><Building2 className="size-4 text-[var(--accent)]" />{client?.name ?? 'Client indisponibil'}</div></div></section>
+<section className="flex items-end justify-between gap-8"><div><div className="flex items-center gap-2"><Badge tone="neutral">{contract.sourceDocumentId?'Contract confirmat':'Contract demonstrativ'}</Badge>{matchCandidate?.recommended && <Badge tone="info">Recomandat pentru revizuire</Badge>}</div><h2 className="mt-3 text-2xl font-bold tracking-tight">{contract.reference}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{contract.supplierName}</p></div><div className="text-right"><div className="eyebrow">Client</div><div className="mt-1 flex items-center gap-2 font-semibold"><Building2 className="size-4 text-[var(--accent)]" />{client?.name ?? 'Client indisponibil'}</div></div></section>
 
+    {contract.sourceDocumentId&&<Link to={`/contracts/documents/${contract.clientId}/${contract.sourceDocumentId}`} className="inline-block font-semibold text-[var(--accent)]">Document original · propunere AI și istoric confirmare</Link>}
     <section className="grid grid-cols-3 gap-4" aria-label="Date contractuale">
       <InfoCard icon={CalendarRange} label="Perioadă efectivă" value={contract.period} />
       <InfoCard icon={Landmark} label="Valoare și monedă" value={formatMoney(contract.value.amount, contract.currency)} />

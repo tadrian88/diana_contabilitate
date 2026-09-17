@@ -1,30 +1,20 @@
-import { useMemo } from 'react'
-import { useClients, useInvoices } from '../invoices/invoice-hooks'
+import { useQuery } from '@tanstack/react-query'
 import { useClientScope } from '../../app/scope-context'
-import type { Client, Invoice, ValidationTask } from '../../domain/invoice'
+import type { ValidationTaskInboxItem } from '../../domain/invoice'
+import { useInvoiceRepository } from '../../app/repository-context'
+import { queryKeys } from '../../app/queryKeys'
 
-export interface TaskInboxItem {
-  task: ValidationTask
-  invoice: Invoice
-  client?: Client
-}
+export type TaskInboxItem = ValidationTaskInboxItem
 
 export function useTaskInbox() {
   const { scope } = useClientScope()
-  const invoiceQuery = useInvoices(scope)
-  const clientQuery = useClients()
-  const items = useMemo(() => {
-    const clients = new Map((clientQuery.data ?? []).map((client) => [client.id, client]))
-    return (invoiceQuery.data ?? [])
-      .filter((invoice): invoice is Invoice & { task: ValidationTask } => Boolean(invoice.task))
-      .map((invoice) => ({ invoice, task: invoice.task, client: clients.get(invoice.clientId) }))
-      .sort((left, right) => right.task.createdAt.localeCompare(left.task.createdAt))
-  }, [clientQuery.data, invoiceQuery.data])
+  const repository = useInvoiceRepository()
+  const query = useQuery({ queryKey: queryKeys.tasks.list(scope), queryFn: () => repository.listValidationTasks(scope) })
+  const items = [...(query.data ?? [])].sort((left, right) => right.task.createdAt.localeCompare(left.task.createdAt))
 
   return {
     items,
-    isLoading: invoiceQuery.isLoading || clientQuery.isLoading,
-    isError: invoiceQuery.isError || clientQuery.isError,
+    isLoading: query.isLoading,
+    isError: query.isError,
   }
 }
-

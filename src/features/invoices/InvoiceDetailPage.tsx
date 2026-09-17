@@ -10,6 +10,7 @@ import { ContractTask } from './ContractTask'
 import { ClassificationWorkspace } from './ClassificationWorkspace'
 import { AttentionBadge, PipelineBadge, SagaBadge } from './InvoiceStatusBadges'
 import { getUnresolvedIssueCount, SAGA_LABELS } from './invoice-view'
+import { SagaExportCard } from './SagaExportCard'
 
 const tabValues = ['summary', 'contract', 'lines', 'classification', 'history'] as const
 type InvoiceTab = typeof tabValues[number]
@@ -92,6 +93,7 @@ function SummaryTab({ invoice }: { invoice: Invoice }) {
         <div className={`card p-5 ${getUnresolvedIssueCount(invoice) ? 'border-[var(--warning-border)]' : ''}`}><div className="eyebrow">Ce se întâmplă acum</div><p className="mt-2 text-sm font-medium">{nextAction(invoice)}</p>{invoice.task && invoice.task.status !== 'RESOLVED' && <div className="mt-3 flex items-start gap-2 text-xs text-[var(--text-secondary)]"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--warning)]" />{invoice.task.reason}</div>}</div>
         <div className="card p-5"><div className="eyebrow">Context asociat</div><div className="mt-2 text-sm font-semibold">{invoice.contract?.reference ?? (invoice.task?.type === 'CONTRACT_MATCH' ? 'Contract în curs de validare' : 'Niciun contract asociat')}</div><div className="mt-1 text-xs text-[var(--text-muted)]">{getUnresolvedIssueCount(invoice)} probleme nerezolvate · ultima activitate: {invoice.activity.at(-1)?.label ?? 'Indisponibilă'}</div></div>
       </div>
+      <SagaExportCard invoice={invoice} />
     </div>
   )
 }
@@ -121,6 +123,8 @@ function nextAction(invoice: Invoice) {
   if (invoice.pipelineStatus === 'AWAITING_CONTRACT') return 'Așteaptă furnizarea externă a contractului.'
   if (invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM') return 'Contabilul confirmă contractul recomandat sau selectează o alternativă.'
   if (invoice.pipelineStatus === 'AWAITING_REVIEW') return 'Contabilul revizuiește numai clasificările incerte.'
+  if (invoice.pipelineStatus === 'EXPORTING' && invoice.sagaExport?.artifactStatus === 'GENERATED') return 'Fișierul este pregătit. Importă-l în SAGA și confirmă manual importul.'
+  if (invoice.pipelineStatus === 'EXPORTED' && invoice.sagaExport?.confirmationType === 'HUMAN') return 'Procesare finalizată prin confirmarea manuală a importului în SAGA.'
   if (invoice.pipelineStatus === 'EXPORTED') return 'Procesare finalizată. Factura a ajuns în starea SAGA simulată.'
   if (invoice.pipelineStatus === 'DUPLICATE') return 'Stare terminală. Factura nu continuă către SAGA.'
   return 'Procesarea automată continuă fără intervenția contabilului.'

@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Diana V1 accountant golden examples",
+  "description": "Validate the input manifest examples array. Does not establish real provenance, accounting approval, release eligibility or SAGA acceptance. Reuses native Value/Approval JSON representation.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "exampleId",
+      "sourceFixture",
+      "originalSourceReference",
+      "clientId",
+      "profileId",
+      "mappingVersion",
+      "kind",
+      "fixtureSha256",
+      "profileVersion",
+      "expectedReadiness",
+      "expectedSagaMappingCompatibility",
+      "approval",
+      "lines"
+    ],
+    "properties": {
+      "exampleId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "sourceFixture": {
+        "type": "string",
+        "minLength": 1
+      },
+      "originalSourceReference": {
+        "type": "string",
+        "minLength": 1
+      },
+      "clientId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "profileId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "mappingVersion": {
+        "type": "string",
+        "minLength": 1
+      },
+      "kind": {
+        "enum": [
+          "POSITIVE",
+          "NEGATIVE_BOUNDARY"
+        ]
+      },
+      "fixtureSha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "profileVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "expectedReadiness": {
+        "enum": [
+          "READY_FOR_SAGA",
+          "AWAITING_REVIEW"
+        ]
+      },
+      "expectedSagaMappingCompatibility": {
+        "type": "boolean"
+      },
+      "boundaryReason": {
+        "type": "string"
+      },
+      "approval": {
+        "$ref": "#/$defs/approval"
+      },
+      "lines": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": [
+            "sourceLineId",
+            "decisions"
+          ],
+          "properties": {
+            "sourceLineId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "familyId": {
+              "type": "string"
+            },
+            "decisions": {
+              "type": "object",
+              "required": [
+                "ACCOUNT",
+                "VAT_TREATMENT",
+                "VAT_DEDUCTIBILITY",
+                "EXPENSE_TAX_TREATMENT"
+              ],
+              "properties": {
+                "ACCOUNT": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/value"
+                        },
+                        {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "ACCOUNT"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "VAT_TREATMENT": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/value"
+                        },
+                        {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "ORDINARY",
+                                "SPECIAL_UNSUPPORTED"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "VAT_DEDUCTIBILITY": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/value"
+                        },
+                        {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "FULL",
+                                "NONE",
+                                "LIMITED",
+                                "NOT_APPLICABLE"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "EXPENSE_TAX_TREATMENT": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/value"
+                        },
+                        {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "FULLY_DEDUCTIBLE",
+                                "NONDEDUCTIBLE",
+                                "LIMITED",
+                                "PERIOD_LIMIT_CATEGORY",
+                                "NOT_APPLICABLE"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "additionalProperties": false,
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "kind": {
+              "const": "NEGATIVE_BOUNDARY"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "boundaryReason"
+          ],
+          "properties": {
+            "boundaryReason": {
+              "minLength": 1
+            }
+          }
+        }
+      }
+    ]
+  },
+  "$defs": {
+    "value": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        },
+        "percentage": {
+          "type": "string"
+        },
+        "basis": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "timing": {
+          "type": "string"
+        },
+        "sourceCategory": {
+          "type": "string"
+        },
+        "sourceRate": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Native accounting.Value. Structural validation only; accounting.Value.Validate remains authoritative for dimension-specific tagged-union constraints."
+    },
+    "approval": {
+      "type": "object",
+      "required": [
+        "actor",
+        "at",
+        "evidence"
+      ],
+      "properties": {
+        "actor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

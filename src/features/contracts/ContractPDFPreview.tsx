@@ -1,0 +1,13 @@
+import { useEffect, useRef, useState } from 'react'
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
+import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { useInvoiceRepository } from '../../app/repository-context'
+import { Button } from '../../components/ui/button'
+
+GlobalWorkerOptions.workerSrc=workerURL
+export function ContractPDFPreview({clientId,documentId,page,onPage}:{clientId:string;documentId:string;page:number;onPage:(page:number)=>void}){
+  const repository=useInvoiceRepository();const canvas=useRef<HTMLCanvasElement>(null);const [pdf,setPDF]=useState<PDFDocumentProxy|null>(null);const [error,setError]=useState(false)
+  useEffect(()=>{let cancelled=false;let task:ReturnType<typeof getDocument>|null=null;setPDF(null);setError(false);void repository.getContractDocumentFile(clientId,documentId).then(async blob=>{const data=new Uint8Array(await blob.arrayBuffer());if(cancelled)return;task=getDocument({data});const loaded=await task.promise;if(!cancelled)setPDF(loaded)}).catch(()=>{if(!cancelled)setError(true)});return()=>{cancelled=true;void task?.destroy()}},[clientId,documentId,repository])
+  useEffect(()=>{let cancelled=false;let renderTask:ReturnType<Awaited<ReturnType<PDFDocumentProxy['getPage']>>['render']>|undefined;if(pdf&&canvas.current){void pdf.getPage(Math.min(Math.max(page,1),pdf.numPages)).then(pdfPage=>{if(cancelled||!canvas.current)return;const viewport=pdfPage.getViewport({scale:1});const scale=600/viewport.width;const scaled=pdfPage.getViewport({scale});canvas.current.width=scaled.width;canvas.current.height=scaled.height;renderTask=pdfPage.render({canvas:canvas.current,viewport:scaled});return renderTask.promise}).catch(()=>{if(!cancelled)setError(true)})};return()=>{cancelled=true;renderTask?.cancel()}},[pdf,page])
+  return <section className="card overflow-hidden" aria-label="Previzualizare PDF contractual"><div className="flex items-center justify-between border-b border-[var(--border)] p-3"><Button variant="secondary" size="sm" disabled={!pdf||page<=1} onClick={()=>onPage(page-1)}>Pagina anterioară</Button><span className="text-xs">Pagina {page}{pdf?` / ${pdf.numPages}`:''}</span><Button variant="secondary" size="sm" disabled={!pdf||page>=pdf.numPages} onClick={()=>onPage(page+1)}>Pagina următoare</Button></div><div className="max-h-[850px] overflow-auto bg-[var(--surface-subtle)] p-4">{error?<p role="alert">PDF-ul nu poate fi afișat. Originalul rămâne păstrat.</p>:!pdf?<p role="status">Se încarcă PDF-ul…</p>:null}<canvas ref={canvas} className="mx-auto max-w-full bg-white" aria-label={`Pagina PDF ${page}`}/></div></section>
+}

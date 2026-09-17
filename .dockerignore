@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+backend/.env
+backend/.env.*
+node_modules
+dist
+playwright-report
+test-results
+*.p12
+*.pfx
+*.key
+Docs/*.pdf

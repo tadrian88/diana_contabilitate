@@ -127,7 +127,7 @@ function CountCard({ label, value, tone }: { label: string; value: number; tone:
 }
 
 function LoadingState() { return <div className="space-y-3 p-5" aria-label="Se încarcă task-urile">{[1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-lg bg-[var(--surface-subtle)]" />)}</div> }
-function ErrorState() { return <div className="p-12 text-center"><AlertCircle className="mx-auto size-7 text-[var(--danger)]" /><h3 className="mt-3 font-bold">Task-urile nu au putut fi încărcate</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Repository-ul demonstrativ a returnat o eroare.</p></div> }
+function ErrorState() { return <div className="p-12 text-center"><AlertCircle className="mx-auto size-7 text-[var(--danger)]" /><h3 className="mt-3 font-bold">Task-urile nu au putut fi încărcate</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Serviciul de date nu este disponibil. Verifică starea API-ului.</p></div> }
 function EmptyState({ status, filtered, onReset }: { status: TaskStatus; filtered: boolean; onReset: () => void }) {
   if (filtered) return <div className="p-12 text-center"><SearchX className="mx-auto size-7 text-[var(--text-muted)]" /><h3 className="mt-3 font-bold">Niciun rezultat pentru filtrul curent</h3><Button className="mt-4" variant="secondary" size="sm" onClick={onReset}><RotateCcw className="size-3.5" />Resetează filtrul</Button></div>
   if (status === 'OPEN') return <div className="p-12 text-center"><CheckCircle2 className="mx-auto size-8 text-[var(--success)]" /><h3 className="mt-3 font-bold">Totul este în regulă</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Nu există facturi care necesită acum decizia contabilului.</p></div>

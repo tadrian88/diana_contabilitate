@@ -1,0 +1,17 @@
+h1:++0UTL6jzNNDycKRbMV/K8it4jg3fzt4bya5bJjUoM4=
+000001_foundation.sql h1:1LvkBtffbjWi2YVKW0qGZciJYWvAxKI8su7C3IkgNws=
+000002_invoice_pipeline.sql h1:5NTZwA70HYrkGCZPFDbVk/k2ZqpklocyXKsDWtvfTKU=
+000003_duplicate_status_invariant.sql h1:jbmP08VPjY9Ci+3DbpbCM8Bs/EvLxuHXNuh8EWCW45A=
+000004_validation_tasks.sql h1:OJnt11mKi+m/Na0xCc253cI+YMAK+o6QL1G9qvhHv34=
+000005_contract_matching.sql h1:44MgHyl//z/sXSqmp+63DhU/8QhM8OnNZilehbX1kOo=
+000006_classification_rules.sql h1:lxAB8jCAm28obeVksE84Q9k8+lBLKbvUTQRWXDPcgMk=
+000007_worker_outbox.sql h1:gLbXwuqABZ0Q/u6NYOwePUqZCubWd4MUR50PVFMuziM=
+000008_anaf_spv_ingestion.sql h1:hzGMTKzCqpDDl6vArFnRnEPm3WgDNaWIqV7CHSCQxGw=
+000009_anaf_spv_connection_ux.sql h1:mThlJGYjpRLtPFpRtluks6I1l+lqXeQM9EMcdadGea0=
+000010_real_saga_export.sql h1:C7eoPBSe7Pfk/ibOUHGQMOb/r1Dae1CknayOU1ol2uY=
+000011_saga_export_human_confirmation.sql h1:ygNL3nxJRrwS3/Jqn8+VS6k27xaDBTyA0XfqgHeodtE=
+000012_contract_ingestion_ai.sql h1:epwtcTKPps6zgG6DLt2iSJTz1XRZTV6p/hM+Zw5GPTM=
+000013_production_accounting_rules.sql h1:HLHqAOGWiw5V/RPPwzsZs4IKujY2KULY+ZLyGb3wXuw=
+000014_accounting_domain_v2.sql h1:JNYlwLdoz+5mZle41ya/39Qj2FM/3aDso9FRC+5YniE=
+000015_client_management_onboarding.sql h1:VhqXi962tM6Vfx0OFxwvTbVLVovdZLnGV92aX1zxJIY=
+000016_authentication_v1.sql h1:h8t9QqRZ0P2bmDHj/uMLySTDwKW0lCllU5QIVDhoNbs=

@@ -1,0 +1,40 @@
+import { expect, test } from '@playwright/test'
+
+test('ANAF connection onboarding, durable sync, disconnect and reconnect', async ({ page }) => {
+  await page.goto('/clients/client-alfa#anaf-spv')
+  await expect(page.getByText('Neconectat', { exact: true })).toBeVisible()
+  await expect(page.getByText('Certificat digital calificat', { exact: true })).toBeVisible()
+  await expect(page.locator('#anaf-spv').getByText('RO-DEMO-ALFA-001', { exact: true })).toBeVisible()
+  await expect(page.locator('input[type="file"]')).toHaveCount(0)
+  await expect(page.locator('input[type="password"]')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Conectează ANAF' }).click()
+  await expect(page.getByRole('heading', { name: 'Autorizare ANAF simulată' })).toBeVisible()
+  await expect(page.getByText('Certificat sintetic calificat')).toBeVisible()
+  await page.getByRole('button', { name: 'Autorizează cu certificatul sintetic' }).click()
+  await expect(page).toHaveURL(/clients\/client-alfa.*result=connected/)
+  await expect(page.getByText('Conectat', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('Conectat', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Sincronizează acum' }).click()
+  await expect(page.getByText('Sincronizarea a fost pornită.')).toBeVisible()
+  await page.goto('/invoices')
+  await page.getByLabel('Caută după furnizor sau număr factură').fill('FAKE-ANAF-LOCAL-1')
+  await expect(page.getByRole('link', { name: 'FAKE-ANAF-LOCAL-1' })).toBeVisible({ timeout: 20_000 })
+
+  await page.goto('/clients/client-alfa#anaf-spv')
+  await page.getByRole('button', { name: 'Deconectează' }).click()
+  await page.getByRole('button', { name: 'Confirmă deconectarea' }).click()
+  await expect(page.getByText('Dezactivat', { exact: true })).toBeVisible()
+  await page.goto('/invoices')
+  await page.getByLabel('Caută după furnizor sau număr factură').fill('FAKE-ANAF-LOCAL-1')
+  await expect(page.getByRole('link', { name: 'FAKE-ANAF-LOCAL-1' })).toBeVisible()
+
+  await page.goto('/clients/client-alfa#anaf-spv')
+  await page.getByRole('button', { name: 'Reconectează ANAF' }).click()
+	await expect(page.getByRole('heading', { name: 'Autorizare ANAF simulată' })).toBeVisible()
+	await page.getByRole('button', { name: 'Autorizează cu certificatul sintetic' }).click()
+  await expect(page).toHaveURL(/clients\/client-alfa.*result=connected/)
+  await expect(page.getByText('Conectat', { exact: true })).toBeVisible()
+})

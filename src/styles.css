@@ -75,7 +75,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 1180px; min-height: 100vh; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 
@@ -87,6 +87,16 @@ button { cursor: pointer; }
   background: var(--surface);
   box-shadow: var(--shadow-card);
 }
+
+.auth-brand-panel {
+  background:
+    radial-gradient(circle at 75% 20%, oklch(0.65 0.18 252 / .34), transparent 34%),
+    radial-gradient(circle at 22% 78%, oklch(0.55 0.13 220 / .24), transparent 38%),
+    linear-gradient(145deg, oklch(0.18 0.035 260), oklch(0.27 0.075 255));
+}
+.auth-brand-panel::after { content: ''; position: absolute; inset: 0; background-image: linear-gradient(oklch(1 0 0 / .035) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / .035) 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(to bottom, black, transparent 82%); }
+.auth-input { height: 2.75rem; width: 100%; border-radius: .5rem; border: 1px solid var(--border-strong); background: var(--surface); padding: 0 1rem; color: var(--text); font-size: .875rem; outline: none; transition: border-color 120ms, box-shadow 120ms; }
+.auth-input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus) 24%, transparent); }
 
 .eyebrow {
   color: var(--text-muted);
@@ -107,4 +117,3 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
-

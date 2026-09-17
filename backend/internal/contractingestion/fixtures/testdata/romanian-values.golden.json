@@ -1,0 +1,12 @@
+{
+  "supplierName": "Furnizor extras SRL",
+  "supplierCui": "RO12345678",
+  "reference": "CTR-2026-01",
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2027-12-31",
+  "totalValue": "125000.00",
+  "currency": "RON",
+  "unitType": "servicii",
+  "paymentTerms": "30 zile",
+  "buyerCui": "RO10000000"
+}

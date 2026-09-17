@@ -12,11 +12,12 @@ import { ContractDetailPage } from '../features/contracts/ContractDetailPage'
 import { RulesListPage } from '../features/rules/RulesListPage'
 import { RuleDetailPage } from '../features/rules/RuleDetailPage'
 import { ClientsListPage } from '../features/clients/ClientsListPage'
+import { CreateClientPage } from '../features/clients/CreateClientPage'
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
 
 export function renderApp(repository: InvoiceRepository, initialEntry = '/') {
   return render(
-    <AppProviders repository={repository}>
+    <AppProviders repository={repository} authUser={{ id: 'test-user', email: 'contabil.test@example.com', persona: 'CONTABIL' }}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route element={<AppShell />}>
@@ -29,6 +30,7 @@ export function renderApp(repository: InvoiceRepository, initialEntry = '/') {
             <Route path="rules" element={<RulesListPage />} />
             <Route path="rules/:ruleId" element={<RuleDetailPage />} />
             <Route path="clients" element={<ClientsListPage />} />
+            <Route path="clients/new" element={<CreateClientPage />} />
             <Route path="clients/:clientId" element={<ClientDetailPage />} />
           </Route>
         </Routes>

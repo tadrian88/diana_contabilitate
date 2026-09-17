@@ -1,0 +1,4 @@
+import {Link,useNavigate} from 'react-router-dom'
+import {CompanyForm} from './CompanyForm'
+import {useClientWrite} from './client-management-hooks'
+export function CreateClientPage(){const mutation=useClientWrite();const navigate=useNavigate();return <div className="space-y-5"><Link to="/clients">Înapoi la Clienți</Link><section className="card p-6"><h2 className="mb-2 text-2xl font-bold">Adaugă client</h2><p className="mb-6 text-sm text-[var(--text-secondary)]">Salvează identitatea companiei, apoi continuă configurarea profilului fiscal, ANAF și exportului SAGA.</p>{mutation.isError&&<div role="alert" className="mb-4 text-[var(--danger)]">Clientul nu a putut fi salvat. Verifică datele și dacă există deja aceeași companie.</div>}<CompanyForm minimum pending={mutation.isPending} onSave={(company,key,onSaved)=>mutation.mutate({input:{kind:'create',company},key},{onSuccess:d=>{onSaved();navigate(`/clients/${d.client.id}`)}})}/></section></div>}

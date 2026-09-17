@@ -38,7 +38,7 @@ describe('fluxurile principale ale facturii', () => {
     await waitFor(async () => expect((await repository.getInvoice('inv-classification'))?.pipelineStatus).toBe('AWAITING_REVIEW'))
     expect(screen.getByText('1', { selector: 'div.text-2xl' })).toBeInTheDocument()
 
-    const remainingArticle = screen.getAllByText('Deductibilitate').find((element) => element.tagName === 'H4')?.closest('article')
+    const remainingArticle = screen.getAllByText('Instrucțiune SAGA istorică').find((element) => element.tagName === 'H4')?.closest('article')
     await user.click(within(remainingArticle!).getByRole('button', { name: 'Acceptă propunerea' }))
     await waitFor(() => expect(screen.getAllByText('Exportată în SAGA').length).toBeGreaterThan(0), { timeout: 4000 })
     expect((await repository.getInvoice('inv-classification'))?.task?.status).toBe('RESOLVED')

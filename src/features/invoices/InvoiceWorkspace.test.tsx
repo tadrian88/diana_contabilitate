@@ -107,8 +107,8 @@ describe('Invoice Detail workspace', () => {
     await user.click(screen.getByRole('tab', { name: 'Clasificare' }))
     const classificationOverview = screen.getByRole('heading', { name: 'Clasificări pe linii' }).closest('section')!
     expect(within(classificationOverview).getAllByText('Cont contabil')).toHaveLength(2)
-    expect(within(classificationOverview).getAllByText('Cotă TVA')).toHaveLength(2)
-    expect(within(classificationOverview).getAllByText('Deductibilitate')).toHaveLength(2)
+    expect(within(classificationOverview).getAllByText('Confirmare istorică a cotei TVA')).toHaveLength(2)
+    expect(within(classificationOverview).getAllByText('Instrucțiune SAGA istorică')).toHaveLength(2)
     expect(within(classificationOverview).getAllByText('Exemplu demonstrativ — bază legală nevalidată')).toHaveLength(6)
   })
 

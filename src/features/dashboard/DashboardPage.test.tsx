@@ -36,6 +36,15 @@ describe('Dashboard selectors', () => {
     expect(dashboard.kpis.exported).toBe(2)
     expect(dashboard.kpis.processing).toBe(8)
   })
+
+  it('does not count a generated or downloaded artifact as exported', () => {
+    const invoices = structuredClone(mockInvoices)
+    const generated = invoices.find((invoice) => invoice.id === 'inv-happy')!
+    generated.pipelineStatus = 'EXPORTING'; generated.sagaStatus = 'EXPORTING'
+    generated.sagaExport = { attemptId: 'attempt-generated', artifactStatus: 'GENERATED', filename: 'generated.xml', generatedAt: '2026-09-14T10:00:00Z', downloadedAt: '2026-09-14T10:05:00Z', invoiceRevision: 3 }
+
+    expect(selectDashboard(invoices, mockClients).kpis.exported).toBe(2)
+  })
 })
 
 describe('Complete Dashboard', () => {

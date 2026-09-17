@@ -36,9 +36,9 @@ export function ContractTask({ invoice }: { invoice: Invoice }) {
         ) : (
           <div className="mt-6">
             <Button onClick={() => requestContract.mutate()} disabled={requestContract.isPending}>Solicită contract</Button>
-            <p className="mt-3 text-xs text-[var(--text-muted)]">Aceasta este singura acțiune disponibilă în fluxul MVP.</p>
           </div>
         )}
+        <Link to={`/contracts/upload?clientId=${encodeURIComponent(invoice.clientId)}&invoiceId=${encodeURIComponent(invoice.id)}`} className="mt-5 inline-block rounded-lg border border-[var(--border-strong)] px-4 py-2 text-sm font-semibold text-[var(--accent)]">Încarcă contract</Link>
       </div>
     )
   }

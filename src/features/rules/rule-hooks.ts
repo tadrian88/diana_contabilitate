@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useInvoiceRepository } from '../../app/repository-context'
 import type { ClientScope } from '../../domain/invoice'
 import type { CreateClientOverrideInput, CreateRuleVersionInput } from '../../repositories/invoiceRepository'
+import { queryKeys } from '../../app/queryKeys'
 
 export const ruleQueryKeys = {
-  rules: (scope: ClientScope) => ['rules', scope] as const,
-  rule: (id: string) => ['rule', id] as const,
+  rules: queryKeys.rules.list,
+  rule: queryKeys.rules.detail,
 }
 
 export function useRules(scope: ClientScope) {
@@ -25,7 +26,7 @@ export function useCreateRuleVersion(id: string) {
     mutationFn: (input: CreateRuleVersionInput) => repository.createRuleVersion(id, input),
     onSuccess: (rule) => {
       queryClient.setQueryData(ruleQueryKeys.rule(id), rule)
-      void queryClient.invalidateQueries({ queryKey: ['rules'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rules.root })
     },
   })
 }
@@ -37,7 +38,7 @@ export function useCreateClientOverride(id: string) {
     mutationFn: (input: CreateClientOverrideInput) => repository.createClientOverride(id, input),
     onSuccess: (rule) => {
       queryClient.setQueryData(ruleQueryKeys.rule(rule.id), rule)
-      void queryClient.invalidateQueries({ queryKey: ['rules'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rules.root })
     },
   })
 }

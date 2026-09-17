@@ -1,0 +1,8 @@
+FROM arigaio/atlas:0.36.0
+
+WORKDIR /schema
+COPY atlas.hcl ./atlas.hcl
+COPY migrations ./migrations
+
+ENTRYPOINT ["/atlas"]
+CMD ["migrate", "apply", "--env", "cloud"]

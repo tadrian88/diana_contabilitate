@@ -10,6 +10,9 @@ import { useClients, useInvoices } from '../invoices/invoice-hooks'
 import { useRules } from '../rules/rule-hooks'
 import { RULE_CATEGORY_LABELS } from '../rules/rule-view'
 import { selectClientOperations } from './client-selectors'
+import { lifecycleLabels } from '../../domain/client-management'
+import { ClientSettings } from './ClientSettings'
+import { SPVConnectionCard } from './SPVConnectionCard'
 
 export function ClientDetailPage() {
   const { clientId = '' } = useParams()
@@ -31,11 +34,14 @@ export function ClientDetailPage() {
   const operations = selectClientOperations(client, invoiceQuery.data ?? [], contractQuery.data ?? [], ruleQuery.data ?? [])
   return <div className="space-y-6">
     <Link to="/clients" className="inline-flex items-center gap-2 rounded text-sm font-semibold text-[var(--text-secondary)] outline-none hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><ArrowLeft className="size-4" />Înapoi la Clienți</Link>
-    <section className="flex items-end justify-between gap-6"><div><p className="eyebrow">Context operațional client</p><h2 className="mt-2 text-2xl font-bold tracking-tight">{client.name}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{client.cui} · date demonstrative</p></div><Badge tone="info">Context activ</Badge></section>
+    <section className="flex items-end justify-between gap-6"><div><p className="eyebrow">Context operațional client</p><h2 className="mt-2 text-2xl font-bold tracking-tight">{client.name}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{client.cui}</p></div><Badge tone="info">{lifecycleLabels[client.status??'ACTIVE']}</Badge></section>
 
     <nav aria-label="Navigare în contextul clientului" className="grid grid-cols-4 gap-3"><ContextLink to="/invoices" label="Facturi" detail={`${operations.invoices.length} înregistrări`} icon={FileText} /><ContextLink to="/tasks?status=OPEN&type=ALL" label="Task-uri" detail={`${operations.counts.open} deschise`} icon={ArrowRight} /><ContextLink to="/contracts" label="Contracte" detail={`${operations.contracts.length} disponibile`} icon={ScrollText} /><ContextLink to="/rules?scope=CLIENT_OVERRIDE" label="Reguli" detail={`${operations.ruleOverrides.length} override-uri`} icon={Scale} /></nav>
 
     <section aria-label="Stări SAGA" className="grid grid-cols-4 gap-3"><Metric label="Pregătite pentru SAGA" value={operations.counts.ready} /><Metric label="Export în curs" value={operations.counts.exporting} /><Metric label="Exportate în SAGA" value={operations.counts.exported} /><Metric label="Export eșuat" value={operations.counts.failed} danger={operations.counts.failed > 0} /></section>
+
+    <ClientSettings clientId={client.id} />
+    <SPVConnectionCard clientId={client.id} clientName={client.name} clientCUI={client.cui} />
 
     <div className="grid grid-cols-2 gap-5">
       <Section title="Facturi" action="Vezi toate facturile" to="/invoices">{operations.invoices.length === 0 ? <Empty text="Nu există facturi pentru acest client." /> : operations.invoices.slice(0, 5).map((invoice) => <Link key={invoice.id} to={`/invoices/${invoice.id}`} className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-3 last:border-0 hover:bg-[var(--surface-subtle)]"><div><div className="text-sm font-bold">{invoice.documentNumber}</div><div className="mt-1 text-xs text-[var(--text-secondary)]">{invoice.supplierName}</div></div><div className="flex items-center gap-2"><PipelineBadge status={invoice.pipelineStatus} /><SagaBadge status={invoice.sagaStatus} /></div></Link>)}</Section>

@@ -4,3 +4,13 @@ playwright-report
 test-results
 .DS_Store
 
+
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+*.p12
+*.pfx
+*.key
+deploy/gcp-test.local.env

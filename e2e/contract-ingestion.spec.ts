@@ -1,0 +1,79 @@
+import { execFileSync } from 'node:child_process'
+import { expect, test } from '@playwright/test'
+
+const clientId = 'client-contract-ingestion'
+function pdf(name: string) {
+  return execFileSync('go', ['run', './cmd/contractfixture', '-name', name], { cwd: 'backend', env: { ...process.env, GOCACHE: '/private/tmp/diana-go-cache' } })
+}
+test.describe.serial('Actual API → PostgreSQL → outbox → Asynq → review → ContractAvailable', () => {
+  test.beforeAll(async ({ request }) => {
+    const response = await request.get('/api/v1/clients')
+    expect(response.ok(), 'The contract E2E API must return the client list').toBeTruthy()
+    const clients = await response.json() as Array<{ id: string }>
+    expect(clients.some(client => client.id === clientId), 'Run cmd/contractingestionseed in the isolated E2E DATABASE_URL before this suite (handoff section L)').toBeTruthy()
+  })
+  test('upload, human correction, explicit confirmation, and persisted provenance', async ({ page }) => {
+    await page.goto(`/contracts/upload?clientId=${clientId}`)
+    await page.getByLabel('Document contractual PDF').setInputFiles({ name: 'english.pdf', mimeType: 'application/pdf', buffer: pdf('english') })
+    await page.getByRole('button', { name: 'Încarcă și extrage datele' }).click()
+    await expect(page.getByLabel('Referință contract')).toHaveValue('CTR-2026-01', { timeout: 60_000 })
+    const reviewURL = page.url()
+    await page.reload()
+    await expect(page.getByLabel('Referință contract')).toHaveValue('CTR-2026-01')
+    await page.getByLabel('Referință contract').fill('CI-HUMAN-CORRECTION')
+    // Keep the next missing-contract journey independent: explicitly reviewed supplier differs.
+    await page.getByLabel('CUI furnizor').fill('RO87654321')
+    await page.getByRole('button', { name: 'Confirmă contractul' }).click()
+    await expect(page.getByRole('link', { name: 'Deschide contractul autoritativ' })).toBeVisible()
+    await page.reload()
+    await expect(page.getByText('CI-HUMAN-CORRECTION', { exact: false })).toBeVisible()
+    await page.getByRole('link', { name: 'Deschide contractul autoritativ' }).click()
+    await expect(page.getByRole('heading', { name: 'CI-HUMAN-CORRECTION' })).toBeVisible()
+    await page.goto(reviewURL)
+    await expect(page.getByRole('button', { name: 'Confirmă contractul' })).toHaveCount(0)
+  })
+  test('missing invoice uses the same upload flow and resumes only after confirmation', async ({ page }) => {
+    await page.goto('/invoices/inv-contract-ingestion-waiting?tab=contract')
+    await expect(page.getByText('Contract lipsă', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Solicită contract' }).click()
+    await page.getByRole('link', { name: /Încarcă contract/ }).click()
+    await expect(page).toHaveURL(/clientId=client-contract-ingestion/)
+    await page.getByLabel('Document contractual PDF').setInputFiles({ name: 'romanian.pdf', mimeType: 'application/pdf', buffer: pdf('romanian') })
+    await page.getByRole('button', { name: 'Încarcă și extrage datele' }).click()
+    await expect(page.getByLabel('Referință contract')).toBeVisible({ timeout: 60_000 })
+    const before = await page.request.get('http://127.0.0.1:8090/api/v1/invoices/inv-contract-ingestion-waiting')
+    expect((await before.json()).pipelineStatus).toBe('AWAITING_CONTRACT')
+    await page.getByRole('button', { name: 'Confirmă contractul' }).click()
+    await expect(page.getByRole('link', { name: 'Deschide contractul autoritativ' })).toBeVisible()
+    await page.goto('/invoices/inv-contract-ingestion-waiting?tab=contract')
+    await expect(page.getByText('Contract asociat', { exact: true })).toBeVisible({ timeout: 60_000 })
+    await page.reload()
+    await expect(page.getByText('Contract asociat', { exact: true })).toBeVisible()
+  })
+  test('duplicate upload reuses the confirmed source instead of extracting again', async ({ page }) => {
+    await page.goto(`/contracts/upload?clientId=${clientId}`)
+    await page.getByLabel('Document contractual PDF').setInputFiles({ name: 'renamed.pdf', mimeType: 'application/pdf', buffer: pdf('english') })
+    await page.getByRole('button', { name: 'Încarcă și extrage datele' }).click()
+    await expect(page.getByText('Acest PDF există deja pentru client.', { exact: false })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Deschide contractul autoritativ' })).toBeVisible()
+    await expect(page.getByLabel('Referință contract')).toHaveCount(0)
+  })
+  test('image-only PDF uses the same persisted review boundary', async ({ page }) => {
+    await page.goto(`/contracts/upload?clientId=${clientId}`)
+    await page.getByLabel('Document contractual PDF').setInputFiles({ name: 'scan.pdf', mimeType: 'application/pdf', buffer: pdf('scanned') })
+    await page.getByRole('button', { name: 'Încarcă și extrage datele' }).click()
+    await expect(page.getByLabel('Referință contract')).toHaveValue('CTR-2026-01', { timeout: 60_000 })
+    await page.reload()
+    await expect(page.getByLabel('Monedă ISO')).toHaveValue('RON')
+    await expect(page.getByRole('link', { name: 'Deschide contractul autoritativ' })).toHaveCount(0)
+  })
+  test('failed extraction never opens an empty manual-from-zero form', async ({ page }) => {
+    await page.goto(`/contracts/upload?clientId=${clientId}`)
+    await page.getByLabel('Document contractual PDF').setInputFiles({ name: 'unknown.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%not-a-known-test-fixture\n%%EOF\n') })
+    await page.getByRole('button', { name: 'Încarcă și extrage datele' }).click()
+    await expect(page.getByRole('button', { name: 'Reîncearcă extragerea' })).toBeVisible({ timeout: 60_000 })
+    await page.reload()
+    await expect(page.getByLabel('Referință contract')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Confirmă contractul' })).toHaveCount(0)
+  })
+})

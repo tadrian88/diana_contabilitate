@@ -1,0 +1,31 @@
+import { expect, test } from '@playwright/test'
+
+test('TEST_ONLY domain workspace retains four dimensions and a mapping blocker', async ({ page }) => {
+  await page.goto('/invoices/inv-accounting-v2-test-only?tab=classification')
+  await expect(page.getByText('Configurație sintetică TEST_ONLY', { exact: false })).toBeVisible()
+  await expect(page.getByText('Tratament TVA', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Drept de deducere TVA', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Tratament fiscal al cheltuielii — impozit pe profit', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Cont contabil', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Verificare contabilă necesară')).toBeVisible()
+  await expect(page.getByText('Maparea SAGA pentru tratamentul obișnuit nu este aprobată/validată.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Descarcă XML' })).toHaveCount(0)
+})
+
+test('typed limited VAT correction persists while unapproved mapping stays blocked', async ({ page }) => {
+  await page.goto('/invoices/inv-accounting-v2-test-only?tab=classification')
+  const row = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Drept de deducere TVA', exact: true }) })
+  await row.getByRole('button', { name: 'Corectează' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByLabel('Decizie', { exact: true }).selectOption('LIMITED')
+  await page.getByLabel('Procent deductibil (%) — separator punct').fill('50.1250')
+  await page.getByLabel('Baza legală / utilizarea justificată').fill('TEST_ONLY utilization evidence')
+  await page.getByLabel('Motiv / documente justificative').fill('TEST_ONLY accountant review')
+  const response = page.waitForResponse((r) => r.url().includes('/classification-decisions') && r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Salvează decizia' }).click()
+  expect((await response).status()).toBe(200)
+  await expect(page.getByText(/50.1250%/).first()).toBeVisible()
+  await page.reload()
+  await expect(page.getByText(/50.1250%/).first()).toBeVisible()
+  await expect(page.getByText('Verificare contabilă necesară')).toBeVisible()
+})
