@@ -5,6 +5,7 @@ export const queryKeys = {
   spv: (clientId: string) => ['clients', clientId, 'spv'] as const,
   invoices: {
     root: ['invoices'] as const,
+    lists: ['invoices', 'list'] as const,
     list: (scope: ClientScope) => ['invoices', 'list', scope] as const,
     detail: (id: string) => ['invoices', 'detail', id] as const,
   },

@@ -9,7 +9,10 @@ function useUpdateInvoice<T>(invoiceId: string, mutationFn: (value: T) => Promis
     mutationFn,
     onSuccess: (invoice) => {
       queryClient.setQueryData(queryKeys.invoices.detail(invoiceId), invoice)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.invoices.root })
+      // The mutation response is the authoritative detail snapshot. Refresh
+      // invoice lists without refetching this detail, otherwise an older GET
+      // can overwrite consecutive review decisions in the cache.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.invoices.lists })
       void queryClient.invalidateQueries({ queryKey: queryKeys.contracts.root })
       void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.root })
     },
