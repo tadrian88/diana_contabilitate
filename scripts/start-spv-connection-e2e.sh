@@ -36,7 +36,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 0' INT TERM
 
-GOCACHE=/private/tmp/diana-go-cache go run ./cmd/fakeanaf -buyer-cui RO-DEMO-ALFA-001 &
+GOCACHE=/private/tmp/diana-go-cache go run ./cmd/fakeanaf -buyer-cui RO91000001 &
 fake_pid=$!
 until curl --fail --silent http://127.0.0.1:8090/token >/dev/null 2>&1; do kill -0 "$fake_pid" 2>/dev/null || exit 1; sleep 1; done
 

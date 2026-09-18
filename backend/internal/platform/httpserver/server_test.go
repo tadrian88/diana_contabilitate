@@ -51,7 +51,7 @@ func (readyStub) Ping(context.Context) error { return nil }
 func testHandler(invoice *invoicing.Invoice) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return withTestActor(New(
-		clients.NewService(clientReader{items: []clients.Client{{ID: "client-alfa", Name: "Client Demo Alfa SRL", CUI: "RO-DEMO-ALFA-001"}}}),
+		clients.NewService(clientReader{items: []clients.Client{{ID: "client-alfa", Name: "Client Demo Alfa SRL", CUI: "RO91000001"}}}),
 		invoicing.NewService(invoiceReader{item: invoice}), nil, nil, nil, nil, readyStub{}, logger,
 	), requestactor.Actor{ID: "test-accountant", Display: "Test", Persona: "CONTABIL", AllClients: true})
 }
@@ -162,7 +162,7 @@ func (s *validationTaskStore) RequestMissingContract(_ context.Context, command 
 func testHandlerWithTasks(invoice *invoicing.Invoice, store *validationTaskStore) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return withTestActor(New(
-		clients.NewService(clientReader{items: []clients.Client{{ID: "client-alfa", Name: "Client Demo Alfa SRL", CUI: "RO-DEMO-ALFA-001"}}}),
+		clients.NewService(clientReader{items: []clients.Client{{ID: "client-alfa", Name: "Client Demo Alfa SRL", CUI: "RO91000001"}}}),
 		invoicing.NewService(invoiceReader{item: invoice}), validationtasks.NewService(store, func() time.Time { return time.Date(2026, time.September, 12, 12, 0, 0, 0, time.UTC) }), nil, nil, nil, readyStub{}, logger,
 	), requestactor.Actor{ID: "test-accountant", Display: "Test", Persona: "CONTABIL", AllClients: true})
 }

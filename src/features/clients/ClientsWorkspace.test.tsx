@@ -9,10 +9,10 @@ describe('Clients workspace', () => {
     renderApp(new MockInvoiceRepository(), '/clients')
     const alfa = (await screen.findByText('Client Demo Alfa SRL')).closest('tr')!
     const beta = screen.getByText('Client Demo Beta SRL').closest('tr')!
-    expect(within(alfa).getByText('RO-DEMO-ALFA-001')).toBeInTheDocument()
+    expect(within(alfa).getByText('RO91000001')).toBeInTheDocument()
     expect(within(alfa).getAllByText('4').length).toBeGreaterThan(0)
     expect(within(alfa).getAllByText('1').length).toBeGreaterThan(0)
-    expect(within(beta).getByText('RO-DEMO-BETA-002')).toBeInTheDocument()
+    expect(within(beta).getByText('RO91000002')).toBeInTheDocument()
     expect(screen.getByTestId('active-scope')).toHaveTextContent('Toți clienții')
   })
 

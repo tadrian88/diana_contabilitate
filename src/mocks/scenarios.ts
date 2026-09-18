@@ -1,8 +1,8 @@
 import type { ClassificationRule, Client, Contract, ContractSummary, Invoice, LineClassification, PipelineStatus, RuleCategory } from '../domain/invoice'
 
 export const mockClients: Client[] = [
-  { id: 'client-alfa', name: 'Client Demo Alfa SRL', cui: 'RO-DEMO-ALFA-001' },
-  { id: 'client-beta', name: 'Client Demo Beta SRL', cui: 'RO-DEMO-BETA-002' },
+  { id: 'client-alfa', name: 'Client Demo Alfa SRL', cui: 'RO91000001' },
+  { id: 'client-beta', name: 'Client Demo Beta SRL', cui: 'RO91000002' },
 ]
 
 const standardPath: PipelineStatus[] = [

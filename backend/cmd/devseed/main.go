@@ -26,6 +26,7 @@ import (
 	"diana-contabilitate/backend/internal/accountingtest"
 	classificationdomain "diana-contabilitate/backend/internal/classification"
 	contractdomain "diana-contabilitate/backend/internal/contracts"
+	"diana-contabilitate/backend/internal/fiscalidentity"
 	"diana-contabilitate/backend/internal/invoicing"
 	"diana-contabilitate/backend/internal/money"
 	"diana-contabilitate/backend/internal/platform/config"
@@ -58,16 +59,20 @@ func main() {
 func seed(ctx context.Context, store *postgres.Store) error {
 	now := time.Date(2026, time.September, 8, 14, 0, 0, 0, time.UTC)
 	clients := []struct{ id, name, cui string }{
-		{"client-alfa", "Client Demo Alfa SRL", "RO-DEMO-ALFA-001"},
-		{"client-beta", "Client Demo Beta SRL", "RO-DEMO-BETA-002"},
+		{"client-alfa", "Client Demo Alfa SRL", "RO91000001"},
+		{"client-beta", "Client Demo Beta SRL", "RO91000002"},
 	}
 	for _, item := range clients {
+		normalizedIdentifier, valid := fiscalidentity.Romanian(item.cui)
+		if !valid {
+			return fmt.Errorf("invalid Romanian demo client CUI %q", item.cui)
+		}
 		exists, err := store.Client.AccountingClient.Query().Where(accountingclient.IDEQ(item.id)).Exist(ctx)
 		if err != nil {
 			return err
 		}
 		if !exists {
-			if _, err := store.Client.AccountingClient.Create().SetID(item.id).SetName(item.name).SetCui(item.cui).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+			if _, err := store.Client.AccountingClient.Create().SetID(item.id).SetName(item.name).SetCui(item.cui).SetNormalizedIdentifier(normalizedIdentifier).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
 				return err
 			}
 		}

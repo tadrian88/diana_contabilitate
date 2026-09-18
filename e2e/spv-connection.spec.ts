@@ -4,7 +4,7 @@ test('ANAF connection onboarding, durable sync, disconnect and reconnect', async
   await page.goto('/clients/client-alfa#anaf-spv')
   await expect(page.getByText('Neconectat', { exact: true })).toBeVisible()
   await expect(page.getByText('Certificat digital calificat', { exact: true })).toBeVisible()
-  await expect(page.locator('#anaf-spv').getByText('RO-DEMO-ALFA-001', { exact: true })).toBeVisible()
+  await expect(page.locator('#anaf-spv').getByText('RO91000001', { exact: true })).toBeVisible()
   await expect(page.locator('input[type="file"]')).toHaveCount(0)
   await expect(page.locator('input[type="password"]')).toHaveCount(0)
 
