@@ -26,7 +26,9 @@ Comanda execută, în ordine:
    SAGA, onboarding, authentication și contract ingestion;
 8. migrațiile pe baza locală normală `diana`;
 9. rebuild și restart pentru PostgreSQL, Redis, API, worker și frontend;
-10. health checks pentru API, worker și frontend.
+10. health checks externe pentru API, worker și frontend, cu retry limitat cât
+    timp porturile Docker devin accesibile pe host; la eșec sunt afișate
+    automat starea containerelor și ultimele loguri ale serviciului.
 
 Bazele E2E sunt dedicate și resetabile; testele nu mai folosesc baza locală
 principală `diana`. Volumele și datele aplicației locale nu sunt șterse.
