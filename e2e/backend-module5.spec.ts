@@ -52,6 +52,7 @@ test('accountant correction persists without resolving remaining items', async (
 test('final pending decisions resolve the task and resume the invoice', async ({ page }) => {
   await page.goto('/invoices/inv-classification-review-api?tab=classification')
   const acceptButtons = page.getByRole('button', { name: 'Acceptă propunerea' })
+  await expect(acceptButtons.first()).toBeVisible()
   for (;;) {
     const pendingCount = await acceptButtons.count()
     if (pendingCount === 0) break

@@ -15,8 +15,9 @@ class SPVRepository extends MockInvoiceRepository {
 }
 
 const base: SPVConnection = { status: 'NOT_CONNECTED', lastSyncStatus: 'NEVER', importAutomatic: false, configurationReady: true, identityValidation: 'NOT_AVAILABLE' }
+const authUser = { id: 'test-user', email: 'contabil.test@example.com', persona: 'CONTABIL' as const }
 function renderCard(value: SPVConnection, initial = '/clients/client-alfa', onAuthorize?: (url: string) => void) {
-  return render(<AppProviders repository={new SPVRepository(value)}><MemoryRouter initialEntries={[initial]}><SPVConnectionCard clientId="client-alfa" clientName="Client Alfa" clientCUI="RO12345678" onAuthorize={onAuthorize} /></MemoryRouter></AppProviders>)
+  return render(<AppProviders repository={new SPVRepository(value)} authUser={authUser}><MemoryRouter initialEntries={[initial]}><SPVConnectionCard clientId="client-alfa" clientName="Client Alfa" clientCUI="RO12345678" onAuthorize={onAuthorize} /></MemoryRouter></AppProviders>)
 }
 
 test('renders the client-scoped not-connected card and starts OAuth redirect', async () => {
@@ -56,7 +57,7 @@ test('renders safe callback, loading and API error states', async () => {
   const connected = renderCard(base, '/clients/client-alfa?integration=anaf&result=error&reason=invalid_state')
   expect(await screen.findByText(/Sesiunea de conectare a expirat/)).toBeInTheDocument(); connected.unmount()
   class ErrorRepository extends MockInvoiceRepository { override async getSPVConnection(): Promise<SPVConnection> { throw new Error('raw provider secret') } }
-  render(<AppProviders repository={new ErrorRepository()}><MemoryRouter><SPVConnectionCard clientId="client-alfa" clientName="Client Alfa" clientCUI="RO12345678" /></MemoryRouter></AppProviders>)
+  render(<AppProviders repository={new ErrorRepository()} authUser={authUser}><MemoryRouter><SPVConnectionCard clientId="client-alfa" clientName="Client Alfa" clientCUI="RO12345678" /></MemoryRouter></AppProviders>)
   expect(screen.getByLabelText('Se încarcă integrarea ANAF')).toBeInTheDocument()
   expect(await screen.findByText('Starea conexiunii ANAF nu a putut fi încărcată.')).toBeInTheDocument()
   expect(screen.queryByText('raw provider secret')).not.toBeInTheDocument()
