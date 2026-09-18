@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('automatically classified invoice exposes all three dimensions', async ({ page }) => {
   await page.goto('/invoices/inv-classification-auto-api?tab=classification')

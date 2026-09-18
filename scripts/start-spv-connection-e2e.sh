@@ -24,6 +24,7 @@ export FRONTEND_BASE_URL="http://127.0.0.1:4180"
 export SPV_SYNC_INTERVAL="1s"
 atlas migrate apply --env local
 GOCACHE=/private/tmp/diana-go-cache go run ./cmd/devseed
+DIANA_AUTH_PASSWORD='Diana-E2E-Only-2026!' GOCACHE=/private/tmp/diana-go-cache go run ./cmd/authuser provision --email demo.fixture@accountingtechco.test --all-clients
 
 fake_pid=""; worker_pid=""
 cleanup() {

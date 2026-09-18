@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 async function expectEventuallyExported(page: Page) {
   await expect(page.getByText('Exportată în SAGA', { exact: true }).first()).toBeVisible({ timeout: 15_000 })

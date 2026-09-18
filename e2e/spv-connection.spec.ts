@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('ANAF connection onboarding, durable sync, disconnect and reconnect', async ({ page }) => {
   await page.goto('/clients/client-alfa#anaf-spv')

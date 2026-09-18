@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('Invoice Detail reads the persisted invoice and lines through Go and PostgreSQL', async ({ page }) => {
   const responsePromise = page.waitForResponse((response) => response.url().includes('/api/v1/invoices/inv-resolved'))

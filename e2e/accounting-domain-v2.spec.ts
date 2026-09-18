@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('TEST_ONLY domain workspace retains four dimensions and a mapping blocker', async ({ page }) => {
   await page.goto('/invoices/inv-accounting-v2-test-only?tab=classification')

@@ -12,8 +12,10 @@ cd backend
 export DATABASE_URL="postgresql://diana:diana@127.0.0.1:5442/diana_saga_export_e2e?sslmode=disable"
 export REDIS_URL="redis://127.0.0.1:6382/15"
 export SAGA_MODE="file"
+export FRONTEND_BASE_URL="http://127.0.0.1:4180"
 atlas migrate apply --env local
 SEED_MODULE7=false SEED_SAGA_UX=true GOCACHE=/private/tmp/diana-go-cache go run ./cmd/devseed
+DIANA_AUTH_PASSWORD='Diana-E2E-Only-2026!' GOCACHE=/private/tmp/diana-go-cache go run ./cmd/authuser provision --email demo.fixture@accountingtechco.test --all-clients
 
 worker_pid=""
 cleanup() {

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('unique compatible contract is associated automatically without a task', async ({ page }) => {
   await page.goto('/invoices/inv-contract-auto?tab=contract')

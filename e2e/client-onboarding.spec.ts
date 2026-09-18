@@ -1,4 +1,4 @@
-import {expect,test} from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 test('A–G: persisted client onboarding, fake certificate authorization, SAGA and lifecycle',async({page})=>{
  await page.goto('/clients');await page.getByRole('link',{name:'Adaugă client'}).click()
  await page.getByLabel('Denumire legală').fill('Client Onboarding E2E SRL');await page.getByLabel('CUI / CIF').fill('RO12345678');await page.getByRole('button',{name:'Creează client'}).click()

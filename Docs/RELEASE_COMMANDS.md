@@ -30,6 +30,10 @@ Comanda execută, în ordine:
 
 Bazele E2E sunt dedicate și resetabile; testele nu mai folosesc baza locală
 principală `diana`. Volumele și datele aplicației locale nu sunt șterse.
+Suita Playwright UI de bază rulează intenționat cu repository și utilizator
+mock, fără proxy către API. Suitele care validează backend-ul își creează în
+fiecare bază izolată un utilizator exclusiv de test și obțin o sesiune reală;
+testul complet de login/logout rulează separat în suita `authentication`.
 
 Dacă un gate eșuează, noul cod nu este deployat. Serviciile locale care rulau
 înainte de Playwright sunt repornite. Pentru diagnostic:

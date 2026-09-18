@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('persisted missing-contract request survives reload and remains blocked', async ({ page }) => {
   await page.goto('/tasks')

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 function kpi(page: import('@playwright/test').Page, label: string) {
   return page.locator(`[data-kpi="${label}"]`)

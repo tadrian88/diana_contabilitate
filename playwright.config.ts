@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   testIgnore: [
+    'authentication-v1.spec.ts',
     'contract-ingestion.spec.ts',
     'accounting-domain-v2.spec.ts',
     'backend-module1.spec.ts',
@@ -13,7 +14,7 @@ export default defineConfig({
     'backend-module7.spec.ts',
     'spv-connection.spec.ts',
     'client-onboarding.spec.ts',
-	'saga-export-ux.spec.ts',
+    'saga-export-ux.spec.ts',
   ],
   fullyParallel: false,
   reporter: 'list',
@@ -28,8 +29,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+    command: 'VITE_BACKEND_READS_ENABLED=false VITE_E2E_MOCK_AUTH=true VITE_API_PROXY_TARGET= npm run dev -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
   },
 })

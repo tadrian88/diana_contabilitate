@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures/authenticated'
 
 test('real SAGA artifact stays EXPORTING until explicit human confirmation', async ({ page }) => {
   await page.goto('/invoices/inv-saga-ux-real')

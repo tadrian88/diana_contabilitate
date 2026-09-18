@@ -11,7 +11,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: './scripts/start-backend-e2e.sh',
+      command: 'E2E_FRONTEND_BASE_URL=http://127.0.0.1:4175 ./scripts/start-backend-e2e.sh',
       url: 'http://127.0.0.1:8080/readyz',
       reuseExistingServer: false,
       timeout: 120_000,

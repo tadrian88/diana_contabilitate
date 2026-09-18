@@ -11,8 +11,10 @@ docker compose exec -T postgres psql -U diana -d postgres -c "CREATE DATABASE di
 cd backend
 export DATABASE_URL="postgresql://diana:diana@127.0.0.1:5442/diana_backend7_e2e?sslmode=disable"
 export REDIS_URL="redis://127.0.0.1:6382/15"
+export FRONTEND_BASE_URL="http://127.0.0.1:4179"
 atlas migrate apply --env local
 GOCACHE=/private/tmp/diana-go-cache go run ./cmd/devseed
+DIANA_AUTH_PASSWORD='Diana-E2E-Only-2026!' GOCACHE=/private/tmp/diana-go-cache go run ./cmd/authuser provision --email demo.fixture@accountingtechco.test --all-clients
 
 worker_pid=""
 cleanup() {
