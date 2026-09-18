@@ -27,10 +27,9 @@ and status jobs, frontend/API/callback/worker Cloud Run services, serverless
 NEGs and the global HTTPS load balancer. IAP is enabled on frontend and normal
 API backends; the isolated ANAF callback backend is intentionally public.
 
-Current user action: add the two A records from `GCP_DNS_SQUARESPACE.md`.
-Static IP is `136.69.63.17`; replacement managed certificate `diana-test-cert-v2` is
-`PROVISIONING`. Do not register the ANAF OAuth callback until DNS resolves and
-the certificate is `ACTIVE` for both hostnames.
+Static IP is `136.69.63.17`; managed certificate `diana-test-cert-v3` is
+`ACTIVE` for both hostnames. DNS, HTTPS health and anonymous-access checks pass.
+Live ANAF OAuth registration and certification remain separate operator steps.
 
 ## Build and release
 

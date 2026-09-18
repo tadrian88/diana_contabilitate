@@ -1,8 +1,8 @@
 # Squarespace DNS for Diana TEST
 
-Status: **READY FOR USER DNS CHANGE**. Global static IP `diana-test-ip` is
-`136.69.63.17`. The Google-managed certificate is `PROVISIONING` until both
-hostnames resolve to this address.
+Status: **PUBLISHED AND VERIFIED**. Global static IP `diana-test-ip` is
+`136.69.63.17`. Both hostnames resolve to this address and managed certificate
+`diana-test-cert-v3` is `ACTIVE`.
 
 Final intended records:
 

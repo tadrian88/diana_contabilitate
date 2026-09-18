@@ -37,7 +37,7 @@ identities and domains.
 | Cloud SQL | `diana-test-pg17`, PostgreSQL 17, private IP `172.26.0.3` |
 | Memorystore | `diana-test-redis`, Redis 7.2, private IP `172.26.22.35:6379` |
 | Load balancer IP | `diana-test-ip` = `136.69.63.17` |
-| Managed certificate | `diana-test-cert-v2`, planned replacement for `test.platform.accountingtechco.com` and `api-test.accountingtechco.com` |
+| Managed certificate | `diana-test-cert-v3`, active for `test.platform.accountingtechco.com` and `api-test.accountingtechco.com` |
 
 The canonical Cloud Run application origin is
 `FRONTEND_BASE_URL=https://test.platform.accountingtechco.com` on both the API

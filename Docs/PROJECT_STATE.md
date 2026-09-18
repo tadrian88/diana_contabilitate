@@ -92,11 +92,12 @@ Authoritative details and exact A–W commands: [CLASSIFICATION_V1_TEST_HANDOFF.
 - INFRASTRUCTURE DEPLOYED: Artifact Registry, identities, secrets, VPC, private
   Cloud SQL and Redis, successful migrations, frontend/API/callback/worker,
   serverless NEGs and global load balancer exist. Static IP is `136.69.63.17`.
-- USER DNS ACTION PENDING: add `test.platform` and `api-test` A records. Managed TLS
-  certificate is `PROVISIONING`; ANAF OAuth registration/sync has not run.
+- DNS for `test.platform` and `api-test` resolves to the reserved IP. Managed TLS
+  certificate `diana-test-cert-v3` is `ACTIVE`; ANAF OAuth registration/sync has
+  not run.
 - IAP is enabled on frontend and normal API backends; only the exact isolated
-  ANAF callback route is public. The security gate remains open until external
-  anonymous tests prove accounting endpoints inaccessible.
+  ANAF callback route is public. External anonymous checks return `401` for the
+  protected accounting endpoints.
 - `cloud-test` config hardening forbids fake SAGA and unofficial enabled ANAF
   endpoints. Classification V1 production pack remains empty/review-only;
   Classification V2 remains NOT STARTED.
