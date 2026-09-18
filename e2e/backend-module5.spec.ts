@@ -51,16 +51,20 @@ test('accountant correction persists without resolving remaining items', async (
 
 test('final pending decisions resolve the task and resume the invoice', async ({ page }) => {
   await page.goto('/invoices/inv-classification-review-api?tab=classification')
-  while (await page.getByRole('button', { name: 'Acceptă propunerea' }).count()) {
+  const acceptButtons = page.getByRole('button', { name: 'Acceptă propunerea' })
+  for (;;) {
+    const pendingCount = await acceptButtons.count()
+    if (pendingCount === 0) break
     const response = page.waitForResponse((value) => value.url().includes('/classification-decisions'))
-    await page.getByRole('button', { name: 'Acceptă propunerea' }).first().click()
+    await acceptButtons.first().click()
     expect((await response).status()).toBe(200)
+    await expect(acceptButtons).toHaveCount(pendingCount - 1)
   }
-  await expect(page.getByText('Pregătită pentru SAGA').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pregătită pentru SAGA' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Clasificări pe linii' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Acceptă propunerea' })).toHaveCount(0)
+  await expect(acceptButtons).toHaveCount(0)
   await page.reload()
-  await expect(page.getByText('Pregătită pentru SAGA').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pregătită pentru SAGA' })).toBeVisible()
 })
 
 test('rule list detail and immutable history load from backend', async ({ page }) => {
