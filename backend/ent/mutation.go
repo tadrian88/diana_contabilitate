@@ -13,6 +13,7 @@ import (
 	"diana-contabilitate/backend/ent/contractextractionattempt"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
@@ -56,6 +57,7 @@ const (
 	TypeContractExtractionAttempt  = "ContractExtractionAttempt"
 	TypeContractMatchCandidate     = "ContractMatchCandidate"
 	TypeContractMatchRun           = "ContractMatchRun"
+	TypeContractServiceTerm        = "ContractServiceTerm"
 	TypeContractSourceDocument     = "ContractSourceDocument"
 	TypeInvoice                    = "Invoice"
 	TypeInvoiceContractAssociation = "InvoiceContractAssociation"
@@ -6510,7 +6512,10 @@ type ContractMutation struct {
 	reference                   *string
 	effective_from              *time.Time
 	effective_to                *time.Time
+	period_type                 *contract.PeriodType
+	lifecycle_state             *contract.LifecycleState
 	total_value                 *string
+	has_legacy_total_value      *bool
 	currency                    *string
 	unit_type                   *string
 	payment_terms               *string
@@ -6531,6 +6536,9 @@ type ContractMutation struct {
 	invoice_associations        map[string]struct{}
 	removedinvoice_associations map[string]struct{}
 	clearedinvoice_associations bool
+	service_terms               map[string]struct{}
+	removedservice_terms        map[string]struct{}
+	clearedservice_terms        bool
 	done                        bool
 	oldValue                    func(context.Context) (*Contract, error)
 	predicates                  []predicate.Contract
@@ -6873,7 +6881,7 @@ func (m *ContractMutation) EffectiveTo() (r time.Time, exists bool) {
 // OldEffectiveTo returns the old "effective_to" field's value of the Contract entity.
 // If the Contract object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ContractMutation) OldEffectiveTo(ctx context.Context) (v time.Time, err error) {
+func (m *ContractMutation) OldEffectiveTo(ctx context.Context) (v *time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldEffectiveTo is only allowed on UpdateOne operations")
 	}
@@ -6887,9 +6895,94 @@ func (m *ContractMutation) OldEffectiveTo(ctx context.Context) (v time.Time, err
 	return oldValue.EffectiveTo, nil
 }
 
+// ClearEffectiveTo clears the value of the "effective_to" field.
+func (m *ContractMutation) ClearEffectiveTo() {
+	m.effective_to = nil
+	m.clearedFields[contract.FieldEffectiveTo] = struct{}{}
+}
+
+// EffectiveToCleared returns if the "effective_to" field was cleared in this mutation.
+func (m *ContractMutation) EffectiveToCleared() bool {
+	_, ok := m.clearedFields[contract.FieldEffectiveTo]
+	return ok
+}
+
 // ResetEffectiveTo resets all changes to the "effective_to" field.
 func (m *ContractMutation) ResetEffectiveTo() {
 	m.effective_to = nil
+	delete(m.clearedFields, contract.FieldEffectiveTo)
+}
+
+// SetPeriodType sets the "period_type" field.
+func (m *ContractMutation) SetPeriodType(ct contract.PeriodType) {
+	m.period_type = &ct
+}
+
+// PeriodType returns the value of the "period_type" field in the mutation.
+func (m *ContractMutation) PeriodType() (r contract.PeriodType, exists bool) {
+	v := m.period_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPeriodType returns the old "period_type" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldPeriodType(ctx context.Context) (v contract.PeriodType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPeriodType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPeriodType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPeriodType: %w", err)
+	}
+	return oldValue.PeriodType, nil
+}
+
+// ResetPeriodType resets all changes to the "period_type" field.
+func (m *ContractMutation) ResetPeriodType() {
+	m.period_type = nil
+}
+
+// SetLifecycleState sets the "lifecycle_state" field.
+func (m *ContractMutation) SetLifecycleState(cs contract.LifecycleState) {
+	m.lifecycle_state = &cs
+}
+
+// LifecycleState returns the value of the "lifecycle_state" field in the mutation.
+func (m *ContractMutation) LifecycleState() (r contract.LifecycleState, exists bool) {
+	v := m.lifecycle_state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLifecycleState returns the old "lifecycle_state" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldLifecycleState(ctx context.Context) (v contract.LifecycleState, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLifecycleState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLifecycleState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLifecycleState: %w", err)
+	}
+	return oldValue.LifecycleState, nil
+}
+
+// ResetLifecycleState resets all changes to the "lifecycle_state" field.
+func (m *ContractMutation) ResetLifecycleState() {
+	m.lifecycle_state = nil
 }
 
 // SetTotalValue sets the "total_value" field.
@@ -6926,6 +7019,42 @@ func (m *ContractMutation) OldTotalValue(ctx context.Context) (v string, err err
 // ResetTotalValue resets all changes to the "total_value" field.
 func (m *ContractMutation) ResetTotalValue() {
 	m.total_value = nil
+}
+
+// SetHasLegacyTotalValue sets the "has_legacy_total_value" field.
+func (m *ContractMutation) SetHasLegacyTotalValue(b bool) {
+	m.has_legacy_total_value = &b
+}
+
+// HasLegacyTotalValue returns the value of the "has_legacy_total_value" field in the mutation.
+func (m *ContractMutation) HasLegacyTotalValue() (r bool, exists bool) {
+	v := m.has_legacy_total_value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldHasLegacyTotalValue returns the old "has_legacy_total_value" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldHasLegacyTotalValue(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldHasLegacyTotalValue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldHasLegacyTotalValue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldHasLegacyTotalValue: %w", err)
+	}
+	return oldValue.HasLegacyTotalValue, nil
+}
+
+// ResetHasLegacyTotalValue resets all changes to the "has_legacy_total_value" field.
+func (m *ContractMutation) ResetHasLegacyTotalValue() {
+	m.has_legacy_total_value = nil
 }
 
 // SetCurrency sets the "currency" field.
@@ -7495,6 +7624,60 @@ func (m *ContractMutation) ResetInvoiceAssociations() {
 	m.removedinvoice_associations = nil
 }
 
+// AddServiceTermIDs adds the "service_terms" edge to the ContractServiceTerm entity by ids.
+func (m *ContractMutation) AddServiceTermIDs(ids ...string) {
+	if m.service_terms == nil {
+		m.service_terms = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.service_terms[ids[i]] = struct{}{}
+	}
+}
+
+// ClearServiceTerms clears the "service_terms" edge to the ContractServiceTerm entity.
+func (m *ContractMutation) ClearServiceTerms() {
+	m.clearedservice_terms = true
+}
+
+// ServiceTermsCleared reports if the "service_terms" edge to the ContractServiceTerm entity was cleared.
+func (m *ContractMutation) ServiceTermsCleared() bool {
+	return m.clearedservice_terms
+}
+
+// RemoveServiceTermIDs removes the "service_terms" edge to the ContractServiceTerm entity by IDs.
+func (m *ContractMutation) RemoveServiceTermIDs(ids ...string) {
+	if m.removedservice_terms == nil {
+		m.removedservice_terms = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.service_terms, ids[i])
+		m.removedservice_terms[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedServiceTerms returns the removed IDs of the "service_terms" edge to the ContractServiceTerm entity.
+func (m *ContractMutation) RemovedServiceTermsIDs() (ids []string) {
+	for id := range m.removedservice_terms {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ServiceTermsIDs returns the "service_terms" edge IDs in the mutation.
+func (m *ContractMutation) ServiceTermsIDs() (ids []string) {
+	for id := range m.service_terms {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetServiceTerms resets all changes to the "service_terms" edge.
+func (m *ContractMutation) ResetServiceTerms() {
+	m.service_terms = nil
+	m.clearedservice_terms = false
+	m.removedservice_terms = nil
+}
+
 // Where appends a list predicates to the ContractMutation builder.
 func (m *ContractMutation) Where(ps ...predicate.Contract) {
 	m.predicates = append(m.predicates, ps...)
@@ -7529,7 +7712,7 @@ func (m *ContractMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ContractMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 21)
 	if m.client != nil {
 		fields = append(fields, contract.FieldClientID)
 	}
@@ -7551,8 +7734,17 @@ func (m *ContractMutation) Fields() []string {
 	if m.effective_to != nil {
 		fields = append(fields, contract.FieldEffectiveTo)
 	}
+	if m.period_type != nil {
+		fields = append(fields, contract.FieldPeriodType)
+	}
+	if m.lifecycle_state != nil {
+		fields = append(fields, contract.FieldLifecycleState)
+	}
 	if m.total_value != nil {
 		fields = append(fields, contract.FieldTotalValue)
+	}
+	if m.has_legacy_total_value != nil {
+		fields = append(fields, contract.FieldHasLegacyTotalValue)
 	}
 	if m.currency != nil {
 		fields = append(fields, contract.FieldCurrency)
@@ -7606,8 +7798,14 @@ func (m *ContractMutation) Field(name string) (ent.Value, bool) {
 		return m.EffectiveFrom()
 	case contract.FieldEffectiveTo:
 		return m.EffectiveTo()
+	case contract.FieldPeriodType:
+		return m.PeriodType()
+	case contract.FieldLifecycleState:
+		return m.LifecycleState()
 	case contract.FieldTotalValue:
 		return m.TotalValue()
+	case contract.FieldHasLegacyTotalValue:
+		return m.HasLegacyTotalValue()
 	case contract.FieldCurrency:
 		return m.Currency()
 	case contract.FieldUnitType:
@@ -7651,8 +7849,14 @@ func (m *ContractMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldEffectiveFrom(ctx)
 	case contract.FieldEffectiveTo:
 		return m.OldEffectiveTo(ctx)
+	case contract.FieldPeriodType:
+		return m.OldPeriodType(ctx)
+	case contract.FieldLifecycleState:
+		return m.OldLifecycleState(ctx)
 	case contract.FieldTotalValue:
 		return m.OldTotalValue(ctx)
+	case contract.FieldHasLegacyTotalValue:
+		return m.OldHasLegacyTotalValue(ctx)
 	case contract.FieldCurrency:
 		return m.OldCurrency(ctx)
 	case contract.FieldUnitType:
@@ -7731,12 +7935,33 @@ func (m *ContractMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetEffectiveTo(v)
 		return nil
+	case contract.FieldPeriodType:
+		v, ok := value.(contract.PeriodType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPeriodType(v)
+		return nil
+	case contract.FieldLifecycleState:
+		v, ok := value.(contract.LifecycleState)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLifecycleState(v)
+		return nil
 	case contract.FieldTotalValue:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetTotalValue(v)
+		return nil
+	case contract.FieldHasLegacyTotalValue:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetHasLegacyTotalValue(v)
 		return nil
 	case contract.FieldCurrency:
 		v, ok := value.(string)
@@ -7853,6 +8078,9 @@ func (m *ContractMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *ContractMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(contract.FieldEffectiveTo) {
+		fields = append(fields, contract.FieldEffectiveTo)
+	}
 	if m.FieldCleared(contract.FieldSourceReference) {
 		fields = append(fields, contract.FieldSourceReference)
 	}
@@ -7879,6 +8107,9 @@ func (m *ContractMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *ContractMutation) ClearField(name string) error {
 	switch name {
+	case contract.FieldEffectiveTo:
+		m.ClearEffectiveTo()
+		return nil
 	case contract.FieldSourceReference:
 		m.ClearSourceReference()
 		return nil
@@ -7920,8 +8151,17 @@ func (m *ContractMutation) ResetField(name string) error {
 	case contract.FieldEffectiveTo:
 		m.ResetEffectiveTo()
 		return nil
+	case contract.FieldPeriodType:
+		m.ResetPeriodType()
+		return nil
+	case contract.FieldLifecycleState:
+		m.ResetLifecycleState()
+		return nil
 	case contract.FieldTotalValue:
 		m.ResetTotalValue()
+		return nil
+	case contract.FieldHasLegacyTotalValue:
+		m.ResetHasLegacyTotalValue()
 		return nil
 	case contract.FieldCurrency:
 		m.ResetCurrency()
@@ -7959,7 +8199,7 @@ func (m *ContractMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ContractMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.client != nil {
 		edges = append(edges, contract.EdgeClient)
 	}
@@ -7968,6 +8208,9 @@ func (m *ContractMutation) AddedEdges() []string {
 	}
 	if m.invoice_associations != nil {
 		edges = append(edges, contract.EdgeInvoiceAssociations)
+	}
+	if m.service_terms != nil {
+		edges = append(edges, contract.EdgeServiceTerms)
 	}
 	return edges
 }
@@ -7992,18 +8235,27 @@ func (m *ContractMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case contract.EdgeServiceTerms:
+		ids := make([]ent.Value, 0, len(m.service_terms))
+		for id := range m.service_terms {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ContractMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedmatch_candidates != nil {
 		edges = append(edges, contract.EdgeMatchCandidates)
 	}
 	if m.removedinvoice_associations != nil {
 		edges = append(edges, contract.EdgeInvoiceAssociations)
+	}
+	if m.removedservice_terms != nil {
+		edges = append(edges, contract.EdgeServiceTerms)
 	}
 	return edges
 }
@@ -8024,13 +8276,19 @@ func (m *ContractMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case contract.EdgeServiceTerms:
+		ids := make([]ent.Value, 0, len(m.removedservice_terms))
+		for id := range m.removedservice_terms {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ContractMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedclient {
 		edges = append(edges, contract.EdgeClient)
 	}
@@ -8039,6 +8297,9 @@ func (m *ContractMutation) ClearedEdges() []string {
 	}
 	if m.clearedinvoice_associations {
 		edges = append(edges, contract.EdgeInvoiceAssociations)
+	}
+	if m.clearedservice_terms {
+		edges = append(edges, contract.EdgeServiceTerms)
 	}
 	return edges
 }
@@ -8053,6 +8314,8 @@ func (m *ContractMutation) EdgeCleared(name string) bool {
 		return m.clearedmatch_candidates
 	case contract.EdgeInvoiceAssociations:
 		return m.clearedinvoice_associations
+	case contract.EdgeServiceTerms:
+		return m.clearedservice_terms
 	}
 	return false
 }
@@ -8080,6 +8343,9 @@ func (m *ContractMutation) ResetEdge(name string) error {
 		return nil
 	case contract.EdgeInvoiceAssociations:
 		m.ResetInvoiceAssociations()
+		return nil
+	case contract.EdgeServiceTerms:
+		m.ResetServiceTerms()
 		return nil
 	}
 	return fmt.Errorf("unknown Contract edge %s", name)
@@ -11341,6 +11607,1137 @@ func (m *ContractMatchRunMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown ContractMatchRun edge %s", name)
+}
+
+// ContractServiceTermMutation represents an operation that mutates the ContractServiceTerm nodes in the graph.
+type ContractServiceTermMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *string
+	position              *int
+	addposition           *int
+	service_description   *string
+	pricing_model         *contractserviceterm.PricingModel
+	unit_price            *string
+	currency              *string
+	unit                  *string
+	quantity_source       *contractserviceterm.QuantitySource
+	quantity_value        *string
+	quantity_driver       *string
+	billing_frequency     *contractserviceterm.BillingFrequency
+	source_evidence       *json.RawMessage
+	appendsource_evidence json.RawMessage
+	clearedFields         map[string]struct{}
+	contract              *string
+	clearedcontract       bool
+	done                  bool
+	oldValue              func(context.Context) (*ContractServiceTerm, error)
+	predicates            []predicate.ContractServiceTerm
+}
+
+var _ ent.Mutation = (*ContractServiceTermMutation)(nil)
+
+// contractservicetermOption allows management of the mutation configuration using functional options.
+type contractservicetermOption func(*ContractServiceTermMutation)
+
+// newContractServiceTermMutation creates new mutation for the ContractServiceTerm entity.
+func newContractServiceTermMutation(c config, op Op, opts ...contractservicetermOption) *ContractServiceTermMutation {
+	m := &ContractServiceTermMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeContractServiceTerm,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withContractServiceTermID sets the ID field of the mutation.
+func withContractServiceTermID(id string) contractservicetermOption {
+	return func(m *ContractServiceTermMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ContractServiceTerm
+		)
+		m.oldValue = func(ctx context.Context) (*ContractServiceTerm, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ContractServiceTerm.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withContractServiceTerm sets the old ContractServiceTerm of the mutation.
+func withContractServiceTerm(node *ContractServiceTerm) contractservicetermOption {
+	return func(m *ContractServiceTermMutation) {
+		m.oldValue = func(context.Context) (*ContractServiceTerm, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ContractServiceTermMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ContractServiceTermMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ContractServiceTerm entities.
+func (m *ContractServiceTermMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ContractServiceTermMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ContractServiceTermMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ContractServiceTerm.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetContractID sets the "contract_id" field.
+func (m *ContractServiceTermMutation) SetContractID(s string) {
+	m.contract = &s
+}
+
+// ContractID returns the value of the "contract_id" field in the mutation.
+func (m *ContractServiceTermMutation) ContractID() (r string, exists bool) {
+	v := m.contract
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContractID returns the old "contract_id" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldContractID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContractID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContractID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContractID: %w", err)
+	}
+	return oldValue.ContractID, nil
+}
+
+// ResetContractID resets all changes to the "contract_id" field.
+func (m *ContractServiceTermMutation) ResetContractID() {
+	m.contract = nil
+}
+
+// SetPosition sets the "position" field.
+func (m *ContractServiceTermMutation) SetPosition(i int) {
+	m.position = &i
+	m.addposition = nil
+}
+
+// Position returns the value of the "position" field in the mutation.
+func (m *ContractServiceTermMutation) Position() (r int, exists bool) {
+	v := m.position
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosition returns the old "position" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldPosition(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosition is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosition requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosition: %w", err)
+	}
+	return oldValue.Position, nil
+}
+
+// AddPosition adds i to the "position" field.
+func (m *ContractServiceTermMutation) AddPosition(i int) {
+	if m.addposition != nil {
+		*m.addposition += i
+	} else {
+		m.addposition = &i
+	}
+}
+
+// AddedPosition returns the value that was added to the "position" field in this mutation.
+func (m *ContractServiceTermMutation) AddedPosition() (r int, exists bool) {
+	v := m.addposition
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPosition resets all changes to the "position" field.
+func (m *ContractServiceTermMutation) ResetPosition() {
+	m.position = nil
+	m.addposition = nil
+}
+
+// SetServiceDescription sets the "service_description" field.
+func (m *ContractServiceTermMutation) SetServiceDescription(s string) {
+	m.service_description = &s
+}
+
+// ServiceDescription returns the value of the "service_description" field in the mutation.
+func (m *ContractServiceTermMutation) ServiceDescription() (r string, exists bool) {
+	v := m.service_description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldServiceDescription returns the old "service_description" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldServiceDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldServiceDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldServiceDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldServiceDescription: %w", err)
+	}
+	return oldValue.ServiceDescription, nil
+}
+
+// ResetServiceDescription resets all changes to the "service_description" field.
+func (m *ContractServiceTermMutation) ResetServiceDescription() {
+	m.service_description = nil
+}
+
+// SetPricingModel sets the "pricing_model" field.
+func (m *ContractServiceTermMutation) SetPricingModel(cm contractserviceterm.PricingModel) {
+	m.pricing_model = &cm
+}
+
+// PricingModel returns the value of the "pricing_model" field in the mutation.
+func (m *ContractServiceTermMutation) PricingModel() (r contractserviceterm.PricingModel, exists bool) {
+	v := m.pricing_model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPricingModel returns the old "pricing_model" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldPricingModel(ctx context.Context) (v contractserviceterm.PricingModel, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPricingModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPricingModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPricingModel: %w", err)
+	}
+	return oldValue.PricingModel, nil
+}
+
+// ResetPricingModel resets all changes to the "pricing_model" field.
+func (m *ContractServiceTermMutation) ResetPricingModel() {
+	m.pricing_model = nil
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (m *ContractServiceTermMutation) SetUnitPrice(s string) {
+	m.unit_price = &s
+}
+
+// UnitPrice returns the value of the "unit_price" field in the mutation.
+func (m *ContractServiceTermMutation) UnitPrice() (r string, exists bool) {
+	v := m.unit_price
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUnitPrice returns the old "unit_price" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldUnitPrice(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUnitPrice is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUnitPrice requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUnitPrice: %w", err)
+	}
+	return oldValue.UnitPrice, nil
+}
+
+// ClearUnitPrice clears the value of the "unit_price" field.
+func (m *ContractServiceTermMutation) ClearUnitPrice() {
+	m.unit_price = nil
+	m.clearedFields[contractserviceterm.FieldUnitPrice] = struct{}{}
+}
+
+// UnitPriceCleared returns if the "unit_price" field was cleared in this mutation.
+func (m *ContractServiceTermMutation) UnitPriceCleared() bool {
+	_, ok := m.clearedFields[contractserviceterm.FieldUnitPrice]
+	return ok
+}
+
+// ResetUnitPrice resets all changes to the "unit_price" field.
+func (m *ContractServiceTermMutation) ResetUnitPrice() {
+	m.unit_price = nil
+	delete(m.clearedFields, contractserviceterm.FieldUnitPrice)
+}
+
+// SetCurrency sets the "currency" field.
+func (m *ContractServiceTermMutation) SetCurrency(s string) {
+	m.currency = &s
+}
+
+// Currency returns the value of the "currency" field in the mutation.
+func (m *ContractServiceTermMutation) Currency() (r string, exists bool) {
+	v := m.currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrency returns the old "currency" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldCurrency(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrency: %w", err)
+	}
+	return oldValue.Currency, nil
+}
+
+// ResetCurrency resets all changes to the "currency" field.
+func (m *ContractServiceTermMutation) ResetCurrency() {
+	m.currency = nil
+}
+
+// SetUnit sets the "unit" field.
+func (m *ContractServiceTermMutation) SetUnit(s string) {
+	m.unit = &s
+}
+
+// Unit returns the value of the "unit" field in the mutation.
+func (m *ContractServiceTermMutation) Unit() (r string, exists bool) {
+	v := m.unit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUnit returns the old "unit" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldUnit(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUnit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUnit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUnit: %w", err)
+	}
+	return oldValue.Unit, nil
+}
+
+// ClearUnit clears the value of the "unit" field.
+func (m *ContractServiceTermMutation) ClearUnit() {
+	m.unit = nil
+	m.clearedFields[contractserviceterm.FieldUnit] = struct{}{}
+}
+
+// UnitCleared returns if the "unit" field was cleared in this mutation.
+func (m *ContractServiceTermMutation) UnitCleared() bool {
+	_, ok := m.clearedFields[contractserviceterm.FieldUnit]
+	return ok
+}
+
+// ResetUnit resets all changes to the "unit" field.
+func (m *ContractServiceTermMutation) ResetUnit() {
+	m.unit = nil
+	delete(m.clearedFields, contractserviceterm.FieldUnit)
+}
+
+// SetQuantitySource sets the "quantity_source" field.
+func (m *ContractServiceTermMutation) SetQuantitySource(cs contractserviceterm.QuantitySource) {
+	m.quantity_source = &cs
+}
+
+// QuantitySource returns the value of the "quantity_source" field in the mutation.
+func (m *ContractServiceTermMutation) QuantitySource() (r contractserviceterm.QuantitySource, exists bool) {
+	v := m.quantity_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuantitySource returns the old "quantity_source" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldQuantitySource(ctx context.Context) (v contractserviceterm.QuantitySource, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuantitySource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuantitySource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuantitySource: %w", err)
+	}
+	return oldValue.QuantitySource, nil
+}
+
+// ResetQuantitySource resets all changes to the "quantity_source" field.
+func (m *ContractServiceTermMutation) ResetQuantitySource() {
+	m.quantity_source = nil
+}
+
+// SetQuantityValue sets the "quantity_value" field.
+func (m *ContractServiceTermMutation) SetQuantityValue(s string) {
+	m.quantity_value = &s
+}
+
+// QuantityValue returns the value of the "quantity_value" field in the mutation.
+func (m *ContractServiceTermMutation) QuantityValue() (r string, exists bool) {
+	v := m.quantity_value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuantityValue returns the old "quantity_value" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldQuantityValue(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuantityValue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuantityValue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuantityValue: %w", err)
+	}
+	return oldValue.QuantityValue, nil
+}
+
+// ClearQuantityValue clears the value of the "quantity_value" field.
+func (m *ContractServiceTermMutation) ClearQuantityValue() {
+	m.quantity_value = nil
+	m.clearedFields[contractserviceterm.FieldQuantityValue] = struct{}{}
+}
+
+// QuantityValueCleared returns if the "quantity_value" field was cleared in this mutation.
+func (m *ContractServiceTermMutation) QuantityValueCleared() bool {
+	_, ok := m.clearedFields[contractserviceterm.FieldQuantityValue]
+	return ok
+}
+
+// ResetQuantityValue resets all changes to the "quantity_value" field.
+func (m *ContractServiceTermMutation) ResetQuantityValue() {
+	m.quantity_value = nil
+	delete(m.clearedFields, contractserviceterm.FieldQuantityValue)
+}
+
+// SetQuantityDriver sets the "quantity_driver" field.
+func (m *ContractServiceTermMutation) SetQuantityDriver(s string) {
+	m.quantity_driver = &s
+}
+
+// QuantityDriver returns the value of the "quantity_driver" field in the mutation.
+func (m *ContractServiceTermMutation) QuantityDriver() (r string, exists bool) {
+	v := m.quantity_driver
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuantityDriver returns the old "quantity_driver" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldQuantityDriver(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuantityDriver is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuantityDriver requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuantityDriver: %w", err)
+	}
+	return oldValue.QuantityDriver, nil
+}
+
+// ClearQuantityDriver clears the value of the "quantity_driver" field.
+func (m *ContractServiceTermMutation) ClearQuantityDriver() {
+	m.quantity_driver = nil
+	m.clearedFields[contractserviceterm.FieldQuantityDriver] = struct{}{}
+}
+
+// QuantityDriverCleared returns if the "quantity_driver" field was cleared in this mutation.
+func (m *ContractServiceTermMutation) QuantityDriverCleared() bool {
+	_, ok := m.clearedFields[contractserviceterm.FieldQuantityDriver]
+	return ok
+}
+
+// ResetQuantityDriver resets all changes to the "quantity_driver" field.
+func (m *ContractServiceTermMutation) ResetQuantityDriver() {
+	m.quantity_driver = nil
+	delete(m.clearedFields, contractserviceterm.FieldQuantityDriver)
+}
+
+// SetBillingFrequency sets the "billing_frequency" field.
+func (m *ContractServiceTermMutation) SetBillingFrequency(cf contractserviceterm.BillingFrequency) {
+	m.billing_frequency = &cf
+}
+
+// BillingFrequency returns the value of the "billing_frequency" field in the mutation.
+func (m *ContractServiceTermMutation) BillingFrequency() (r contractserviceterm.BillingFrequency, exists bool) {
+	v := m.billing_frequency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingFrequency returns the old "billing_frequency" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldBillingFrequency(ctx context.Context) (v contractserviceterm.BillingFrequency, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingFrequency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingFrequency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingFrequency: %w", err)
+	}
+	return oldValue.BillingFrequency, nil
+}
+
+// ResetBillingFrequency resets all changes to the "billing_frequency" field.
+func (m *ContractServiceTermMutation) ResetBillingFrequency() {
+	m.billing_frequency = nil
+}
+
+// SetSourceEvidence sets the "source_evidence" field.
+func (m *ContractServiceTermMutation) SetSourceEvidence(jm json.RawMessage) {
+	m.source_evidence = &jm
+	m.appendsource_evidence = nil
+}
+
+// SourceEvidence returns the value of the "source_evidence" field in the mutation.
+func (m *ContractServiceTermMutation) SourceEvidence() (r json.RawMessage, exists bool) {
+	v := m.source_evidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceEvidence returns the old "source_evidence" field's value of the ContractServiceTerm entity.
+// If the ContractServiceTerm object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractServiceTermMutation) OldSourceEvidence(ctx context.Context) (v json.RawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceEvidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceEvidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceEvidence: %w", err)
+	}
+	return oldValue.SourceEvidence, nil
+}
+
+// AppendSourceEvidence adds jm to the "source_evidence" field.
+func (m *ContractServiceTermMutation) AppendSourceEvidence(jm json.RawMessage) {
+	m.appendsource_evidence = append(m.appendsource_evidence, jm...)
+}
+
+// AppendedSourceEvidence returns the list of values that were appended to the "source_evidence" field in this mutation.
+func (m *ContractServiceTermMutation) AppendedSourceEvidence() (json.RawMessage, bool) {
+	if len(m.appendsource_evidence) == 0 {
+		return nil, false
+	}
+	return m.appendsource_evidence, true
+}
+
+// ClearSourceEvidence clears the value of the "source_evidence" field.
+func (m *ContractServiceTermMutation) ClearSourceEvidence() {
+	m.source_evidence = nil
+	m.appendsource_evidence = nil
+	m.clearedFields[contractserviceterm.FieldSourceEvidence] = struct{}{}
+}
+
+// SourceEvidenceCleared returns if the "source_evidence" field was cleared in this mutation.
+func (m *ContractServiceTermMutation) SourceEvidenceCleared() bool {
+	_, ok := m.clearedFields[contractserviceterm.FieldSourceEvidence]
+	return ok
+}
+
+// ResetSourceEvidence resets all changes to the "source_evidence" field.
+func (m *ContractServiceTermMutation) ResetSourceEvidence() {
+	m.source_evidence = nil
+	m.appendsource_evidence = nil
+	delete(m.clearedFields, contractserviceterm.FieldSourceEvidence)
+}
+
+// ClearContract clears the "contract" edge to the Contract entity.
+func (m *ContractServiceTermMutation) ClearContract() {
+	m.clearedcontract = true
+	m.clearedFields[contractserviceterm.FieldContractID] = struct{}{}
+}
+
+// ContractCleared reports if the "contract" edge to the Contract entity was cleared.
+func (m *ContractServiceTermMutation) ContractCleared() bool {
+	return m.clearedcontract
+}
+
+// ContractIDs returns the "contract" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ContractID instead. It exists only for internal usage by the builders.
+func (m *ContractServiceTermMutation) ContractIDs() (ids []string) {
+	if id := m.contract; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetContract resets all changes to the "contract" edge.
+func (m *ContractServiceTermMutation) ResetContract() {
+	m.contract = nil
+	m.clearedcontract = false
+}
+
+// Where appends a list predicates to the ContractServiceTermMutation builder.
+func (m *ContractServiceTermMutation) Where(ps ...predicate.ContractServiceTerm) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ContractServiceTermMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ContractServiceTermMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ContractServiceTerm, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ContractServiceTermMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ContractServiceTermMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ContractServiceTerm).
+func (m *ContractServiceTermMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ContractServiceTermMutation) Fields() []string {
+	fields := make([]string, 0, 12)
+	if m.contract != nil {
+		fields = append(fields, contractserviceterm.FieldContractID)
+	}
+	if m.position != nil {
+		fields = append(fields, contractserviceterm.FieldPosition)
+	}
+	if m.service_description != nil {
+		fields = append(fields, contractserviceterm.FieldServiceDescription)
+	}
+	if m.pricing_model != nil {
+		fields = append(fields, contractserviceterm.FieldPricingModel)
+	}
+	if m.unit_price != nil {
+		fields = append(fields, contractserviceterm.FieldUnitPrice)
+	}
+	if m.currency != nil {
+		fields = append(fields, contractserviceterm.FieldCurrency)
+	}
+	if m.unit != nil {
+		fields = append(fields, contractserviceterm.FieldUnit)
+	}
+	if m.quantity_source != nil {
+		fields = append(fields, contractserviceterm.FieldQuantitySource)
+	}
+	if m.quantity_value != nil {
+		fields = append(fields, contractserviceterm.FieldQuantityValue)
+	}
+	if m.quantity_driver != nil {
+		fields = append(fields, contractserviceterm.FieldQuantityDriver)
+	}
+	if m.billing_frequency != nil {
+		fields = append(fields, contractserviceterm.FieldBillingFrequency)
+	}
+	if m.source_evidence != nil {
+		fields = append(fields, contractserviceterm.FieldSourceEvidence)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ContractServiceTermMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case contractserviceterm.FieldContractID:
+		return m.ContractID()
+	case contractserviceterm.FieldPosition:
+		return m.Position()
+	case contractserviceterm.FieldServiceDescription:
+		return m.ServiceDescription()
+	case contractserviceterm.FieldPricingModel:
+		return m.PricingModel()
+	case contractserviceterm.FieldUnitPrice:
+		return m.UnitPrice()
+	case contractserviceterm.FieldCurrency:
+		return m.Currency()
+	case contractserviceterm.FieldUnit:
+		return m.Unit()
+	case contractserviceterm.FieldQuantitySource:
+		return m.QuantitySource()
+	case contractserviceterm.FieldQuantityValue:
+		return m.QuantityValue()
+	case contractserviceterm.FieldQuantityDriver:
+		return m.QuantityDriver()
+	case contractserviceterm.FieldBillingFrequency:
+		return m.BillingFrequency()
+	case contractserviceterm.FieldSourceEvidence:
+		return m.SourceEvidence()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ContractServiceTermMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case contractserviceterm.FieldContractID:
+		return m.OldContractID(ctx)
+	case contractserviceterm.FieldPosition:
+		return m.OldPosition(ctx)
+	case contractserviceterm.FieldServiceDescription:
+		return m.OldServiceDescription(ctx)
+	case contractserviceterm.FieldPricingModel:
+		return m.OldPricingModel(ctx)
+	case contractserviceterm.FieldUnitPrice:
+		return m.OldUnitPrice(ctx)
+	case contractserviceterm.FieldCurrency:
+		return m.OldCurrency(ctx)
+	case contractserviceterm.FieldUnit:
+		return m.OldUnit(ctx)
+	case contractserviceterm.FieldQuantitySource:
+		return m.OldQuantitySource(ctx)
+	case contractserviceterm.FieldQuantityValue:
+		return m.OldQuantityValue(ctx)
+	case contractserviceterm.FieldQuantityDriver:
+		return m.OldQuantityDriver(ctx)
+	case contractserviceterm.FieldBillingFrequency:
+		return m.OldBillingFrequency(ctx)
+	case contractserviceterm.FieldSourceEvidence:
+		return m.OldSourceEvidence(ctx)
+	}
+	return nil, fmt.Errorf("unknown ContractServiceTerm field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ContractServiceTermMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case contractserviceterm.FieldContractID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContractID(v)
+		return nil
+	case contractserviceterm.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosition(v)
+		return nil
+	case contractserviceterm.FieldServiceDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetServiceDescription(v)
+		return nil
+	case contractserviceterm.FieldPricingModel:
+		v, ok := value.(contractserviceterm.PricingModel)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPricingModel(v)
+		return nil
+	case contractserviceterm.FieldUnitPrice:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUnitPrice(v)
+		return nil
+	case contractserviceterm.FieldCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrency(v)
+		return nil
+	case contractserviceterm.FieldUnit:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUnit(v)
+		return nil
+	case contractserviceterm.FieldQuantitySource:
+		v, ok := value.(contractserviceterm.QuantitySource)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuantitySource(v)
+		return nil
+	case contractserviceterm.FieldQuantityValue:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuantityValue(v)
+		return nil
+	case contractserviceterm.FieldQuantityDriver:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuantityDriver(v)
+		return nil
+	case contractserviceterm.FieldBillingFrequency:
+		v, ok := value.(contractserviceterm.BillingFrequency)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingFrequency(v)
+		return nil
+	case contractserviceterm.FieldSourceEvidence:
+		v, ok := value.(json.RawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceEvidence(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ContractServiceTerm field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ContractServiceTermMutation) AddedFields() []string {
+	var fields []string
+	if m.addposition != nil {
+		fields = append(fields, contractserviceterm.FieldPosition)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ContractServiceTermMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case contractserviceterm.FieldPosition:
+		return m.AddedPosition()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ContractServiceTermMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case contractserviceterm.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ContractServiceTerm numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ContractServiceTermMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(contractserviceterm.FieldUnitPrice) {
+		fields = append(fields, contractserviceterm.FieldUnitPrice)
+	}
+	if m.FieldCleared(contractserviceterm.FieldUnit) {
+		fields = append(fields, contractserviceterm.FieldUnit)
+	}
+	if m.FieldCleared(contractserviceterm.FieldQuantityValue) {
+		fields = append(fields, contractserviceterm.FieldQuantityValue)
+	}
+	if m.FieldCleared(contractserviceterm.FieldQuantityDriver) {
+		fields = append(fields, contractserviceterm.FieldQuantityDriver)
+	}
+	if m.FieldCleared(contractserviceterm.FieldSourceEvidence) {
+		fields = append(fields, contractserviceterm.FieldSourceEvidence)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ContractServiceTermMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ContractServiceTermMutation) ClearField(name string) error {
+	switch name {
+	case contractserviceterm.FieldUnitPrice:
+		m.ClearUnitPrice()
+		return nil
+	case contractserviceterm.FieldUnit:
+		m.ClearUnit()
+		return nil
+	case contractserviceterm.FieldQuantityValue:
+		m.ClearQuantityValue()
+		return nil
+	case contractserviceterm.FieldQuantityDriver:
+		m.ClearQuantityDriver()
+		return nil
+	case contractserviceterm.FieldSourceEvidence:
+		m.ClearSourceEvidence()
+		return nil
+	}
+	return fmt.Errorf("unknown ContractServiceTerm nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ContractServiceTermMutation) ResetField(name string) error {
+	switch name {
+	case contractserviceterm.FieldContractID:
+		m.ResetContractID()
+		return nil
+	case contractserviceterm.FieldPosition:
+		m.ResetPosition()
+		return nil
+	case contractserviceterm.FieldServiceDescription:
+		m.ResetServiceDescription()
+		return nil
+	case contractserviceterm.FieldPricingModel:
+		m.ResetPricingModel()
+		return nil
+	case contractserviceterm.FieldUnitPrice:
+		m.ResetUnitPrice()
+		return nil
+	case contractserviceterm.FieldCurrency:
+		m.ResetCurrency()
+		return nil
+	case contractserviceterm.FieldUnit:
+		m.ResetUnit()
+		return nil
+	case contractserviceterm.FieldQuantitySource:
+		m.ResetQuantitySource()
+		return nil
+	case contractserviceterm.FieldQuantityValue:
+		m.ResetQuantityValue()
+		return nil
+	case contractserviceterm.FieldQuantityDriver:
+		m.ResetQuantityDriver()
+		return nil
+	case contractserviceterm.FieldBillingFrequency:
+		m.ResetBillingFrequency()
+		return nil
+	case contractserviceterm.FieldSourceEvidence:
+		m.ResetSourceEvidence()
+		return nil
+	}
+	return fmt.Errorf("unknown ContractServiceTerm field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ContractServiceTermMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.contract != nil {
+		edges = append(edges, contractserviceterm.EdgeContract)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ContractServiceTermMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case contractserviceterm.EdgeContract:
+		if id := m.contract; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ContractServiceTermMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ContractServiceTermMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ContractServiceTermMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedcontract {
+		edges = append(edges, contractserviceterm.EdgeContract)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ContractServiceTermMutation) EdgeCleared(name string) bool {
+	switch name {
+	case contractserviceterm.EdgeContract:
+		return m.clearedcontract
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ContractServiceTermMutation) ClearEdge(name string) error {
+	switch name {
+	case contractserviceterm.EdgeContract:
+		m.ClearContract()
+		return nil
+	}
+	return fmt.Errorf("unknown ContractServiceTerm unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ContractServiceTermMutation) ResetEdge(name string) error {
+	switch name {
+	case contractserviceterm.EdgeContract:
+		m.ResetContract()
+		return nil
+	}
+	return fmt.Errorf("unknown ContractServiceTerm edge %s", name)
 }
 
 // ContractSourceDocumentMutation represents an operation that mutates the ContractSourceDocument nodes in the graph.
@@ -15784,6 +17181,7 @@ type InvoiceContractAssociationMutation struct {
 	supplier_name         *string
 	effective_from        *time.Time
 	effective_to          *time.Time
+	period_type           *invoicecontractassociation.PeriodType
 	total_value           *string
 	currency              *string
 	unit_type             *string
@@ -16250,7 +17648,7 @@ func (m *InvoiceContractAssociationMutation) EffectiveTo() (r time.Time, exists 
 // OldEffectiveTo returns the old "effective_to" field's value of the InvoiceContractAssociation entity.
 // If the InvoiceContractAssociation object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *InvoiceContractAssociationMutation) OldEffectiveTo(ctx context.Context) (v time.Time, err error) {
+func (m *InvoiceContractAssociationMutation) OldEffectiveTo(ctx context.Context) (v *time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldEffectiveTo is only allowed on UpdateOne operations")
 	}
@@ -16264,9 +17662,58 @@ func (m *InvoiceContractAssociationMutation) OldEffectiveTo(ctx context.Context)
 	return oldValue.EffectiveTo, nil
 }
 
+// ClearEffectiveTo clears the value of the "effective_to" field.
+func (m *InvoiceContractAssociationMutation) ClearEffectiveTo() {
+	m.effective_to = nil
+	m.clearedFields[invoicecontractassociation.FieldEffectiveTo] = struct{}{}
+}
+
+// EffectiveToCleared returns if the "effective_to" field was cleared in this mutation.
+func (m *InvoiceContractAssociationMutation) EffectiveToCleared() bool {
+	_, ok := m.clearedFields[invoicecontractassociation.FieldEffectiveTo]
+	return ok
+}
+
 // ResetEffectiveTo resets all changes to the "effective_to" field.
 func (m *InvoiceContractAssociationMutation) ResetEffectiveTo() {
 	m.effective_to = nil
+	delete(m.clearedFields, invoicecontractassociation.FieldEffectiveTo)
+}
+
+// SetPeriodType sets the "period_type" field.
+func (m *InvoiceContractAssociationMutation) SetPeriodType(it invoicecontractassociation.PeriodType) {
+	m.period_type = &it
+}
+
+// PeriodType returns the value of the "period_type" field in the mutation.
+func (m *InvoiceContractAssociationMutation) PeriodType() (r invoicecontractassociation.PeriodType, exists bool) {
+	v := m.period_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPeriodType returns the old "period_type" field's value of the InvoiceContractAssociation entity.
+// If the InvoiceContractAssociation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceContractAssociationMutation) OldPeriodType(ctx context.Context) (v invoicecontractassociation.PeriodType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPeriodType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPeriodType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPeriodType: %w", err)
+	}
+	return oldValue.PeriodType, nil
+}
+
+// ResetPeriodType resets all changes to the "period_type" field.
+func (m *InvoiceContractAssociationMutation) ResetPeriodType() {
+	m.period_type = nil
 }
 
 // SetTotalValue sets the "total_value" field.
@@ -16689,7 +18136,7 @@ func (m *InvoiceContractAssociationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InvoiceContractAssociationMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.client != nil {
 		fields = append(fields, invoicecontractassociation.FieldClientID)
 	}
@@ -16719,6 +18166,9 @@ func (m *InvoiceContractAssociationMutation) Fields() []string {
 	}
 	if m.effective_to != nil {
 		fields = append(fields, invoicecontractassociation.FieldEffectiveTo)
+	}
+	if m.period_type != nil {
+		fields = append(fields, invoicecontractassociation.FieldPeriodType)
 	}
 	if m.total_value != nil {
 		fields = append(fields, invoicecontractassociation.FieldTotalValue)
@@ -16769,6 +18219,8 @@ func (m *InvoiceContractAssociationMutation) Field(name string) (ent.Value, bool
 		return m.EffectiveFrom()
 	case invoicecontractassociation.FieldEffectiveTo:
 		return m.EffectiveTo()
+	case invoicecontractassociation.FieldPeriodType:
+		return m.PeriodType()
 	case invoicecontractassociation.FieldTotalValue:
 		return m.TotalValue()
 	case invoicecontractassociation.FieldCurrency:
@@ -16812,6 +18264,8 @@ func (m *InvoiceContractAssociationMutation) OldField(ctx context.Context, name 
 		return m.OldEffectiveFrom(ctx)
 	case invoicecontractassociation.FieldEffectiveTo:
 		return m.OldEffectiveTo(ctx)
+	case invoicecontractassociation.FieldPeriodType:
+		return m.OldPeriodType(ctx)
 	case invoicecontractassociation.FieldTotalValue:
 		return m.OldTotalValue(ctx)
 	case invoicecontractassociation.FieldCurrency:
@@ -16905,6 +18359,13 @@ func (m *InvoiceContractAssociationMutation) SetField(name string, value ent.Val
 		}
 		m.SetEffectiveTo(v)
 		return nil
+	case invoicecontractassociation.FieldPeriodType:
+		v, ok := value.(invoicecontractassociation.PeriodType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPeriodType(v)
+		return nil
 	case invoicecontractassociation.FieldTotalValue:
 		v, ok := value.(string)
 		if !ok {
@@ -16984,6 +18445,9 @@ func (m *InvoiceContractAssociationMutation) AddField(name string, value ent.Val
 // mutation.
 func (m *InvoiceContractAssociationMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(invoicecontractassociation.FieldEffectiveTo) {
+		fields = append(fields, invoicecontractassociation.FieldEffectiveTo)
+	}
 	if m.FieldCleared(invoicecontractassociation.FieldAssociatedByID) {
 		fields = append(fields, invoicecontractassociation.FieldAssociatedByID)
 	}
@@ -17004,6 +18468,9 @@ func (m *InvoiceContractAssociationMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *InvoiceContractAssociationMutation) ClearField(name string) error {
 	switch name {
+	case invoicecontractassociation.FieldEffectiveTo:
+		m.ClearEffectiveTo()
+		return nil
 	case invoicecontractassociation.FieldAssociatedByID:
 		m.ClearAssociatedByID()
 		return nil
@@ -17047,6 +18514,9 @@ func (m *InvoiceContractAssociationMutation) ResetField(name string) error {
 		return nil
 	case invoicecontractassociation.FieldEffectiveTo:
 		m.ResetEffectiveTo()
+		return nil
+	case invoicecontractassociation.FieldPeriodType:
+		m.ResetPeriodType()
 		return nil
 	case invoicecontractassociation.FieldTotalValue:
 		m.ResetTotalValue()

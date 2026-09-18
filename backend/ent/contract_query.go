@@ -8,6 +8,7 @@ import (
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
 	"diana-contabilitate/backend/ent/predicate"
 	"fmt"
@@ -29,6 +30,7 @@ type ContractQuery struct {
 	withClient              *AccountingClientQuery
 	withMatchCandidates     *ContractMatchCandidateQuery
 	withInvoiceAssociations *InvoiceContractAssociationQuery
+	withServiceTerms        *ContractServiceTermQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -124,6 +126,28 @@ func (_q *ContractQuery) QueryInvoiceAssociations() *InvoiceContractAssociationQ
 			sqlgraph.From(contract.Table, contract.FieldID, selector),
 			sqlgraph.To(invoicecontractassociation.Table, invoicecontractassociation.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, contract.InvoiceAssociationsTable, contract.InvoiceAssociationsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryServiceTerms chains the current query on the "service_terms" edge.
+func (_q *ContractQuery) QueryServiceTerms() *ContractServiceTermQuery {
+	query := (&ContractServiceTermClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contract.Table, contract.FieldID, selector),
+			sqlgraph.To(contractserviceterm.Table, contractserviceterm.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, contract.ServiceTermsTable, contract.ServiceTermsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -326,6 +350,7 @@ func (_q *ContractQuery) Clone() *ContractQuery {
 		withClient:              _q.withClient.Clone(),
 		withMatchCandidates:     _q.withMatchCandidates.Clone(),
 		withInvoiceAssociations: _q.withInvoiceAssociations.Clone(),
+		withServiceTerms:        _q.withServiceTerms.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -362,6 +387,17 @@ func (_q *ContractQuery) WithInvoiceAssociations(opts ...func(*InvoiceContractAs
 		opt(query)
 	}
 	_q.withInvoiceAssociations = query
+	return _q
+}
+
+// WithServiceTerms tells the query-builder to eager-load the nodes that are connected to
+// the "service_terms" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ContractQuery) WithServiceTerms(opts ...func(*ContractServiceTermQuery)) *ContractQuery {
+	query := (&ContractServiceTermClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withServiceTerms = query
 	return _q
 }
 
@@ -443,10 +479,11 @@ func (_q *ContractQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Con
 	var (
 		nodes       = []*Contract{}
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withClient != nil,
 			_q.withMatchCandidates != nil,
 			_q.withInvoiceAssociations != nil,
+			_q.withServiceTerms != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -488,6 +525,13 @@ func (_q *ContractQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Con
 			func(n *Contract, e *InvoiceContractAssociation) {
 				n.Edges.InvoiceAssociations = append(n.Edges.InvoiceAssociations, e)
 			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withServiceTerms; query != nil {
+		if err := _q.loadServiceTerms(ctx, query, nodes,
+			func(n *Contract) { n.Edges.ServiceTerms = []*ContractServiceTerm{} },
+			func(n *Contract, e *ContractServiceTerm) { n.Edges.ServiceTerms = append(n.Edges.ServiceTerms, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -568,6 +612,36 @@ func (_q *ContractQuery) loadInvoiceAssociations(ctx context.Context, query *Inv
 	}
 	query.Where(predicate.InvoiceContractAssociation(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(contract.InvoiceAssociationsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ContractID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "contract_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ContractQuery) loadServiceTerms(ctx context.Context, query *ContractServiceTermQuery, nodes []*Contract, init func(*Contract), assign func(*Contract, *ContractServiceTerm)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Contract)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(contractserviceterm.FieldContractID)
+	}
+	query.Where(predicate.ContractServiceTerm(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(contract.ServiceTermsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

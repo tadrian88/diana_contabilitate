@@ -3,6 +3,8 @@
 package contract
 
 import (
+	"fmt"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 )
@@ -26,8 +28,14 @@ const (
 	FieldEffectiveFrom = "effective_from"
 	// FieldEffectiveTo holds the string denoting the effective_to field in the database.
 	FieldEffectiveTo = "effective_to"
+	// FieldPeriodType holds the string denoting the period_type field in the database.
+	FieldPeriodType = "period_type"
+	// FieldLifecycleState holds the string denoting the lifecycle_state field in the database.
+	FieldLifecycleState = "lifecycle_state"
 	// FieldTotalValue holds the string denoting the total_value field in the database.
 	FieldTotalValue = "total_value"
+	// FieldHasLegacyTotalValue holds the string denoting the has_legacy_total_value field in the database.
+	FieldHasLegacyTotalValue = "has_legacy_total_value"
 	// FieldCurrency holds the string denoting the currency field in the database.
 	FieldCurrency = "currency"
 	// FieldUnitType holds the string denoting the unit_type field in the database.
@@ -54,6 +62,8 @@ const (
 	EdgeMatchCandidates = "match_candidates"
 	// EdgeInvoiceAssociations holds the string denoting the invoice_associations edge name in mutations.
 	EdgeInvoiceAssociations = "invoice_associations"
+	// EdgeServiceTerms holds the string denoting the service_terms edge name in mutations.
+	EdgeServiceTerms = "service_terms"
 	// Table holds the table name of the contract in the database.
 	Table = "contracts"
 	// ClientTable is the table that holds the client relation/edge.
@@ -77,6 +87,13 @@ const (
 	InvoiceAssociationsInverseTable = "invoice_contract_associations"
 	// InvoiceAssociationsColumn is the table column denoting the invoice_associations relation/edge.
 	InvoiceAssociationsColumn = "contract_id"
+	// ServiceTermsTable is the table that holds the service_terms relation/edge.
+	ServiceTermsTable = "contract_service_terms"
+	// ServiceTermsInverseTable is the table name for the ContractServiceTerm entity.
+	// It exists in this package in order to avoid circular dependency with the "contractserviceterm" package.
+	ServiceTermsInverseTable = "contract_service_terms"
+	// ServiceTermsColumn is the table column denoting the service_terms relation/edge.
+	ServiceTermsColumn = "contract_id"
 )
 
 // Columns holds all SQL columns for contract fields.
@@ -89,7 +106,10 @@ var Columns = []string{
 	FieldReference,
 	FieldEffectiveFrom,
 	FieldEffectiveTo,
+	FieldPeriodType,
+	FieldLifecycleState,
 	FieldTotalValue,
+	FieldHasLegacyTotalValue,
 	FieldCurrency,
 	FieldUnitType,
 	FieldPaymentTerms,
@@ -121,6 +141,8 @@ var (
 	NormalizedSupplierCuiValidator func(string) error
 	// ReferenceValidator is a validator for the "reference" field. It is called by the builders before save.
 	ReferenceValidator func(string) error
+	// DefaultHasLegacyTotalValue holds the default value on creation for the "has_legacy_total_value" field.
+	DefaultHasLegacyTotalValue bool
 	// CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	CurrencyValidator func(string) error
 	// UnitTypeValidator is a validator for the "unit_type" field. It is called by the builders before save.
@@ -132,6 +154,58 @@ var (
 	// RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
 	RevisionValidator func(uint64) error
 )
+
+// PeriodType defines the type for the "period_type" enum field.
+type PeriodType string
+
+// PeriodTypeFIXED_TERM is the default value of the PeriodType enum.
+const DefaultPeriodType = PeriodTypeFIXED_TERM
+
+// PeriodType values.
+const (
+	PeriodTypeFIXED_TERM      PeriodType = "FIXED_TERM"
+	PeriodTypeINDEFINITE_TERM PeriodType = "INDEFINITE_TERM"
+)
+
+func (pt PeriodType) String() string {
+	return string(pt)
+}
+
+// PeriodTypeValidator is a validator for the "period_type" field enum values. It is called by the builders before save.
+func PeriodTypeValidator(pt PeriodType) error {
+	switch pt {
+	case PeriodTypeFIXED_TERM, PeriodTypeINDEFINITE_TERM:
+		return nil
+	default:
+		return fmt.Errorf("contract: invalid enum value for period_type field: %q", pt)
+	}
+}
+
+// LifecycleState defines the type for the "lifecycle_state" enum field.
+type LifecycleState string
+
+// LifecycleStateACTIVE is the default value of the LifecycleState enum.
+const DefaultLifecycleState = LifecycleStateACTIVE
+
+// LifecycleState values.
+const (
+	LifecycleStateACTIVE   LifecycleState = "ACTIVE"
+	LifecycleStateARCHIVED LifecycleState = "ARCHIVED"
+)
+
+func (ls LifecycleState) String() string {
+	return string(ls)
+}
+
+// LifecycleStateValidator is a validator for the "lifecycle_state" field enum values. It is called by the builders before save.
+func LifecycleStateValidator(ls LifecycleState) error {
+	switch ls {
+	case LifecycleStateACTIVE, LifecycleStateARCHIVED:
+		return nil
+	default:
+		return fmt.Errorf("contract: invalid enum value for lifecycle_state field: %q", ls)
+	}
+}
 
 // OrderOption defines the ordering options for the Contract queries.
 type OrderOption func(*sql.Selector)
@@ -176,9 +250,24 @@ func ByEffectiveTo(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEffectiveTo, opts...).ToFunc()
 }
 
+// ByPeriodType orders the results by the period_type field.
+func ByPeriodType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPeriodType, opts...).ToFunc()
+}
+
+// ByLifecycleState orders the results by the lifecycle_state field.
+func ByLifecycleState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLifecycleState, opts...).ToFunc()
+}
+
 // ByTotalValue orders the results by the total_value field.
 func ByTotalValue(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalValue, opts...).ToFunc()
+}
+
+// ByHasLegacyTotalValue orders the results by the has_legacy_total_value field.
+func ByHasLegacyTotalValue(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldHasLegacyTotalValue, opts...).ToFunc()
 }
 
 // ByCurrency orders the results by the currency field.
@@ -265,6 +354,20 @@ func ByInvoiceAssociations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOpti
 		sqlgraph.OrderByNeighborTerms(s, newInvoiceAssociationsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByServiceTermsCount orders the results by service_terms count.
+func ByServiceTermsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newServiceTermsStep(), opts...)
+	}
+}
+
+// ByServiceTerms orders the results by service_terms terms.
+func ByServiceTerms(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newServiceTermsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newClientStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -284,5 +387,12 @@ func newInvoiceAssociationsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(InvoiceAssociationsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, InvoiceAssociationsTable, InvoiceAssociationsColumn),
+	)
+}
+func newServiceTermsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ServiceTermsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ServiceTermsTable, ServiceTermsColumn),
 	)
 }

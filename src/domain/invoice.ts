@@ -62,6 +62,7 @@ export interface ContractSummary {
   currency: string
   unitType: string
   paymentTerms: string
+  hasLegacyTotalValue?:boolean
 }
 
 export interface Contract extends ContractSummary {
@@ -70,6 +71,8 @@ export interface Contract extends ContractSummary {
   sourceMetadata?: string
   sourceDocumentId?:string
   extractionAttemptId?:string
+  periodType?:'FIXED_TERM'|'INDEFINITE_TERM'
+  serviceTerms?:Array<{serviceDescription:string;pricingModel:'FIXED_FEE'|'UNIT_RATE'|'FIXED_TOTAL';unitPrice?:string;currency:string;unit?:string;quantitySource:string;quantityValue?:string;quantityDriver?:string;billingFrequency:string;evidence?:{page?:number;snippet?:string}}>
 }
 
 export interface RuleProvenance {

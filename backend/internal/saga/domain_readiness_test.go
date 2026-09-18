@@ -14,7 +14,7 @@ import (
 func domainInvoice(t *testing.T) *invoicing.Invoice {
 	t.Helper()
 	f, l, p, pack := accountingtest.Fixture("A")
-	cui := "RO-TEST-SUPPLIER"
+	cui := accountingtest.SupplierCUI
 	input := classification.InvoiceContext{ModelVersion: accounting.ModelVersion, ClientID: "A", IssueDate: "2026-09-15", SupplierID: cui, DocumentType: "INVOICE", Currency: "RON", SourceFacts: f, Snapshot: &accounting.Snapshot{Profile: p, Pack: pack}, Lines: []classification.LineContext{{ID: "line", Description: "TEST_ONLY service", VATRate: money.MustParse("21"), VATValue: money.MustParse("21"), SourceFacts: l}}}
 	out, err := (classification.DomainPolicy{AllowTestOnly: true}).Evaluate(input)
 	if err != nil {
@@ -31,7 +31,7 @@ func domainInvoice(t *testing.T) *invoicing.Invoice {
 	return item
 }
 func domainClient() ClientIdentity {
-	return ClientIdentity{ID: "A", Name: "TEST_ONLY client", CUI: "RO-TEST-BUYER"}
+	return ClientIdentity{ID: "A", Name: "TEST_ONLY client", CUI: accountingtest.BuyerCUI}
 }
 func TestDomainOrdinaryReadinessAndDerivedXML(t *testing.T) {
 	item := domainInvoice(t)

@@ -80,7 +80,7 @@ func domainReleaseFixture(t *testing.T, tc *module5TestContext, edit func(*accou
 func domainPersistedInvoice(t *testing.T, tc *module5TestContext, f *accounting.SourceFacts, l *accounting.LineFacts, suffix string) string {
 	t.Helper()
 	id := "domain-" + tc.clientID + "-" + suffix
-	if _, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui("RO-TEST-SUPPLIER").SetNormalizedSupplierCui("RO-TEST-SUPPLIER").SetDocumentNumber(id).SetNormalizedDocumentNumber(id).SetIssueDate(tc.now).SetIssueDay(invoicing.InvoiceIssueDay(tc.now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber(id).SetNormalizedDocumentNumber(id).SetIssueDate(tc.now).SetIssueDay(invoicing.InvoiceIssueDay(tc.now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	tc.invoices = append(tc.invoices, id)
@@ -251,14 +251,14 @@ func TestDomainPersistedMissingVersusZero(t *testing.T) {
 func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing.T) {
 	tc := newModule5TestContext(t)
 	domainReleaseFixture(t, tc, nil)
-	if _, err := tc.store.Client.AccountingClient.UpdateOneID(tc.clientID).SetCui("RO-TEST-BUYER").Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.AccountingClient.UpdateOneID(tc.clientID).SetCui(accountingtest.BuyerCUI).SetNormalizedIdentifier(accountingtest.BuyerNormalizedCUI).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	cid := "TEST_ONLY-connection-" + tc.clientID
-	if _, err := tc.store.Client.SPVConnection.Create().SetID(cid).SetClientID(tc.clientID).SetCif("RO-TEST-BUYER").SetEnvironment(spvconnection.EnvironmentTEST).SetAccessTokenCiphertext("TEST_ONLY token").SetRefreshTokenCiphertext("TEST_ONLY refresh").SetAccessTokenExpiresAt(time.Now().Add(time.Hour)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.SPVConnection.Create().SetID(cid).SetClientID(tc.clientID).SetCif(accountingtest.BuyerCUI).SetEnvironment(spvconnection.EnvironmentTEST).SetAccessTokenCiphertext("TEST_ONLY token").SetRefreshTokenCiphertext("TEST_ONLY refresh").SetAccessTokenExpiresAt(time.Now().Add(time.Hour)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tc.store.Client.Contract.Create().SetID("TEST_ONLY-contract-" + tc.clientID).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui("RO-TEST-SUPPLIER").SetNormalizedSupplierCui("RO-TEST-SUPPLIER").SetReference("TEST_ONLY_CONTRACT").SetEffectiveFrom(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)).SetEffectiveTo(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)).SetTotalValue("121").SetCurrency("RON").SetUnitType("H87").SetPaymentTerms("TEST_ONLY").SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.Contract.Create().SetID("TEST_ONLY-contract-" + tc.clientID).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetReference("TEST_ONLY_CONTRACT").SetEffectiveFrom(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)).SetEffectiveTo(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)).SetTotalValue("121").SetCurrency("RON").SetUnitType("H87").SetPaymentTerms("TEST_ONLY").SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	var raw bytes.Buffer
@@ -317,7 +317,7 @@ func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing
 	if err != nil || artifact.ClassificationSnapshot["model_version"] != accounting.ModelVersion {
 		t.Fatal("final domain artifact", err)
 	}
-	if _, err := saga.Generate(item, saga.ClientIdentity{ID: tc.clientID, Name: "TEST_ONLY", CUI: "RO-TEST-BUYER"}); err == nil {
+	if _, err := saga.Generate(item, saga.ClientIdentity{ID: tc.clientID, Name: "TEST_ONLY", CUI: accountingtest.BuyerCUI}); err == nil {
 		t.Fatal("production adapter accepted TEST_ONLY pipeline")
 	}
 }

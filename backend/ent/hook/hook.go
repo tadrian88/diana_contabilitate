@@ -116,6 +116,18 @@ func (f ContractMatchRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContractMatchRunMutation", m)
 }
 
+// The ContractServiceTermFunc type is an adapter to allow the use of ordinary
+// function as ContractServiceTerm mutator.
+type ContractServiceTermFunc func(context.Context, *ent.ContractServiceTermMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContractServiceTermFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContractServiceTermMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContractServiceTermMutation", m)
+}
+
 // The ContractSourceDocumentFunc type is an adapter to allow the use of ordinary
 // function as ContractSourceDocument mutator.
 type ContractSourceDocumentFunc func(context.Context, *ent.ContractSourceDocumentMutation) (ent.Value, error)

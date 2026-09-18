@@ -19,8 +19,11 @@ func (Contract) Fields() []ent.Field {
 		field.String("normalized_supplier_cui").NotEmpty(),
 		field.String("reference").NotEmpty(),
 		field.Time("effective_from").SchemaType(map[string]string{dialect.Postgres: "date"}),
-		field.Time("effective_to").SchemaType(map[string]string{dialect.Postgres: "date"}),
+		field.Time("effective_to").SchemaType(map[string]string{dialect.Postgres: "date"}).Optional().Nillable(),
+		field.Enum("period_type").Values("FIXED_TERM", "INDEFINITE_TERM").Default("FIXED_TERM"),
+		field.Enum("lifecycle_state").Values("ACTIVE", "ARCHIVED").Default("ACTIVE"),
 		field.String("total_value").SchemaType(map[string]string{dialect.Postgres: "numeric(20,4)"}),
+		field.Bool("has_legacy_total_value").Default(true),
 		field.String("currency").MinLen(3).MaxLen(3),
 		field.String("unit_type").NotEmpty(),
 		field.String("payment_terms").NotEmpty(),
@@ -39,6 +42,7 @@ func (Contract) Edges() []ent.Edge {
 		edge.From("client", AccountingClient.Type).Ref("contracts").Field("client_id").Unique().Required().Immutable(),
 		edge.To("match_candidates", ContractMatchCandidate.Type),
 		edge.To("invoice_associations", InvoiceContractAssociation.Type),
+		edge.To("service_terms", ContractServiceTerm.Type),
 	}
 }
 

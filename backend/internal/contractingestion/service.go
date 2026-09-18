@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/contracts"
-	"diana-contabilitate/backend/internal/invoicing"
+	"diana-contabilitate/backend/internal/fiscalidentity"
 	"diana-contabilitate/backend/internal/money"
 )
 
@@ -170,7 +171,10 @@ func ValidateProposal(p Proposal) error {
 	if !hasContractData {
 		return apperrors.ErrValidation
 	}
-	fields := []Field{p.SupplierName, p.SupplierCUI, p.Reference, p.EffectiveFrom, p.EffectiveTo, p.TotalValue, p.Currency, p.UnitType, p.PaymentTerms, p.BuyerCUI}
+	fields := []Field{p.SupplierName, p.SupplierCUI, p.Reference, p.EffectiveFrom, p.EffectiveTo, p.TotalValue, p.Currency, p.UnitType, p.PaymentTerms, p.BuyerCUI, p.PeriodType}
+	for _, term := range p.ServiceTerms {
+		fields = append(fields, term.ServiceDescription, term.PricingModel, term.UnitPrice, term.Currency, term.Unit, term.QuantitySource, term.QuantityValue, term.QuantityDriver, term.BillingFrequency)
+	}
 	for _, f := range fields {
 		if f.Value != nil && len(*f.Value) > 4096 {
 			return apperrors.ErrValidation
@@ -220,6 +224,20 @@ func ValidateProposal(p Proposal) error {
 			return apperrors.ErrValidation
 		}
 	}
+	if p.PeriodType.Value != nil && *p.PeriodType.Value != "FIXED_TERM" && *p.PeriodType.Value != "INDEFINITE_TERM" {
+		return apperrors.ErrValidation
+	}
+	if p.PeriodType.Value != nil && *p.PeriodType.Value == "INDEFINITE_TERM" && p.EffectiveTo.Value != nil {
+		return apperrors.ErrValidation
+	}
+	for _, term := range p.ServiceTerms {
+		if term.PricingModel.Value == nil || (*term.PricingModel.Value != "FIXED_FEE" && *term.PricingModel.Value != "UNIT_RATE" && *term.PricingModel.Value != "FIXED_TOTAL") {
+			return apperrors.ErrValidation
+		}
+		if term.UnitPrice.Value == nil || !validAmount(*term.UnitPrice.Value) || term.Currency.Value == nil || !validCurrency(*term.Currency.Value) {
+			return apperrors.ErrValidation
+		}
+	}
 	return nil
 }
 
@@ -241,8 +259,25 @@ func (s *Service) Confirm(ctx context.Context, command ConfirmCommand) (string, 
 	if err != nil {
 		return "", false, err
 	}
-	if doc.BuyerMismatch {
-		return "", false, ErrBuyerMismatch
+	// Evidence belongs to the immutable extraction proposal, never to editable
+	// browser input. User edits change values, not source provenance.
+	if doc.LatestAttempt != nil && doc.LatestAttempt.Proposal != nil {
+		for index := range command.Contract.ServiceTerms {
+			if index < len(doc.LatestAttempt.Proposal.ServiceTerms) {
+				command.Contract.ServiceTerms[index].Evidence = doc.LatestAttempt.Proposal.ServiceTerms[index].ServiceDescription.Evidence
+			} else {
+				command.Contract.ServiceTerms[index].Evidence = Evidence{}
+			}
+		}
+	}
+	readiness := ConfirmationReadinessFor(command.Contract, doc.ClientCUI)
+	if !readiness.CanConfirm {
+		for _, blocker := range readiness.Blockers {
+			if blocker.Code == "BUYER_MISMATCH" {
+				return "", false, ErrBuyerMismatch
+			}
+		}
+		return "", false, apperrors.ErrValidation
 	}
 	value, err := validatedContract(command)
 	if err != nil {
@@ -259,6 +294,107 @@ func (s *Service) Confirm(ctx context.Context, command ConfirmCommand) (string, 
 	return id, changed, err
 }
 
+func (s *Service) Discard(ctx context.Context, clientID, documentID string, revision uint64, actor Actor) error {
+	if !authorized(actor, clientID) {
+		return apperrors.ErrNotFound
+	}
+	if revision == 0 {
+		return apperrors.ErrValidation
+	}
+	if _, err := s.store.GetDocument(ctx, clientID, documentID); err != nil {
+		return err
+	}
+	return s.store.DiscardDocument(ctx, clientID, documentID, revision, actor, s.clock())
+}
+
+func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) ConfirmationReadiness {
+	result := ConfirmationReadiness{Blockers: []ConfirmationBlocker{}}
+	add := func(code, message string) {
+		result.Blockers = append(result.Blockers, ConfirmationBlocker{Code: code, Message: message})
+	}
+	if strings.TrimSpace(v.SupplierName) == "" {
+		add("SUPPLIER_NAME_REQUIRED", "Denumirea furnizorului este obligatorie.")
+	}
+	if !validCUI(v.SupplierCUI) {
+		add("SUPPLIER_CUI_INVALID", "CUI-ul furnizorului nu este valid.")
+	}
+	if strings.TrimSpace(v.Reference) == "" {
+		add("REFERENCE_REQUIRED", "Referința contractului este obligatorie.")
+	}
+	from, fromErr := time.Parse("2006-01-02", v.EffectiveFrom)
+	if fromErr != nil {
+		add("START_DATE_INVALID", "Data de început este obligatorie și trebuie să fie validă.")
+	}
+	periodType := strings.ToUpper(strings.TrimSpace(v.PeriodType))
+	if periodType == "" {
+		periodType = "FIXED_TERM"
+	}
+	if periodType != "FIXED_TERM" && periodType != "INDEFINITE_TERM" {
+		add("PERIOD_TYPE_INVALID", "Tipul perioadei contractuale nu este valid.")
+	}
+	if periodType == "FIXED_TERM" {
+		to, err := time.Parse("2006-01-02", v.EffectiveTo)
+		if err != nil {
+			add("END_DATE_REQUIRED", "Data de sfârșit este obligatorie pentru un contract pe durată determinată.")
+		} else if fromErr == nil && to.Before(from) {
+			add("PERIOD_INVALID", "Data de sfârșit trebuie să fie după data de început.")
+		}
+	} else if strings.TrimSpace(v.EffectiveTo) != "" {
+		add("INDEFINITE_END_DATE", "Un contract pe durată nedeterminată nu poate avea dată de sfârșit.")
+	}
+	if clientCUI != "" {
+		if strings.TrimSpace(v.BuyerCUI) == "" {
+			add("BUYER_CUI_REQUIRED", "CUI-ul cumpărătorului trebuie verificat.")
+		} else if !fiscalidentity.Same(v.BuyerCUI, clientCUI) {
+			add("BUYER_MISMATCH", "CUI-ul cumpărătorului nu corespunde clientului selectat.")
+		}
+	}
+	if !validCurrency(v.Currency) {
+		add("CURRENCY_INVALID", "Moneda contractului trebuie să fie un cod ISO valid.")
+	}
+	if v.TotalValue != "" && !validAmount(v.TotalValue) {
+		add("TOTAL_VALUE_INVALID", "Valoarea contractuală totală nu este validă.")
+	}
+	for index, term := range v.ServiceTerms {
+		prefix := fmt.Sprintf("Serviciul %d: ", index+1)
+		if strings.TrimSpace(term.ServiceDescription) == "" {
+			add("SERVICE_DESCRIPTION_REQUIRED", prefix+"descrierea este obligatorie.")
+		}
+		if term.PricingModel != "FIXED_FEE" && term.PricingModel != "UNIT_RATE" && term.PricingModel != "FIXED_TOTAL" {
+			add("PRICING_MODEL_INVALID", prefix+"modelul de tarifare nu este valid.")
+		}
+		if !validAmount(term.UnitPrice) {
+			add("UNIT_PRICE_INVALID", prefix+"prețul nu este valid.")
+		}
+		if !validCurrency(term.Currency) {
+			add("SERVICE_CURRENCY_INVALID", prefix+"moneda nu este validă.")
+		}
+		if term.PricingModel == "UNIT_RATE" && strings.TrimSpace(term.Unit) == "" {
+			add("SERVICE_UNIT_REQUIRED", prefix+"unitatea este obligatorie pentru tariful unitar.")
+		}
+		if term.QuantitySource == "CONTRACT_FIXED_QUANTITY" && !validAmount(term.QuantityValue) {
+			add("QUANTITY_REQUIRED", prefix+"cantitatea contractuală fixă este obligatorie.")
+		}
+		if !member(term.QuantitySource, "CONTRACT_FIXED_QUANTITY", "INVOICE_REPORTED_QUANTITY", "USER_CONFIRMED_QUANTITY", "EXTERNAL_SOURCE_FUTURE", "UNKNOWN") {
+			add("QUANTITY_SOURCE_INVALID", prefix+"sursa cantității nu este validă.")
+		}
+		if !member(term.BillingFrequency, "MONTHLY", "QUARTERLY", "ANNUAL", "PER_OCCURRENCE", "UNKNOWN") {
+			add("BILLING_FREQUENCY_INVALID", prefix+"periodicitatea nu este validă.")
+		}
+	}
+	result.CanConfirm = len(result.Blockers) == 0
+	return result
+}
+
+func member(value string, allowed ...string) bool {
+	for _, candidate := range allowed {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
+}
+
 func validatedContract(c ConfirmCommand) (contracts.Contract, error) {
 	v := c.Contract
 	for _, text := range []string{v.SupplierName, v.SupplierCUI, v.Reference, v.EffectiveFrom, v.EffectiveTo, v.TotalValue, v.Currency, v.UnitType, v.PaymentTerms} {
@@ -266,7 +402,7 @@ func validatedContract(c ConfirmCommand) (contracts.Contract, error) {
 			return contracts.Contract{}, apperrors.ErrValidation
 		}
 	}
-	if strings.TrimSpace(v.SupplierName) == "" || strings.TrimSpace(v.Reference) == "" || strings.TrimSpace(v.UnitType) == "" || strings.TrimSpace(v.PaymentTerms) == "" {
+	if !ConfirmationReadinessFor(v, "").CanConfirm {
 		return contracts.Contract{}, apperrors.ErrValidation
 	}
 	cui := strings.TrimSpace(v.SupplierCUI)
@@ -278,12 +414,39 @@ func validatedContract(c ConfirmCommand) (contracts.Contract, error) {
 		return contracts.Contract{}, apperrors.ErrValidation
 	}
 	from, e1 := time.Parse("2006-01-02", v.EffectiveFrom)
-	to, e2 := time.Parse("2006-01-02", v.EffectiveTo)
-	amount, e3 := money.Parse(v.TotalValue)
-	if e1 != nil || e2 != nil || e3 != nil || !validAmount(v.TotalValue) || to.Before(from) {
+	var to *time.Time
+	if strings.ToUpper(strings.TrimSpace(v.PeriodType)) != "INDEFINITE_TERM" {
+		parsed, err := time.Parse("2006-01-02", v.EffectiveTo)
+		if err != nil {
+			return contracts.Contract{}, apperrors.ErrValidation
+		}
+		to = &parsed
+	}
+	amount := money.MustParse("0")
+	var e3 error
+	if v.TotalValue != "" {
+		amount, e3 = money.Parse(v.TotalValue)
+	}
+	if e1 != nil || e3 != nil {
 		return contracts.Contract{}, apperrors.ErrValidation
 	}
-	return contracts.Contract{ID: newID("contract"), ClientID: c.ClientID, SupplierName: strings.TrimSpace(v.SupplierName), SupplierCUI: cui, NormalizedSupplierCUI: invoicing.NormalizeBusinessIdentifier(cui), Reference: strings.TrimSpace(v.Reference), EffectiveFrom: from, EffectiveTo: to, Value: money.Money{Amount: amount, Currency: currency}, UnitType: strings.TrimSpace(v.UnitType), PaymentTerms: strings.TrimSpace(v.PaymentTerms), Revision: 1}, nil
+	periodType := strings.ToUpper(strings.TrimSpace(v.PeriodType))
+	if periodType == "" {
+		periodType = "FIXED_TERM"
+	}
+	result := contracts.Contract{ID: newID("contract"), ClientID: c.ClientID, SupplierName: strings.TrimSpace(v.SupplierName), SupplierCUI: cui, NormalizedSupplierCUI: fiscalidentity.ForComparison(cui, "RO"), Reference: strings.TrimSpace(v.Reference), EffectiveFrom: from, EffectiveTo: to, PeriodType: periodType, Value: money.Money{Amount: amount, Currency: currency}, HasLegacyTotalValue: strings.TrimSpace(v.TotalValue) != "", UnitType: strings.TrimSpace(v.UnitType), PaymentTerms: strings.TrimSpace(v.PaymentTerms), Revision: 1}
+	for index, term := range v.ServiceTerms {
+		price, _ := money.Parse(term.UnitPrice)
+		priceCopy := price
+		var quantity *money.Amount
+		if term.QuantityValue != "" {
+			parsed, _ := money.Parse(term.QuantityValue)
+			quantity = &parsed
+		}
+		evidence, _ := json.Marshal(term.Evidence)
+		result.ServiceTerms = append(result.ServiceTerms, contracts.ServiceTerm{ID: newID("contractterm"), Position: index + 1, ServiceDescription: strings.TrimSpace(term.ServiceDescription), PricingModel: term.PricingModel, UnitPrice: &priceCopy, Currency: strings.ToUpper(strings.TrimSpace(term.Currency)), Unit: strings.TrimSpace(term.Unit), QuantitySource: term.QuantitySource, QuantityValue: quantity, QuantityDriver: strings.TrimSpace(term.QuantityDriver), BillingFrequency: term.BillingFrequency, EvidenceJSON: evidence})
+	}
+	return result, nil
 }
 
 func validCUI(value string) bool {

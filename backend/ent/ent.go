@@ -13,6 +13,7 @@ import (
 	"diana-contabilitate/backend/ent/contractextractionattempt"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
@@ -102,6 +103,7 @@ func checkColumn(t, c string) error {
 			contractextractionattempt.Table:  contractextractionattempt.ValidColumn,
 			contractmatchcandidate.Table:     contractmatchcandidate.ValidColumn,
 			contractmatchrun.Table:           contractmatchrun.ValidColumn,
+			contractserviceterm.Table:        contractserviceterm.ValidColumn,
 			contractsourcedocument.Table:     contractsourcedocument.ValidColumn,
 			invoice.Table:                    invoice.ValidColumn,
 			invoicecontractassociation.Table: invoicecontractassociation.ValidColumn,

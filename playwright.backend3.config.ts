@@ -13,15 +13,14 @@ export default defineConfig({
     {
       command: './scripts/start-backend-e2e.sh',
       url: 'http://127.0.0.1:8080/readyz',
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
     {
       command: 'VITE_BACKEND_READS_ENABLED=true VITE_API_PROXY_TARGET=http://127.0.0.1:8080 npm run dev -- --host 127.0.0.1 --port 4175',
       url: 'http://127.0.0.1:4175',
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
   ],
 })
-

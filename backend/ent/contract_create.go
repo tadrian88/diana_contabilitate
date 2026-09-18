@@ -7,6 +7,7 @@ import (
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
 	"errors"
 	"fmt"
@@ -65,9 +66,59 @@ func (_c *ContractCreate) SetEffectiveTo(v time.Time) *ContractCreate {
 	return _c
 }
 
+// SetNillableEffectiveTo sets the "effective_to" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableEffectiveTo(v *time.Time) *ContractCreate {
+	if v != nil {
+		_c.SetEffectiveTo(*v)
+	}
+	return _c
+}
+
+// SetPeriodType sets the "period_type" field.
+func (_c *ContractCreate) SetPeriodType(v contract.PeriodType) *ContractCreate {
+	_c.mutation.SetPeriodType(v)
+	return _c
+}
+
+// SetNillablePeriodType sets the "period_type" field if the given value is not nil.
+func (_c *ContractCreate) SetNillablePeriodType(v *contract.PeriodType) *ContractCreate {
+	if v != nil {
+		_c.SetPeriodType(*v)
+	}
+	return _c
+}
+
+// SetLifecycleState sets the "lifecycle_state" field.
+func (_c *ContractCreate) SetLifecycleState(v contract.LifecycleState) *ContractCreate {
+	_c.mutation.SetLifecycleState(v)
+	return _c
+}
+
+// SetNillableLifecycleState sets the "lifecycle_state" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableLifecycleState(v *contract.LifecycleState) *ContractCreate {
+	if v != nil {
+		_c.SetLifecycleState(*v)
+	}
+	return _c
+}
+
 // SetTotalValue sets the "total_value" field.
 func (_c *ContractCreate) SetTotalValue(v string) *ContractCreate {
 	_c.mutation.SetTotalValue(v)
+	return _c
+}
+
+// SetHasLegacyTotalValue sets the "has_legacy_total_value" field.
+func (_c *ContractCreate) SetHasLegacyTotalValue(v bool) *ContractCreate {
+	_c.mutation.SetHasLegacyTotalValue(v)
+	return _c
+}
+
+// SetNillableHasLegacyTotalValue sets the "has_legacy_total_value" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableHasLegacyTotalValue(v *bool) *ContractCreate {
+	if v != nil {
+		_c.SetHasLegacyTotalValue(*v)
+	}
 	return _c
 }
 
@@ -212,6 +263,21 @@ func (_c *ContractCreate) AddInvoiceAssociations(v ...*InvoiceContractAssociatio
 	return _c.AddInvoiceAssociationIDs(ids...)
 }
 
+// AddServiceTermIDs adds the "service_terms" edge to the ContractServiceTerm entity by IDs.
+func (_c *ContractCreate) AddServiceTermIDs(ids ...string) *ContractCreate {
+	_c.mutation.AddServiceTermIDs(ids...)
+	return _c
+}
+
+// AddServiceTerms adds the "service_terms" edges to the ContractServiceTerm entity.
+func (_c *ContractCreate) AddServiceTerms(v ...*ContractServiceTerm) *ContractCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddServiceTermIDs(ids...)
+}
+
 // Mutation returns the ContractMutation object of the builder.
 func (_c *ContractCreate) Mutation() *ContractMutation {
 	return _c.mutation
@@ -247,6 +313,18 @@ func (_c *ContractCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *ContractCreate) defaults() {
+	if _, ok := _c.mutation.PeriodType(); !ok {
+		v := contract.DefaultPeriodType
+		_c.mutation.SetPeriodType(v)
+	}
+	if _, ok := _c.mutation.LifecycleState(); !ok {
+		v := contract.DefaultLifecycleState
+		_c.mutation.SetLifecycleState(v)
+	}
+	if _, ok := _c.mutation.HasLegacyTotalValue(); !ok {
+		v := contract.DefaultHasLegacyTotalValue
+		_c.mutation.SetHasLegacyTotalValue(v)
+	}
 	if _, ok := _c.mutation.Revision(); !ok {
 		v := contract.DefaultRevision
 		_c.mutation.SetRevision(v)
@@ -293,11 +371,27 @@ func (_c *ContractCreate) check() error {
 	if _, ok := _c.mutation.EffectiveFrom(); !ok {
 		return &ValidationError{Name: "effective_from", err: errors.New(`ent: missing required field "Contract.effective_from"`)}
 	}
-	if _, ok := _c.mutation.EffectiveTo(); !ok {
-		return &ValidationError{Name: "effective_to", err: errors.New(`ent: missing required field "Contract.effective_to"`)}
+	if _, ok := _c.mutation.PeriodType(); !ok {
+		return &ValidationError{Name: "period_type", err: errors.New(`ent: missing required field "Contract.period_type"`)}
+	}
+	if v, ok := _c.mutation.PeriodType(); ok {
+		if err := contract.PeriodTypeValidator(v); err != nil {
+			return &ValidationError{Name: "period_type", err: fmt.Errorf(`ent: validator failed for field "Contract.period_type": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.LifecycleState(); !ok {
+		return &ValidationError{Name: "lifecycle_state", err: errors.New(`ent: missing required field "Contract.lifecycle_state"`)}
+	}
+	if v, ok := _c.mutation.LifecycleState(); ok {
+		if err := contract.LifecycleStateValidator(v); err != nil {
+			return &ValidationError{Name: "lifecycle_state", err: fmt.Errorf(`ent: validator failed for field "Contract.lifecycle_state": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.TotalValue(); !ok {
 		return &ValidationError{Name: "total_value", err: errors.New(`ent: missing required field "Contract.total_value"`)}
+	}
+	if _, ok := _c.mutation.HasLegacyTotalValue(); !ok {
+		return &ValidationError{Name: "has_legacy_total_value", err: errors.New(`ent: missing required field "Contract.has_legacy_total_value"`)}
 	}
 	if _, ok := _c.mutation.Currency(); !ok {
 		return &ValidationError{Name: "currency", err: errors.New(`ent: missing required field "Contract.currency"`)}
@@ -397,11 +491,23 @@ func (_c *ContractCreate) createSpec() (*Contract, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := _c.mutation.EffectiveTo(); ok {
 		_spec.SetField(contract.FieldEffectiveTo, field.TypeTime, value)
-		_node.EffectiveTo = value
+		_node.EffectiveTo = &value
+	}
+	if value, ok := _c.mutation.PeriodType(); ok {
+		_spec.SetField(contract.FieldPeriodType, field.TypeEnum, value)
+		_node.PeriodType = value
+	}
+	if value, ok := _c.mutation.LifecycleState(); ok {
+		_spec.SetField(contract.FieldLifecycleState, field.TypeEnum, value)
+		_node.LifecycleState = value
 	}
 	if value, ok := _c.mutation.TotalValue(); ok {
 		_spec.SetField(contract.FieldTotalValue, field.TypeString, value)
 		_node.TotalValue = value
+	}
+	if value, ok := _c.mutation.HasLegacyTotalValue(); ok {
+		_spec.SetField(contract.FieldHasLegacyTotalValue, field.TypeBool, value)
+		_node.HasLegacyTotalValue = value
 	}
 	if value, ok := _c.mutation.Currency(); ok {
 		_spec.SetField(contract.FieldCurrency, field.TypeString, value)
@@ -485,6 +591,22 @@ func (_c *ContractCreate) createSpec() (*Contract, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(invoicecontractassociation.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ServiceTermsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -115,6 +116,7 @@ func NewWithContractIngestion(clientService *clients.Service, invoiceService *in
 	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-documents/{documentId}/file", s.downloadContractDocument)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/confirm", s.confirmContractDocument)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/reextract", s.retryContractDocument)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/discard", s.discardContractDocument)
 	return s.middleware(mux)
 }
 
@@ -223,25 +225,13 @@ func (s *Server) downloadContractDocument(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": source.Document.OriginalFilename}))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(source.Bytes)))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(source.Bytes)
+	http.ServeContent(w, r, source.Document.OriginalFilename, source.Document.UploadedAt, bytes.NewReader(source.Bytes))
 }
 
 type confirmContractDocumentRequest struct {
-	ExtractionAttemptID      string `json:"extractionAttemptId"`
-	ExpectedDocumentRevision uint64 `json:"expectedDocumentRevision"`
-	Contract                 struct {
-		SupplierName  string `json:"supplierName"`
-		SupplierCUI   string `json:"supplierCui"`
-		Reference     string `json:"reference"`
-		EffectiveFrom string `json:"effectiveFrom"`
-		EffectiveTo   string `json:"effectiveTo"`
-		TotalValue    string `json:"totalValue"`
-		Currency      string `json:"currency"`
-		UnitType      string `json:"unitType"`
-		PaymentTerms  string `json:"paymentTerms"`
-	} `json:"contract"`
+	ExtractionAttemptID      string                             `json:"extractionAttemptId"`
+	ExpectedDocumentRevision uint64                             `json:"expectedDocumentRevision"`
+	Contract                 contractingestion.ReviewedContract `json:"contract"`
 }
 
 func (s *Server) confirmContractDocument(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +248,7 @@ func (s *Server) confirmContractDocument(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	actor, _ := requestactor.FromContext(r.Context())
-	id, changed, err := s.contractIngestion.Confirm(r.Context(), contractingestion.ConfirmCommand{ClientID: strings.TrimSpace(r.PathValue("clientId")), DocumentID: strings.TrimSpace(r.PathValue("documentId")), ExtractionAttemptID: req.ExtractionAttemptID, ExpectedDocumentRevision: req.ExpectedDocumentRevision, Contract: contractingestion.ReviewedContract{SupplierName: req.Contract.SupplierName, SupplierCUI: req.Contract.SupplierCUI, Reference: req.Contract.Reference, EffectiveFrom: req.Contract.EffectiveFrom, EffectiveTo: req.Contract.EffectiveTo, TotalValue: req.Contract.TotalValue, Currency: req.Contract.Currency, UnitType: req.Contract.UnitType, PaymentTerms: req.Contract.PaymentTerms}, CommandID: key, Actor: ingestionActor(actor, r)})
+	id, changed, err := s.contractIngestion.Confirm(r.Context(), contractingestion.ConfirmCommand{ClientID: strings.TrimSpace(r.PathValue("clientId")), DocumentID: strings.TrimSpace(r.PathValue("documentId")), ExtractionAttemptID: req.ExtractionAttemptID, ExpectedDocumentRevision: req.ExpectedDocumentRevision, Contract: req.Contract, CommandID: key, Actor: ingestionActor(actor, r)})
 	if s.writeContractIngestionError(w, r, err) {
 		return
 	}
@@ -266,6 +256,27 @@ func (s *Server) confirmContractDocument(w http.ResponseWriter, r *http.Request)
 		s.metrics.ContractConfirmed()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"contractId": id, "changed": changed})
+}
+
+func (s *Server) discardContractDocument(w http.ResponseWriter, r *http.Request) {
+	if s.contractIngestion == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "CONTRACT_INGESTION_UNAVAILABLE", "Extragerea contractelor nu este configurată.")
+		return
+	}
+	var req struct {
+		Revision uint64 `json:"expectedDocumentRevision"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&req) != nil || req.Revision == 0 {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Revizia documentului este obligatorie.")
+		return
+	}
+	actor, _ := requestactor.FromContext(r.Context())
+	if err := s.contractIngestion.Discard(r.Context(), strings.TrimSpace(r.PathValue("clientId")), strings.TrimSpace(r.PathValue("documentId")), req.Revision, ingestionActor(actor, r)); s.writeContractIngestionError(w, r, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) writeContractIngestionError(w http.ResponseWriter, r *http.Request, err error) bool {
 	if err == nil {

@@ -6,10 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
-	"diana-contabilitate/backend/internal/invoicing"
+	"diana-contabilitate/backend/internal/fiscalidentity"
 )
 
 type ServiceConfig struct {
@@ -90,7 +89,7 @@ func (s *Service) Sync(ctx context.Context, connectionID string) (result SyncRes
 	}
 	pages := 1
 	for page := 1; page <= pages; page++ {
-		messages, totalPages, listErr := s.client.ListIncoming(ctx, token, normalizeCUI(connection.CIF), start, now, page)
+		messages, totalPages, listErr := s.client.ListIncoming(ctx, token, fiscalidentity.ForComparison(connection.CIF, "RO"), start, now, page)
 		if listErr != nil {
 			return result, listErr
 		}
@@ -153,7 +152,7 @@ func (s *Service) ProcessDocument(ctx context.Context, documentID, owner string)
 	if err != nil {
 		return fail(errorKind(err), err)
 	}
-	if normalizeCUI(parsed.BuyerCUI) != normalizeCUI(connection.CIF) {
+	if !fiscalidentity.SameRomanian(parsed.BuyerCUI, connection.CIF) {
 		return fail("PERMANENT", fmt.Errorf("%w: buyer identity does not match target client", ErrPermanent))
 	}
 	if parsed.Invoice.SourceFacts != nil {
@@ -218,11 +217,6 @@ func (s *Service) accessToken(ctx context.Context, connection *Connection) (stri
 	return response.AccessToken, nil
 }
 
-func normalizeCUI(value string) string {
-	normalized := invoicing.NormalizeBusinessIdentifier(value)
-	normalized = strings.ReplaceAll(normalized, " ", "")
-	return strings.TrimPrefix(normalized, "RO")
-}
 func errorKind(err error) string {
 	if errors.Is(err, ErrPermanent) {
 		return "PERMANENT"

@@ -31,9 +31,15 @@ type Contract struct {
 	// EffectiveFrom holds the value of the "effective_from" field.
 	EffectiveFrom time.Time `json:"effective_from,omitempty"`
 	// EffectiveTo holds the value of the "effective_to" field.
-	EffectiveTo time.Time `json:"effective_to,omitempty"`
+	EffectiveTo *time.Time `json:"effective_to,omitempty"`
+	// PeriodType holds the value of the "period_type" field.
+	PeriodType contract.PeriodType `json:"period_type,omitempty"`
+	// LifecycleState holds the value of the "lifecycle_state" field.
+	LifecycleState contract.LifecycleState `json:"lifecycle_state,omitempty"`
 	// TotalValue holds the value of the "total_value" field.
 	TotalValue string `json:"total_value,omitempty"`
+	// HasLegacyTotalValue holds the value of the "has_legacy_total_value" field.
+	HasLegacyTotalValue bool `json:"has_legacy_total_value,omitempty"`
 	// Currency holds the value of the "currency" field.
 	Currency string `json:"currency,omitempty"`
 	// UnitType holds the value of the "unit_type" field.
@@ -68,9 +74,11 @@ type ContractEdges struct {
 	MatchCandidates []*ContractMatchCandidate `json:"match_candidates,omitempty"`
 	// InvoiceAssociations holds the value of the invoice_associations edge.
 	InvoiceAssociations []*InvoiceContractAssociation `json:"invoice_associations,omitempty"`
+	// ServiceTerms holds the value of the service_terms edge.
+	ServiceTerms []*ContractServiceTerm `json:"service_terms,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // ClientOrErr returns the Client value or an error if the edge
@@ -102,14 +110,25 @@ func (e ContractEdges) InvoiceAssociationsOrErr() ([]*InvoiceContractAssociation
 	return nil, &NotLoadedError{edge: "invoice_associations"}
 }
 
+// ServiceTermsOrErr returns the ServiceTerms value or an error if the edge
+// was not loaded in eager-loading.
+func (e ContractEdges) ServiceTermsOrErr() ([]*ContractServiceTerm, error) {
+	if e.loadedTypes[3] {
+		return e.ServiceTerms, nil
+	}
+	return nil, &NotLoadedError{edge: "service_terms"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*Contract) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case contract.FieldHasLegacyTotalValue:
+			values[i] = new(sql.NullBool)
 		case contract.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case contract.FieldID, contract.FieldClientID, contract.FieldSupplierName, contract.FieldSupplierCui, contract.FieldNormalizedSupplierCui, contract.FieldReference, contract.FieldTotalValue, contract.FieldCurrency, contract.FieldUnitType, contract.FieldPaymentTerms, contract.FieldSourceReference, contract.FieldSourceMetadata, contract.FieldSourceDocumentID, contract.FieldExtractionAttemptID:
+		case contract.FieldID, contract.FieldClientID, contract.FieldSupplierName, contract.FieldSupplierCui, contract.FieldNormalizedSupplierCui, contract.FieldReference, contract.FieldPeriodType, contract.FieldLifecycleState, contract.FieldTotalValue, contract.FieldCurrency, contract.FieldUnitType, contract.FieldPaymentTerms, contract.FieldSourceReference, contract.FieldSourceMetadata, contract.FieldSourceDocumentID, contract.FieldExtractionAttemptID:
 			values[i] = new(sql.NullString)
 		case contract.FieldEffectiveFrom, contract.FieldEffectiveTo, contract.FieldCreatedAt, contract.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -174,13 +193,32 @@ func (_m *Contract) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field effective_to", values[i])
 			} else if value.Valid {
-				_m.EffectiveTo = value.Time
+				_m.EffectiveTo = new(time.Time)
+				*_m.EffectiveTo = value.Time
+			}
+		case contract.FieldPeriodType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field period_type", values[i])
+			} else if value.Valid {
+				_m.PeriodType = contract.PeriodType(value.String)
+			}
+		case contract.FieldLifecycleState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field lifecycle_state", values[i])
+			} else if value.Valid {
+				_m.LifecycleState = contract.LifecycleState(value.String)
 			}
 		case contract.FieldTotalValue:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field total_value", values[i])
 			} else if value.Valid {
 				_m.TotalValue = value.String
+			}
+		case contract.FieldHasLegacyTotalValue:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field has_legacy_total_value", values[i])
+			} else if value.Valid {
+				_m.HasLegacyTotalValue = value.Bool
 			}
 		case contract.FieldCurrency:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -274,6 +312,11 @@ func (_m *Contract) QueryInvoiceAssociations() *InvoiceContractAssociationQuery 
 	return NewContractClient(_m.config).QueryInvoiceAssociations(_m)
 }
 
+// QueryServiceTerms queries the "service_terms" edge of the Contract entity.
+func (_m *Contract) QueryServiceTerms() *ContractServiceTermQuery {
+	return NewContractClient(_m.config).QueryServiceTerms(_m)
+}
+
 // Update returns a builder for updating this Contract.
 // Note that you need to call Contract.Unwrap() before calling this method if this Contract
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -315,11 +358,22 @@ func (_m *Contract) String() string {
 	builder.WriteString("effective_from=")
 	builder.WriteString(_m.EffectiveFrom.Format(time.ANSIC))
 	builder.WriteString(", ")
-	builder.WriteString("effective_to=")
-	builder.WriteString(_m.EffectiveTo.Format(time.ANSIC))
+	if v := _m.EffectiveTo; v != nil {
+		builder.WriteString("effective_to=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("period_type=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PeriodType))
+	builder.WriteString(", ")
+	builder.WriteString("lifecycle_state=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LifecycleState))
 	builder.WriteString(", ")
 	builder.WriteString("total_value=")
 	builder.WriteString(_m.TotalValue)
+	builder.WriteString(", ")
+	builder.WriteString("has_legacy_total_value=")
+	builder.WriteString(fmt.Sprintf("%v", _m.HasLegacyTotalValue))
 	builder.WriteString(", ")
 	builder.WriteString("currency=")
 	builder.WriteString(_m.Currency)

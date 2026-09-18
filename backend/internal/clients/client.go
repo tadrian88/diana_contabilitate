@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"diana-contabilitate/backend/internal/fiscalidentity"
 )
 
 type Lifecycle string
@@ -53,8 +55,9 @@ var foreignID = regexp.MustCompile(`^[A-Z0-9][A-Z0-9.-]{1,31}$`)
 func NormalizeIdentifier(raw, country string) (string, error) {
 	value := strings.ToUpper(strings.TrimSpace(raw))
 	if country == "RO" {
-		value = strings.TrimSpace(strings.TrimPrefix(value, "RO"))
-		if !romanianID.MatchString(value) {
+		var ok bool
+		value, ok = fiscalidentity.Romanian(value)
+		if !ok || !romanianID.MatchString(value) {
 			return "", fmt.Errorf("%w: CUI românesc invalid (2–10 cifre)", apperrors.ErrValidation)
 		}
 	} else if !foreignID.MatchString(value) {

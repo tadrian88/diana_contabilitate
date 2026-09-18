@@ -56,7 +56,7 @@ type ContractCandidate struct {
 	Reference     string
 	SupplierName  string
 	EffectiveFrom time.Time
-	EffectiveTo   time.Time
+	EffectiveTo   *time.Time
 	ValueAmount   string
 	Currency      string
 	Confidence    string

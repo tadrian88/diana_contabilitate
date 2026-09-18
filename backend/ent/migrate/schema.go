@@ -219,8 +219,11 @@ var (
 		{Name: "normalized_supplier_cui", Type: field.TypeString},
 		{Name: "reference", Type: field.TypeString},
 		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
-		{Name: "effective_to", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "period_type", Type: field.TypeEnum, Enums: []string{"FIXED_TERM", "INDEFINITE_TERM"}, Default: "FIXED_TERM"},
+		{Name: "lifecycle_state", Type: field.TypeEnum, Enums: []string{"ACTIVE", "ARCHIVED"}, Default: "ACTIVE"},
 		{Name: "total_value", Type: field.TypeString, SchemaType: map[string]string{"postgres": "numeric(20,4)"}},
+		{Name: "has_legacy_total_value", Type: field.TypeBool, Default: true},
 		{Name: "currency", Type: field.TypeString, Size: 3},
 		{Name: "unit_type", Type: field.TypeString},
 		{Name: "payment_terms", Type: field.TypeString},
@@ -241,7 +244,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "contracts_clients_contracts",
-				Columns:    []*schema.Column{ContractsColumns[18]},
+				Columns:    []*schema.Column{ContractsColumns[21]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -250,27 +253,27 @@ var (
 			{
 				Name:    "contract_client_id_reference",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[18], ContractsColumns[4]},
+				Columns: []*schema.Column{ContractsColumns[21], ContractsColumns[4]},
 			},
 			{
 				Name:    "contract_id_client_id",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[0], ContractsColumns[18]},
+				Columns: []*schema.Column{ContractsColumns[0], ContractsColumns[21]},
 			},
 			{
 				Name:    "contract_client_id_normalized_supplier_cui",
 				Unique:  false,
-				Columns: []*schema.Column{ContractsColumns[18], ContractsColumns[3]},
+				Columns: []*schema.Column{ContractsColumns[21], ContractsColumns[3]},
 			},
 			{
 				Name:    "contract_source_document_id",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[13]},
+				Columns: []*schema.Column{ContractsColumns[16]},
 			},
 			{
 				Name:    "contract_extraction_attempt_id",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[14]},
+				Columns: []*schema.Column{ContractsColumns[17]},
 			},
 		},
 	}
@@ -424,6 +427,43 @@ var (
 			},
 		},
 	}
+	// ContractServiceTermsColumns holds the columns for the "contract_service_terms" table.
+	ContractServiceTermsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "position", Type: field.TypeInt},
+		{Name: "service_description", Type: field.TypeString},
+		{Name: "pricing_model", Type: field.TypeEnum, Enums: []string{"FIXED_FEE", "UNIT_RATE", "FIXED_TOTAL"}},
+		{Name: "unit_price", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(20,4)"}},
+		{Name: "currency", Type: field.TypeString, Size: 3},
+		{Name: "unit", Type: field.TypeString, Nullable: true},
+		{Name: "quantity_source", Type: field.TypeEnum, Enums: []string{"CONTRACT_FIXED_QUANTITY", "INVOICE_REPORTED_QUANTITY", "USER_CONFIRMED_QUANTITY", "EXTERNAL_SOURCE_FUTURE", "UNKNOWN"}, Default: "UNKNOWN"},
+		{Name: "quantity_value", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(20,4)"}},
+		{Name: "quantity_driver", Type: field.TypeString, Nullable: true},
+		{Name: "billing_frequency", Type: field.TypeEnum, Enums: []string{"MONTHLY", "QUARTERLY", "ANNUAL", "PER_OCCURRENCE", "UNKNOWN"}, Default: "UNKNOWN"},
+		{Name: "source_evidence", Type: field.TypeJSON, Nullable: true},
+		{Name: "contract_id", Type: field.TypeString},
+	}
+	// ContractServiceTermsTable holds the schema information for the "contract_service_terms" table.
+	ContractServiceTermsTable = &schema.Table{
+		Name:       "contract_service_terms",
+		Columns:    ContractServiceTermsColumns,
+		PrimaryKey: []*schema.Column{ContractServiceTermsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "contract_service_terms_contracts_service_terms",
+				Columns:    []*schema.Column{ContractServiceTermsColumns[12]},
+				RefColumns: []*schema.Column{ContractsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contractserviceterm_contract_id_position",
+				Unique:  true,
+				Columns: []*schema.Column{ContractServiceTermsColumns[12], ContractServiceTermsColumns[1]},
+			},
+		},
+	}
 	// ContractSourceDocumentsColumns holds the columns for the "contract_source_documents" table.
 	ContractSourceDocumentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -436,7 +476,7 @@ var (
 		{Name: "uploaded_by_display", Type: field.TypeString, Nullable: true},
 		{Name: "uploaded_at", Type: field.TypeTime},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"UPLOADED", "EXTRACTING", "READY_FOR_REVIEW", "EXTRACTION_FAILED", "CONFIRMED"}, Default: "UPLOADED"},
-		{Name: "lifecycle_state", Type: field.TypeEnum, Enums: []string{"ACTIVE", "SUPERSEDED"}, Default: "ACTIVE"},
+		{Name: "lifecycle_state", Type: field.TypeEnum, Enums: []string{"ACTIVE", "SUPERSEDED", "DISCARDED"}, Default: "ACTIVE"},
 		{Name: "latest_extraction_id", Type: field.TypeString, Nullable: true},
 		{Name: "confirmed_contract_id", Type: field.TypeString, Nullable: true},
 		{Name: "confirmed_by_id", Type: field.TypeString, Nullable: true},
@@ -578,7 +618,8 @@ var (
 		{Name: "contract_reference", Type: field.TypeString},
 		{Name: "supplier_name", Type: field.TypeString},
 		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
-		{Name: "effective_to", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "period_type", Type: field.TypeEnum, Enums: []string{"FIXED_TERM", "INDEFINITE_TERM"}, Default: "FIXED_TERM"},
 		{Name: "total_value", Type: field.TypeString, SchemaType: map[string]string{"postgres": "numeric(20,4)"}},
 		{Name: "currency", Type: field.TypeString, Size: 3},
 		{Name: "unit_type", Type: field.TypeString},
@@ -599,25 +640,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "invoice_contract_associations_clients_invoice_contract_associations",
-				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[14]},
+				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[15]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "invoice_contract_associations_contracts_invoice_associations",
-				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[15]},
+				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[16]},
 				RefColumns: []*schema.Column{ContractsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "invoice_contract_associations_contract_match_runs_invoice_associations",
-				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[16]},
+				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[17]},
 				RefColumns: []*schema.Column{ContractMatchRunsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "invoice_contract_associations_invoices_contract_association",
-				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[17]},
+				Columns:    []*schema.Column{InvoiceContractAssociationsColumns[18]},
 				RefColumns: []*schema.Column{InvoicesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -626,12 +667,12 @@ var (
 			{
 				Name:    "invoicecontractassociation_invoice_id",
 				Unique:  true,
-				Columns: []*schema.Column{InvoiceContractAssociationsColumns[17]},
+				Columns: []*schema.Column{InvoiceContractAssociationsColumns[18]},
 			},
 			{
 				Name:    "invoicecontractassociation_contract_id_associated_at",
 				Unique:  false,
-				Columns: []*schema.Column{InvoiceContractAssociationsColumns[15], InvoiceContractAssociationsColumns[11]},
+				Columns: []*schema.Column{InvoiceContractAssociationsColumns[16], InvoiceContractAssociationsColumns[12]},
 			},
 		},
 	}
@@ -1165,6 +1206,7 @@ var (
 		ContractExtractionAttemptsTable,
 		ContractMatchCandidatesTable,
 		ContractMatchRunsTable,
+		ContractServiceTermsTable,
 		ContractSourceDocumentsTable,
 		InvoicesTable,
 		InvoiceContractAssociationsTable,
@@ -1196,6 +1238,7 @@ func init() {
 	ContractMatchCandidatesTable.ForeignKeys[2].RefTable = ContractMatchRunsTable
 	ContractMatchRunsTable.ForeignKeys[0].RefTable = ClientsTable
 	ContractMatchRunsTable.ForeignKeys[1].RefTable = InvoicesTable
+	ContractServiceTermsTable.ForeignKeys[0].RefTable = ContractsTable
 	ContractSourceDocumentsTable.ForeignKeys[0].RefTable = ClientsTable
 	InvoicesTable.ForeignKeys[0].RefTable = ClientsTable
 	InvoiceContractAssociationsTable.ForeignKeys[0].RefTable = ClientsTable

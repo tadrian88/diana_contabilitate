@@ -9,9 +9,11 @@ until docker compose exec -T redis redis-cli ping >/dev/null 2>&1; do
   sleep 1
 done
 docker compose exec -T redis redis-cli -n 15 FLUSHDB >/dev/null
+docker compose exec -T postgres psql -U diana -d postgres -c "DROP DATABASE IF EXISTS diana_backend6_e2e WITH (FORCE)" >/dev/null
+docker compose exec -T postgres psql -U diana -d postgres -c "CREATE DATABASE diana_backend6_e2e OWNER diana" >/dev/null
 
 cd backend
-export DATABASE_URL="postgresql://diana:diana@127.0.0.1:5442/diana?sslmode=disable"
+export DATABASE_URL="postgresql://diana:diana@127.0.0.1:5442/diana_backend6_e2e?sslmode=disable"
 export REDIS_URL="redis://127.0.0.1:6382/15"
 atlas migrate apply --env local
 SEED_MODULE7=false GOCACHE=/private/tmp/diana-go-cache go run ./cmd/devseed

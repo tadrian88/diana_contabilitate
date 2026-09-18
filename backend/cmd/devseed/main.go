@@ -672,7 +672,7 @@ func seedAccountingV2Fixture(ctx context.Context, store *postgres.Store, now tim
 	}
 	f, l, p, pack := accountingtest.Fixture(cid)
 	pack.Mapping.Approved = false
-	if _, err := store.Client.AccountingClient.Create().SetID(cid).SetName("TEST_ONLY — Accounting V2 synthetic client").SetCui("RO-TEST-BUYER").SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+	if _, err := store.Client.AccountingClient.Create().SetID(cid).SetName("TEST_ONLY — Accounting V2 synthetic client").SetCui(accountingtest.BuyerCUI).SetNormalizedIdentifier(accountingtest.BuyerNormalizedCUI).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
 		return err
 	}
 	for _, r := range pack.Rules {
@@ -689,7 +689,7 @@ func seedAccountingV2Fixture(ctx context.Context, store *postgres.Store, now tim
 	if _, err := store.Client.AccountingRulePack.Create().SetID(pack.ID).SetClientID(cid).SetVersion(1).SetPayload(pack).SetCreatedAt(now).Save(ctx); err != nil {
 		return err
 	}
-	if _, err := store.Client.Invoice.Create().SetID(id).SetClientID(cid).SetSupplierName("TEST_ONLY supplier").SetSupplierCui("RO-TEST-SUPPLIER").SetNormalizedSupplierCui("RO-TEST-SUPPLIER").SetDocumentNumber("TEST_ONLY-001").SetNormalizedDocumentNumber("TEST_ONLY-001").SetIssueDate(now).SetIssueDay(invoicing.InvoiceIssueDay(now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY_ACCOUNTING_V2").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+	if _, err := store.Client.Invoice.Create().SetID(id).SetClientID(cid).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber("TEST_ONLY-001").SetNormalizedDocumentNumber("TEST_ONLY-001").SetIssueDate(now).SetIssueDay(invoicing.InvoiceIssueDay(now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY_ACCOUNTING_V2").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
 		return err
 	}
 	if _, err := store.Client.InvoiceLine.Create().SetID(id + "-line").SetInvoiceID(id).SetPosition(1).SetDescription("TEST_ONLY service").SetUnit("H87").SetQuantity("1").SetUnitPrice("100").SetNetValue("100").SetVatRate("21").SetVatValue("21").SetTotalValue("121").SetSourceFacts(l).Save(ctx); err != nil {

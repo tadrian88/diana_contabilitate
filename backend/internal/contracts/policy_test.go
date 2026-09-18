@@ -47,5 +47,16 @@ func policyInvoice() InvoiceContext {
 }
 
 func policyContract(id, reference, currency string) Contract {
-	return Contract{ID: id, Reference: reference, Revision: 1, EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), EffectiveTo: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Value: money.Money{Amount: money.MustParse("100.0000"), Currency: currency}}
+	to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+	return Contract{ID: id, Reference: reference, Revision: 1, EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), EffectiveTo: &to, Value: money.Money{Amount: money.MustParse("100.0000"), Currency: currency}}
+}
+
+func TestBaselinePolicyAcceptsInvoiceAfterIndefiniteStart(t *testing.T) {
+	item := policyContract("indefinite", "CTR-INDEFINITE", "RON")
+	item.EffectiveTo = nil
+	item.PeriodType = "INDEFINITE_TERM"
+	decision, err := (BaselinePolicy{}).Evaluate(policyInvoice(), []Contract{item})
+	if err != nil || decision.Outcome != OutcomeUniqueCompatible {
+		t.Fatalf("decision=%+v err=%v", decision, err)
+	}
 }

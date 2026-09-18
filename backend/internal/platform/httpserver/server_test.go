@@ -22,6 +22,8 @@ import (
 	"diana-contabilitate/backend/internal/validationtasks"
 )
 
+func timePointer(value time.Time) *time.Time { return &value }
+
 type clientReader struct{ items []clients.Client }
 
 func (s clientReader) ListClients(context.Context) ([]clients.Client, error) { return s.items, nil }
@@ -99,7 +101,7 @@ func (s *contractStore) ConfirmContractMatch(_ context.Context, command contract
 	s.invoice.ActiveTask = nil
 	s.invoice.ContractAssociation = &contractdomain.AssociationSnapshot{
 		ContractID: command.ContractID, Reference: "CTR-1", SupplierName: "Furnizor", EffectiveFrom: now,
-		EffectiveTo: now.AddDate(0, 1, 0), Value: money.Money{Amount: money.MustParse("100.0000"), Currency: "RON"},
+		EffectiveTo: timePointer(now.AddDate(0, 1, 0)), Value: money.Money{Amount: money.MustParse("100.0000"), Currency: "RON"},
 		UnitType: "BUC", PaymentTerms: "30 zile", PolicyVersion: contractdomain.BaselinePolicyVersion,
 	}
 	return true, nil
@@ -286,7 +288,7 @@ func TestContractReadEndpointsReturnFrontendDTOs(t *testing.T) {
 	store := &contractStore{
 		items: []contractdomain.Contract{{
 			ID: "contract-1", ClientID: "client-alfa", SupplierName: "Furnizor", SupplierCUI: "RO-1", Reference: "CTR-1",
-			EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), EffectiveTo: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC),
+			EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), EffectiveTo: timePointer(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)),
 			Value: money.Money{Amount: money.MustParse("100.0000"), Currency: "RON"}, UnitType: "BUC", PaymentTerms: "30 zile", Revision: 1,
 		}},
 		invoices: []contractdomain.AssociatedInvoice{{ID: "invoice-1", ClientID: "client-alfa", SupplierName: "Furnizor", DocumentNumber: "INV-1", IssueDate: now, Total: money.Money{Amount: money.MustParse("119.0000"), Currency: "RON"}, SPVReference: "SPV-1", PipelineStatus: "EXPORTED", SagaStatus: "EXPORTED"}},

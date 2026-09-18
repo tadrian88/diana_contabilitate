@@ -25,7 +25,7 @@ func (ContractSourceDocument) Fields() []ent.Field {
 		field.String("uploaded_by_display").Optional().Nillable().Immutable(),
 		field.Time("uploaded_at").Immutable(),
 		field.Enum("status").Values("UPLOADED", "EXTRACTING", "READY_FOR_REVIEW", "EXTRACTION_FAILED", "CONFIRMED").Default("UPLOADED"),
-		field.Enum("lifecycle_state").Values("ACTIVE", "SUPERSEDED").Default("ACTIVE"),
+		field.Enum("lifecycle_state").Values("ACTIVE", "SUPERSEDED", "DISCARDED").Default("ACTIVE"),
 		field.String("latest_extraction_id").Optional().Nillable(),
 		field.String("confirmed_contract_id").Optional().Nillable(),
 		field.String("confirmed_by_id").Optional().Nillable(),

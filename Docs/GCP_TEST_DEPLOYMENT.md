@@ -34,11 +34,17 @@ the certificate is `ACTIVE` for both hostnames.
 
 ## Build and release
 
-Run all checks, select a new immutable tag containing the Git SHA, then:
+Comanda canonică de release complet este:
 
 ```bash
-./scripts/gcp/build-push.sh "$(git rev-parse --short=12 HEAD)-$(date -u +%Y%m%dT%H%M%SZ | tr A-Z a-z)"
+make deploy-gcp-test
 ```
+
+Aceasta rulează toate gate-urile locale, construiește un tag imutabil, publică
+imaginile, execută migrarea și migration-status job, actualizează toate cele
+patru servicii și rulează verificările post-deploy. Procedura și limitele sunt
+documentate în `RELEASE_COMMANDS.md`. `scripts/gcp/build-push.sh` rămâne o
+componentă internă și nu reprezintă singur un deployment complet.
 
 Release order is fixed: infrastructure, database credentials, migrations,
 migration status, API/callback, singleton worker, frontend, load balancer,

@@ -34,6 +34,8 @@ const (
 	FieldEffectiveFrom = "effective_from"
 	// FieldEffectiveTo holds the string denoting the effective_to field in the database.
 	FieldEffectiveTo = "effective_to"
+	// FieldPeriodType holds the string denoting the period_type field in the database.
+	FieldPeriodType = "period_type"
 	// FieldTotalValue holds the string denoting the total_value field in the database.
 	FieldTotalValue = "total_value"
 	// FieldCurrency holds the string denoting the currency field in the database.
@@ -101,6 +103,7 @@ var Columns = []string{
 	FieldSupplierName,
 	FieldEffectiveFrom,
 	FieldEffectiveTo,
+	FieldPeriodType,
 	FieldTotalValue,
 	FieldCurrency,
 	FieldUnitType,
@@ -155,6 +158,32 @@ func AssociationKindValidator(ak AssociationKind) error {
 		return nil
 	default:
 		return fmt.Errorf("invoicecontractassociation: invalid enum value for association_kind field: %q", ak)
+	}
+}
+
+// PeriodType defines the type for the "period_type" enum field.
+type PeriodType string
+
+// PeriodTypeFIXED_TERM is the default value of the PeriodType enum.
+const DefaultPeriodType = PeriodTypeFIXED_TERM
+
+// PeriodType values.
+const (
+	PeriodTypeFIXED_TERM      PeriodType = "FIXED_TERM"
+	PeriodTypeINDEFINITE_TERM PeriodType = "INDEFINITE_TERM"
+)
+
+func (pt PeriodType) String() string {
+	return string(pt)
+}
+
+// PeriodTypeValidator is a validator for the "period_type" field enum values. It is called by the builders before save.
+func PeriodTypeValidator(pt PeriodType) error {
+	switch pt {
+	case PeriodTypeFIXED_TERM, PeriodTypeINDEFINITE_TERM:
+		return nil
+	default:
+		return fmt.Errorf("invoicecontractassociation: invalid enum value for period_type field: %q", pt)
 	}
 }
 
@@ -214,6 +243,11 @@ func ByEffectiveFrom(opts ...sql.OrderTermOption) OrderOption {
 // ByEffectiveTo orders the results by the effective_to field.
 func ByEffectiveTo(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEffectiveTo, opts...).ToFunc()
+}
+
+// ByPeriodType orders the results by the period_type field.
+func ByPeriodType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPeriodType, opts...).ToFunc()
 }
 
 // ByTotalValue orders the results by the total_value field.

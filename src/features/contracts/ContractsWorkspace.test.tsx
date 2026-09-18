@@ -47,7 +47,7 @@ describe('Contracts workspace', () => {
     renderApp(new MockInvoiceRepository(), '/contracts/contract-demo-100')
 
     expect(await screen.findByRole('heading', { name: 'CTR-DEMO-100' })).toBeInTheDocument()
-    for (const label of ['Perioadă efectivă', 'Valoare și monedă', 'Tip unitate / bază comercială', 'Termeni de plată', 'Referință sursă', 'Metadate sursă']) expect(screen.getByText(label)).toBeInTheDocument()
+    for (const label of ['Perioadă efectivă', 'Valoare contractuală totală (legacy)', 'Tip unitate / bază comercială', 'Termeni de plată', 'Referință sursă', 'Metadate sursă']) expect(screen.getByText(label)).toBeInTheDocument()
     expect(screen.getByText('DEMO-HP-001')).toBeInTheDocument()
     expect(screen.getByText('DEMO-SH-011')).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'DEMO-SH-011' }))

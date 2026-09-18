@@ -17,8 +17,10 @@ type Contract struct {
 	NormalizedSupplierCUI string
 	Reference             string
 	EffectiveFrom         time.Time
-	EffectiveTo           time.Time
+	EffectiveTo           *time.Time
+	PeriodType            string
 	Value                 money.Money
+	HasLegacyTotalValue   bool
 	UnitType              string
 	PaymentTerms          string
 	SourceReference       *string
@@ -28,6 +30,22 @@ type Contract struct {
 	Revision              uint64
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+	ServiceTerms          []ServiceTerm
+}
+
+type ServiceTerm struct {
+	ID                 string
+	Position           int
+	ServiceDescription string
+	PricingModel       string
+	UnitPrice          *money.Amount
+	Currency           string
+	Unit               string
+	QuantitySource     string
+	QuantityValue      *money.Amount
+	QuantityDriver     string
+	BillingFrequency   string
+	EvidenceJSON       []byte
 }
 
 type AssociationSnapshot struct {
@@ -35,7 +53,7 @@ type AssociationSnapshot struct {
 	Reference        string
 	SupplierName     string
 	EffectiveFrom    time.Time
-	EffectiveTo      time.Time
+	EffectiveTo      *time.Time
 	Value            money.Money
 	UnitType         string
 	PaymentTerms     string

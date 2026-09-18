@@ -14,3 +14,7 @@ backend/.env.local
 *.pfx
 *.key
 deploy/gcp-test.local.env
+.env.example
+.gitignore
+.gitignore
+deploy/gcp-test.env

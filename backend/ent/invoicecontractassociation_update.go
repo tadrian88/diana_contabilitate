@@ -88,6 +88,9 @@ func (_u *InvoiceContractAssociationUpdate) sqlSave(ctx context.Context) (_node 
 			}
 		}
 	}
+	if _u.mutation.EffectiveToCleared() {
+		_spec.ClearField(invoicecontractassociation.FieldEffectiveTo, field.TypeTime)
+	}
 	if _u.mutation.AssociatedByIDCleared() {
 		_spec.ClearField(invoicecontractassociation.FieldAssociatedByID, field.TypeString)
 	}
@@ -204,6 +207,9 @@ func (_u *InvoiceContractAssociationUpdateOne) sqlSave(ctx context.Context) (_no
 				ps[i](selector)
 			}
 		}
+	}
+	if _u.mutation.EffectiveToCleared() {
+		_spec.ClearField(invoicecontractassociation.FieldEffectiveTo, field.TypeTime)
 	}
 	if _u.mutation.AssociatedByIDCleared() {
 		_spec.ClearField(invoicecontractassociation.FieldAssociatedByID, field.TypeString)

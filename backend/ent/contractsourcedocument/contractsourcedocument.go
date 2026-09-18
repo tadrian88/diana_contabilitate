@@ -168,6 +168,7 @@ const DefaultLifecycleState = LifecycleStateACTIVE
 const (
 	LifecycleStateACTIVE     LifecycleState = "ACTIVE"
 	LifecycleStateSUPERSEDED LifecycleState = "SUPERSEDED"
+	LifecycleStateDISCARDED  LifecycleState = "DISCARDED"
 )
 
 func (ls LifecycleState) String() string {
@@ -177,7 +178,7 @@ func (ls LifecycleState) String() string {
 // LifecycleStateValidator is a validator for the "lifecycle_state" field enum values. It is called by the builders before save.
 func LifecycleStateValidator(ls LifecycleState) error {
 	switch ls {
-	case LifecycleStateACTIVE, LifecycleStateSUPERSEDED:
+	case LifecycleStateACTIVE, LifecycleStateSUPERSEDED, LifecycleStateDISCARDED:
 		return nil
 	default:
 		return fmt.Errorf("contractsourcedocument: invalid enum value for lifecycle_state field: %q", ls)

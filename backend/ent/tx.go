@@ -30,6 +30,8 @@ type Tx struct {
 	ContractMatchCandidate *ContractMatchCandidateClient
 	// ContractMatchRun is the client for interacting with the ContractMatchRun builders.
 	ContractMatchRun *ContractMatchRunClient
+	// ContractServiceTerm is the client for interacting with the ContractServiceTerm builders.
+	ContractServiceTerm *ContractServiceTermClient
 	// ContractSourceDocument is the client for interacting with the ContractSourceDocument builders.
 	ContractSourceDocument *ContractSourceDocumentClient
 	// Invoice is the client for interacting with the Invoice builders.
@@ -194,6 +196,7 @@ func (tx *Tx) init() {
 	tx.ContractExtractionAttempt = NewContractExtractionAttemptClient(tx.config)
 	tx.ContractMatchCandidate = NewContractMatchCandidateClient(tx.config)
 	tx.ContractMatchRun = NewContractMatchRunClient(tx.config)
+	tx.ContractServiceTerm = NewContractServiceTermClient(tx.config)
 	tx.ContractSourceDocument = NewContractSourceDocumentClient(tx.config)
 	tx.Invoice = NewInvoiceClient(tx.config)
 	tx.InvoiceContractAssociation = NewInvoiceContractAssociationClient(tx.config)

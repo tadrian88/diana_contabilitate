@@ -199,25 +199,40 @@ type contractCandidateDTO struct {
 }
 
 type contractSummaryDTO struct {
-	ID           string   `json:"id"`
-	Reference    string   `json:"reference"`
-	SupplierName string   `json:"supplierName"`
-	Period       string   `json:"period"`
-	Value        moneyDTO `json:"value"`
-	Currency     string   `json:"currency"`
-	UnitType     string   `json:"unitType"`
-	PaymentTerms string   `json:"paymentTerms"`
+	ID                  string   `json:"id"`
+	Reference           string   `json:"reference"`
+	SupplierName        string   `json:"supplierName"`
+	Period              string   `json:"period"`
+	Value               moneyDTO `json:"value"`
+	Currency            string   `json:"currency"`
+	UnitType            string   `json:"unitType"`
+	PaymentTerms        string   `json:"paymentTerms"`
+	HasLegacyTotalValue bool     `json:"hasLegacyTotalValue"`
 }
 
 type contractDTO struct {
 	contractSummaryDTO
-	ClientID            string  `json:"clientId"`
-	SupplierCUI         string  `json:"supplierCui"`
-	SourceReference     *string `json:"sourceReference,omitempty"`
-	SourceMetadata      *string `json:"sourceMetadata,omitempty"`
-	SourceDocumentID    *string `json:"sourceDocumentId,omitempty"`
-	ExtractionAttemptID *string `json:"extractionAttemptId,omitempty"`
-	Revision            uint64  `json:"revision"`
+	ClientID            string                   `json:"clientId"`
+	SupplierCUI         string                   `json:"supplierCui"`
+	SourceReference     *string                  `json:"sourceReference,omitempty"`
+	SourceMetadata      *string                  `json:"sourceMetadata,omitempty"`
+	SourceDocumentID    *string                  `json:"sourceDocumentId,omitempty"`
+	ExtractionAttemptID *string                  `json:"extractionAttemptId,omitempty"`
+	Revision            uint64                   `json:"revision"`
+	PeriodType          string                   `json:"periodType"`
+	ServiceTerms        []contractServiceTermDTO `json:"serviceTerms"`
+}
+type contractServiceTermDTO struct {
+	ServiceDescription string          `json:"serviceDescription"`
+	PricingModel       string          `json:"pricingModel"`
+	UnitPrice          *string         `json:"unitPrice,omitempty"`
+	Currency           string          `json:"currency"`
+	Unit               string          `json:"unit,omitempty"`
+	QuantitySource     string          `json:"quantitySource"`
+	QuantityValue      *string         `json:"quantityValue,omitempty"`
+	QuantityDriver     string          `json:"quantityDriver,omitempty"`
+	BillingFrequency   string          `json:"billingFrequency"`
+	Evidence           json.RawMessage `json:"evidence,omitempty"`
 }
 
 type contractDocumentDTO struct {
@@ -236,6 +251,7 @@ type contractDocumentDTO struct {
 	ConfirmedBy         *string                             `json:"confirmedBy,omitempty"`
 	ConfirmedContractID *string                             `json:"confirmedContractId,omitempty"`
 	BuyerMismatch       bool                                `json:"buyerMismatch"`
+	ClientCUI           string                              `json:"clientCui"`
 	Duplicate           bool                                `json:"duplicate,omitempty"`
 	Extraction          *contractExtractionDTO              `json:"extraction,omitempty"`
 	Attempts            []contractExtractionDTO             `json:"attempts"`
@@ -255,7 +271,7 @@ type contractExtractionDTO struct {
 }
 
 func contractDocumentResponse(item contractingestion.Document, duplicate bool) contractDocumentDTO {
-	result := contractDocumentDTO{ID: item.ID, ClientID: item.ClientID, OriginalFilename: item.OriginalFilename, MIMEType: item.MIMEType, SizeBytes: item.SizeBytes, SHA256: item.SHA256, Status: string(item.Status), LifecycleState: item.LifecycleState, Revision: item.Revision, UploadedAt: item.UploadedAt.Format(time.RFC3339), UploadedBy: item.UploadedByDisplay, ConfirmedContractID: item.ConfirmedContractID, BuyerMismatch: item.BuyerMismatch, Duplicate: duplicate, ConfirmedBy: item.ConfirmedByDisplay}
+	result := contractDocumentDTO{ID: item.ID, ClientID: item.ClientID, ClientCUI: item.ClientCUI, OriginalFilename: item.OriginalFilename, MIMEType: item.MIMEType, SizeBytes: item.SizeBytes, SHA256: item.SHA256, Status: string(item.Status), LifecycleState: item.LifecycleState, Revision: item.Revision, UploadedAt: item.UploadedAt.Format(time.RFC3339), UploadedBy: item.UploadedByDisplay, ConfirmedContractID: item.ConfirmedContractID, BuyerMismatch: item.BuyerMismatch, Duplicate: duplicate, ConfirmedBy: item.ConfirmedByDisplay}
 	if item.ConfirmedAt != nil {
 		value := item.ConfirmedAt.Format(time.RFC3339)
 		result.ConfirmedAt = &value
@@ -493,17 +509,30 @@ func ruleResponse(item *rules.Rule) ruleDTO {
 }
 
 func contractResponse(item *contracts.Contract) contractDTO {
-	return contractDTO{
+	result := contractDTO{
 		contractSummaryDTO: contractSummaryDTO{
 			ID: item.ID, Reference: item.Reference, SupplierName: item.SupplierName,
 			Period:   formatPeriod(item.EffectiveFrom, item.EffectiveTo),
 			Value:    moneyDTO{Amount: json.RawMessage(item.Value.Amount.String()), Currency: item.Value.Currency},
-			Currency: item.Value.Currency, UnitType: item.UnitType, PaymentTerms: item.PaymentTerms,
+			Currency: item.Value.Currency, UnitType: item.UnitType, PaymentTerms: item.PaymentTerms, HasLegacyTotalValue: item.HasLegacyTotalValue,
 		},
 		ClientID: item.ClientID, SupplierCUI: item.SupplierCUI, SourceReference: item.SourceReference,
 		SourceDocumentID: item.SourceDocumentID, ExtractionAttemptID: item.ExtractionAttemptID,
-		SourceMetadata: item.SourceMetadata, Revision: item.Revision,
+		SourceMetadata: item.SourceMetadata, Revision: item.Revision, PeriodType: item.PeriodType, ServiceTerms: []contractServiceTermDTO{},
 	}
+	for _, term := range item.ServiceTerms {
+		dto := contractServiceTermDTO{ServiceDescription: term.ServiceDescription, PricingModel: term.PricingModel, Currency: term.Currency, Unit: term.Unit, QuantitySource: term.QuantitySource, QuantityDriver: term.QuantityDriver, BillingFrequency: term.BillingFrequency, Evidence: term.EvidenceJSON}
+		if term.UnitPrice != nil {
+			value := term.UnitPrice.String()
+			dto.UnitPrice = &value
+		}
+		if term.QuantityValue != nil {
+			value := term.QuantityValue.String()
+			dto.QuantityValue = &value
+		}
+		result.ServiceTerms = append(result.ServiceTerms, dto)
+	}
+	return result
 }
 
 func associationContractResponse(item *contracts.AssociationSnapshot) *contractSummaryDTO {
@@ -511,7 +540,7 @@ func associationContractResponse(item *contracts.AssociationSnapshot) *contractS
 		ID: item.ContractID, Reference: item.Reference, SupplierName: item.SupplierName,
 		Period:   formatPeriod(item.EffectiveFrom, item.EffectiveTo),
 		Value:    moneyDTO{Amount: json.RawMessage(item.Value.Amount.String()), Currency: item.Value.Currency},
-		Currency: item.Value.Currency, UnitType: item.UnitType, PaymentTerms: item.PaymentTerms,
+		Currency: item.Value.Currency, UnitType: item.UnitType, PaymentTerms: item.PaymentTerms, HasLegacyTotalValue: true,
 	}
 }
 
@@ -523,7 +552,10 @@ func contractInvoiceResponse(item contracts.AssociatedInvoice) contractInvoiceDT
 	}
 }
 
-func formatPeriod(from, to time.Time) string {
+func formatPeriod(from time.Time, to *time.Time) string {
+	if to == nil {
+		return from.UTC().Format("02.01.2006") + " – nedeterminat"
+	}
 	return from.UTC().Format("02.01.2006") + " – " + to.UTC().Format("02.01.2006")
 }
 

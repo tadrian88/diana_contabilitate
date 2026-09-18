@@ -1,5 +1,19 @@
 # Project State
 
+## Standard release commands — 2026-09-17
+
+- `make release-local`: complete deterministic test/migration/build gate followed by local Docker deployment and health checks.
+- `make deploy-gcp-test`: the same gate, immutable image build/push, Cloud TEST migration/status jobs, four-service rollout and post-deploy verification; clean committed tree and explicit confirmation required.
+- E2E databases are isolated from the normal local `diana` database. Live ANAF certificate, real Gemini document, desktop SAGA and human Cloud acceptance remain separate manual gates.
+- See `Docs/RELEASE_COMMANDS.md`.
+
+## Contract Ingestion Hardening + Service Terms V1 — 2026-09-17
+
+- IMPLEMENTED — AWAITING USER-RUN TESTS / REVIEW; engineering gate remains NO.
+- Canonical Romanian CUI comparison, reviewed-value confirmation readiness, indefinite periods, unconfirmed-document discard, authenticated range PDF delivery, Cloud `.mjs` MIME fix, typed service terms, provenance/audit, and two-invoice resume regression are implemented in additive migration `000017`.
+- Existing Module 4 policy thresholds and accounting classification remain unchanged. User-run Go unit tests, all 108 frontend tests, production frontend build, and isolated application of all 17 migrations passed on 2026-09-17/18. Integration fixtures/Redis orchestration exposed by the full gate were corrected and await rerun; Playwright/local deployment/Cloud deployment remain outstanding.
+- See `CONTRACT_INGESTION_HARDENING_V1.md`, `CONTRACT_SERVICE_TERMS_V1.md`, `CONTRACT_INGESTION_HARDENING_RESULT.md`, and `CONTRACT_INGESTION_TEST_HANDOFF.md`.
+
 - Frontend: APPROVED / FROZEN
 - Frontend Modules 1–7: APPROVED / FROZEN
 - Backend Phase 0: APPROVED

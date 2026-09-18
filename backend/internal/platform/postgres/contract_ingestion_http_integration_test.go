@@ -70,6 +70,13 @@ func TestContractIngestionHTTPUploadReviewConfirmAndTenantIsolation(t *testing.T
 	if file.Code != 200 || !bytes.Equal(file.Body.Bytes(), pdf) || file.Header().Get("Cache-Control") != "private, no-store" || file.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("immutable/private PDF=%d headers=%v", file.Code, file.Header())
 	}
+	rangeRequest := httptest.NewRequest(http.MethodGet, path+"/file", nil).WithContext(requestactor.WithActor(tc.ctx, actor))
+	rangeRequest.Header.Set("Range", "bytes=0-15")
+	rangeResponse := httptest.NewRecorder()
+	handler.ServeHTTP(rangeResponse, rangeRequest)
+	if rangeResponse.Code != http.StatusPartialContent || rangeResponse.Header().Get("Accept-Ranges") != "bytes" || rangeResponse.Header().Get("Content-Range") == "" || len(rangeResponse.Body.Bytes()) != 16 {
+		t.Fatalf("range response=%d headers=%v", rangeResponse.Code, rangeResponse.Header())
+	}
 	if denied := send(http.MethodGet, path+"/file", nil, "", "", requestactor.Actor{AuthorizedClientIDs: []string{"other"}}); denied.Code != 404 {
 		t.Fatal("cross-client file access")
 	}

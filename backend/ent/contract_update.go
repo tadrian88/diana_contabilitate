@@ -6,6 +6,7 @@ import (
 	"context"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
 	"diana-contabilitate/backend/ent/predicate"
 	"errors"
@@ -114,6 +115,40 @@ func (_u *ContractUpdate) SetNillableEffectiveTo(v *time.Time) *ContractUpdate {
 	return _u
 }
 
+// ClearEffectiveTo clears the value of the "effective_to" field.
+func (_u *ContractUpdate) ClearEffectiveTo() *ContractUpdate {
+	_u.mutation.ClearEffectiveTo()
+	return _u
+}
+
+// SetPeriodType sets the "period_type" field.
+func (_u *ContractUpdate) SetPeriodType(v contract.PeriodType) *ContractUpdate {
+	_u.mutation.SetPeriodType(v)
+	return _u
+}
+
+// SetNillablePeriodType sets the "period_type" field if the given value is not nil.
+func (_u *ContractUpdate) SetNillablePeriodType(v *contract.PeriodType) *ContractUpdate {
+	if v != nil {
+		_u.SetPeriodType(*v)
+	}
+	return _u
+}
+
+// SetLifecycleState sets the "lifecycle_state" field.
+func (_u *ContractUpdate) SetLifecycleState(v contract.LifecycleState) *ContractUpdate {
+	_u.mutation.SetLifecycleState(v)
+	return _u
+}
+
+// SetNillableLifecycleState sets the "lifecycle_state" field if the given value is not nil.
+func (_u *ContractUpdate) SetNillableLifecycleState(v *contract.LifecycleState) *ContractUpdate {
+	if v != nil {
+		_u.SetLifecycleState(*v)
+	}
+	return _u
+}
+
 // SetTotalValue sets the "total_value" field.
 func (_u *ContractUpdate) SetTotalValue(v string) *ContractUpdate {
 	_u.mutation.SetTotalValue(v)
@@ -124,6 +159,20 @@ func (_u *ContractUpdate) SetTotalValue(v string) *ContractUpdate {
 func (_u *ContractUpdate) SetNillableTotalValue(v *string) *ContractUpdate {
 	if v != nil {
 		_u.SetTotalValue(*v)
+	}
+	return _u
+}
+
+// SetHasLegacyTotalValue sets the "has_legacy_total_value" field.
+func (_u *ContractUpdate) SetHasLegacyTotalValue(v bool) *ContractUpdate {
+	_u.mutation.SetHasLegacyTotalValue(v)
+	return _u
+}
+
+// SetNillableHasLegacyTotalValue sets the "has_legacy_total_value" field if the given value is not nil.
+func (_u *ContractUpdate) SetNillableHasLegacyTotalValue(v *bool) *ContractUpdate {
+	if v != nil {
+		_u.SetHasLegacyTotalValue(*v)
 	}
 	return _u
 }
@@ -275,6 +324,21 @@ func (_u *ContractUpdate) AddInvoiceAssociations(v ...*InvoiceContractAssociatio
 	return _u.AddInvoiceAssociationIDs(ids...)
 }
 
+// AddServiceTermIDs adds the "service_terms" edge to the ContractServiceTerm entity by IDs.
+func (_u *ContractUpdate) AddServiceTermIDs(ids ...string) *ContractUpdate {
+	_u.mutation.AddServiceTermIDs(ids...)
+	return _u
+}
+
+// AddServiceTerms adds the "service_terms" edges to the ContractServiceTerm entity.
+func (_u *ContractUpdate) AddServiceTerms(v ...*ContractServiceTerm) *ContractUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddServiceTermIDs(ids...)
+}
+
 // Mutation returns the ContractMutation object of the builder.
 func (_u *ContractUpdate) Mutation() *ContractMutation {
 	return _u.mutation
@@ -320,6 +384,27 @@ func (_u *ContractUpdate) RemoveInvoiceAssociations(v ...*InvoiceContractAssocia
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveInvoiceAssociationIDs(ids...)
+}
+
+// ClearServiceTerms clears all "service_terms" edges to the ContractServiceTerm entity.
+func (_u *ContractUpdate) ClearServiceTerms() *ContractUpdate {
+	_u.mutation.ClearServiceTerms()
+	return _u
+}
+
+// RemoveServiceTermIDs removes the "service_terms" edge to ContractServiceTerm entities by IDs.
+func (_u *ContractUpdate) RemoveServiceTermIDs(ids ...string) *ContractUpdate {
+	_u.mutation.RemoveServiceTermIDs(ids...)
+	return _u
+}
+
+// RemoveServiceTerms removes "service_terms" edges to ContractServiceTerm entities.
+func (_u *ContractUpdate) RemoveServiceTerms(v ...*ContractServiceTerm) *ContractUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveServiceTermIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -369,6 +454,16 @@ func (_u *ContractUpdate) check() error {
 	if v, ok := _u.mutation.Reference(); ok {
 		if err := contract.ReferenceValidator(v); err != nil {
 			return &ValidationError{Name: "reference", err: fmt.Errorf(`ent: validator failed for field "Contract.reference": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PeriodType(); ok {
+		if err := contract.PeriodTypeValidator(v); err != nil {
+			return &ValidationError{Name: "period_type", err: fmt.Errorf(`ent: validator failed for field "Contract.period_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.LifecycleState(); ok {
+		if err := contract.LifecycleStateValidator(v); err != nil {
+			return &ValidationError{Name: "lifecycle_state", err: fmt.Errorf(`ent: validator failed for field "Contract.lifecycle_state": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Currency(); ok {
@@ -427,8 +522,20 @@ func (_u *ContractUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.EffectiveTo(); ok {
 		_spec.SetField(contract.FieldEffectiveTo, field.TypeTime, value)
 	}
+	if _u.mutation.EffectiveToCleared() {
+		_spec.ClearField(contract.FieldEffectiveTo, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PeriodType(); ok {
+		_spec.SetField(contract.FieldPeriodType, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.LifecycleState(); ok {
+		_spec.SetField(contract.FieldLifecycleState, field.TypeEnum, value)
+	}
 	if value, ok := _u.mutation.TotalValue(); ok {
 		_spec.SetField(contract.FieldTotalValue, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.HasLegacyTotalValue(); ok {
+		_spec.SetField(contract.FieldHasLegacyTotalValue, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(contract.FieldCurrency, field.TypeString, value)
@@ -556,6 +663,51 @@ func (_u *ContractUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ServiceTermsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedServiceTermsIDs(); len(nodes) > 0 && !_u.mutation.ServiceTermsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ServiceTermsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{contract.Label}
@@ -660,6 +812,40 @@ func (_u *ContractUpdateOne) SetNillableEffectiveTo(v *time.Time) *ContractUpdat
 	return _u
 }
 
+// ClearEffectiveTo clears the value of the "effective_to" field.
+func (_u *ContractUpdateOne) ClearEffectiveTo() *ContractUpdateOne {
+	_u.mutation.ClearEffectiveTo()
+	return _u
+}
+
+// SetPeriodType sets the "period_type" field.
+func (_u *ContractUpdateOne) SetPeriodType(v contract.PeriodType) *ContractUpdateOne {
+	_u.mutation.SetPeriodType(v)
+	return _u
+}
+
+// SetNillablePeriodType sets the "period_type" field if the given value is not nil.
+func (_u *ContractUpdateOne) SetNillablePeriodType(v *contract.PeriodType) *ContractUpdateOne {
+	if v != nil {
+		_u.SetPeriodType(*v)
+	}
+	return _u
+}
+
+// SetLifecycleState sets the "lifecycle_state" field.
+func (_u *ContractUpdateOne) SetLifecycleState(v contract.LifecycleState) *ContractUpdateOne {
+	_u.mutation.SetLifecycleState(v)
+	return _u
+}
+
+// SetNillableLifecycleState sets the "lifecycle_state" field if the given value is not nil.
+func (_u *ContractUpdateOne) SetNillableLifecycleState(v *contract.LifecycleState) *ContractUpdateOne {
+	if v != nil {
+		_u.SetLifecycleState(*v)
+	}
+	return _u
+}
+
 // SetTotalValue sets the "total_value" field.
 func (_u *ContractUpdateOne) SetTotalValue(v string) *ContractUpdateOne {
 	_u.mutation.SetTotalValue(v)
@@ -670,6 +856,20 @@ func (_u *ContractUpdateOne) SetTotalValue(v string) *ContractUpdateOne {
 func (_u *ContractUpdateOne) SetNillableTotalValue(v *string) *ContractUpdateOne {
 	if v != nil {
 		_u.SetTotalValue(*v)
+	}
+	return _u
+}
+
+// SetHasLegacyTotalValue sets the "has_legacy_total_value" field.
+func (_u *ContractUpdateOne) SetHasLegacyTotalValue(v bool) *ContractUpdateOne {
+	_u.mutation.SetHasLegacyTotalValue(v)
+	return _u
+}
+
+// SetNillableHasLegacyTotalValue sets the "has_legacy_total_value" field if the given value is not nil.
+func (_u *ContractUpdateOne) SetNillableHasLegacyTotalValue(v *bool) *ContractUpdateOne {
+	if v != nil {
+		_u.SetHasLegacyTotalValue(*v)
 	}
 	return _u
 }
@@ -821,6 +1021,21 @@ func (_u *ContractUpdateOne) AddInvoiceAssociations(v ...*InvoiceContractAssocia
 	return _u.AddInvoiceAssociationIDs(ids...)
 }
 
+// AddServiceTermIDs adds the "service_terms" edge to the ContractServiceTerm entity by IDs.
+func (_u *ContractUpdateOne) AddServiceTermIDs(ids ...string) *ContractUpdateOne {
+	_u.mutation.AddServiceTermIDs(ids...)
+	return _u
+}
+
+// AddServiceTerms adds the "service_terms" edges to the ContractServiceTerm entity.
+func (_u *ContractUpdateOne) AddServiceTerms(v ...*ContractServiceTerm) *ContractUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddServiceTermIDs(ids...)
+}
+
 // Mutation returns the ContractMutation object of the builder.
 func (_u *ContractUpdateOne) Mutation() *ContractMutation {
 	return _u.mutation
@@ -866,6 +1081,27 @@ func (_u *ContractUpdateOne) RemoveInvoiceAssociations(v ...*InvoiceContractAsso
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveInvoiceAssociationIDs(ids...)
+}
+
+// ClearServiceTerms clears all "service_terms" edges to the ContractServiceTerm entity.
+func (_u *ContractUpdateOne) ClearServiceTerms() *ContractUpdateOne {
+	_u.mutation.ClearServiceTerms()
+	return _u
+}
+
+// RemoveServiceTermIDs removes the "service_terms" edge to ContractServiceTerm entities by IDs.
+func (_u *ContractUpdateOne) RemoveServiceTermIDs(ids ...string) *ContractUpdateOne {
+	_u.mutation.RemoveServiceTermIDs(ids...)
+	return _u
+}
+
+// RemoveServiceTerms removes "service_terms" edges to ContractServiceTerm entities.
+func (_u *ContractUpdateOne) RemoveServiceTerms(v ...*ContractServiceTerm) *ContractUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveServiceTermIDs(ids...)
 }
 
 // Where appends a list predicates to the ContractUpdate builder.
@@ -928,6 +1164,16 @@ func (_u *ContractUpdateOne) check() error {
 	if v, ok := _u.mutation.Reference(); ok {
 		if err := contract.ReferenceValidator(v); err != nil {
 			return &ValidationError{Name: "reference", err: fmt.Errorf(`ent: validator failed for field "Contract.reference": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PeriodType(); ok {
+		if err := contract.PeriodTypeValidator(v); err != nil {
+			return &ValidationError{Name: "period_type", err: fmt.Errorf(`ent: validator failed for field "Contract.period_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.LifecycleState(); ok {
+		if err := contract.LifecycleStateValidator(v); err != nil {
+			return &ValidationError{Name: "lifecycle_state", err: fmt.Errorf(`ent: validator failed for field "Contract.lifecycle_state": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Currency(); ok {
@@ -1003,8 +1249,20 @@ func (_u *ContractUpdateOne) sqlSave(ctx context.Context) (_node *Contract, err 
 	if value, ok := _u.mutation.EffectiveTo(); ok {
 		_spec.SetField(contract.FieldEffectiveTo, field.TypeTime, value)
 	}
+	if _u.mutation.EffectiveToCleared() {
+		_spec.ClearField(contract.FieldEffectiveTo, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PeriodType(); ok {
+		_spec.SetField(contract.FieldPeriodType, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.LifecycleState(); ok {
+		_spec.SetField(contract.FieldLifecycleState, field.TypeEnum, value)
+	}
 	if value, ok := _u.mutation.TotalValue(); ok {
 		_spec.SetField(contract.FieldTotalValue, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.HasLegacyTotalValue(); ok {
+		_spec.SetField(contract.FieldHasLegacyTotalValue, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(contract.FieldCurrency, field.TypeString, value)
@@ -1125,6 +1383,51 @@ func (_u *ContractUpdateOne) sqlSave(ctx context.Context) (_node *Contract, err 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(invoicecontractassociation.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ServiceTermsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedServiceTermsIDs(); len(nodes) > 0 && !_u.mutation.ServiceTermsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ServiceTermsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   contract.ServiceTermsTable,
+			Columns: []string{contract.ServiceTermsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(contractserviceterm.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

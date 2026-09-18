@@ -5,11 +5,12 @@ import { vi } from 'vitest'
 import type { ContractDocument } from '../../repositories/invoiceRepository'
 import { ContractProposalReview } from './ContractDocumentReviewPage'
 
-const handlers = vi.hoisted(() => ({ confirm: vi.fn(), retry: vi.fn() }))
+const handlers = vi.hoisted(() => ({ confirm: vi.fn(), retry: vi.fn(), discard: vi.fn() }))
 vi.mock('./ContractPDFPreview', () => ({ ContractPDFPreview: () => <div>Private PDF preview</div> }))
 vi.mock('./contract-ingestion-hooks', () => ({
   useConfirmContractDocument: () => ({ mutate: handlers.confirm, isPending: false, isError: false }),
   useRetryContractExtraction: () => ({ mutate: handlers.retry, isPending: false, isError: false }),
+  useDiscardContractDocument: () => ({ mutate: handlers.discard, isPending: false, isError: false }),
   useContractDocument: vi.fn(),
 }))
 
@@ -23,7 +24,7 @@ function fixture(): ContractDocument {
       promptVersion: 'CONTRACT_EXTRACTION_PROMPT_V1', status: 'SUCCEEDED', startedAt: '2026-09-15T12:00:01Z',
       proposal: { supplierName: field('Supplier SRL'), supplierCui: field('RO12345678'), reference: field('AI-REFERENCE'),
         effectiveFrom: field('2026-01-01'), effectiveTo: field('2027-12-31'), totalValue: field('125000.00'), currency: field('RON'),
-        unitType: field('servicii'), paymentTerms: field('30 zile'), buyerCui: field('RO10000000') } },
+        unitType: field('servicii'), paymentTerms: field('30 zile'), buyerCui: field('RO10000000'), periodType:field('FIXED_TERM'),serviceTerms:[] } },
   }
 }
 function review(document = fixture(), onEvidence = vi.fn()) {
@@ -35,7 +36,7 @@ describe('Contract ingestion human review boundary', () => {
   it('shows the proposal without creating a contract automatically', () => {
     review()
     expect(screen.getByLabelText('Referință contract')).toHaveValue('AI-REFERENCE')
-    expect(screen.getByText('Datele nu sunt încă autoritative.', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('Valorile editate sunt candidatele autoritative', { exact: false })).toBeInTheDocument()
     expect(handlers.confirm).not.toHaveBeenCalled()
   })
   it('submits edited values and the exact extraction revision only on explicit confirmation', async () => {
@@ -44,7 +45,7 @@ describe('Contract ingestion human review boundary', () => {
     await user.type(screen.getByLabelText('Referință contract'), 'USER-CORRECTION')
     expect(handlers.confirm).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Confirmă contractul' }))
-    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ document, key: expect.any(String), contract: expect.objectContaining({ reference: 'USER-CORRECTION' }) }))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ document, key: expect.any(String), contract: expect.objectContaining({ reference: 'USER-CORRECTION' }) }),expect.any(Object))
     expect(document.extraction?.proposal?.reference.value).toBe('AI-REFERENCE')
   })
   it('retains evidence page navigation independently of confirmation', async () => {
@@ -57,14 +58,23 @@ describe('Contract ingestion human review boundary', () => {
     const document = fixture(); document.extraction!.proposal!.currency = { value: null, status: 'MISSING', confidence: 'UNKNOWN', evidence: { page: null, snippet: '' }, alternatives: [] }
     review(document)
     expect(screen.getByLabelText('Monedă ISO')).toHaveValue('')
-    expect(screen.getByText('Câmp obligatoriu lipsă')).toBeInTheDocument()
+    expect(screen.getByText('Moneda ISO este obligatorie.')).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Confirmă contractul' }))
     expect(handlers.confirm).not.toHaveBeenCalled()
   })
   it('blocks buyer mismatch rather than silently moving the document to another client', () => {
-    review({ ...fixture(), buyerMismatch: true })
+    const document=fixture();document.clientCui='RO10000000';document.extraction!.proposal!.buyerCui= {...document.extraction!.proposal!.buyerCui,value:'RO99999999'};review(document)
     expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('CUI-ul cumpărătorului')
+  })
+  it('recomputes buyer blocker from the edited reviewed value', async()=>{
+    const document=fixture();document.clientCui='RO21592770';document.extraction!.proposal!.buyerCui={...document.extraction!.proposal!.buyerCui,value:'RO99999999'};review(document)
+    const input=screen.getByLabelText('CUI cumpărător');await userEvent.setup().clear(input);await userEvent.setup().type(input,'ro 21592770')
+    expect(screen.getByRole('button',{name:'Confirmă contractul'})).toBeEnabled()
+  })
+  it('models indefinite term without an end date',async()=>{
+    review();await userEvent.setup().click(screen.getByLabelText('Nedeterminată'))
+    expect(screen.queryByLabelText('Data de sfârșit')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'Confirmă contractul'})).toBeEnabled()
   })
   it('keeps failure recovery out of the manual-from-zero form', async () => {
     review({ ...fixture(), status: 'EXTRACTION_FAILED' })

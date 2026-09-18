@@ -58,9 +58,9 @@ func (policy BaselinePolicy) Evaluate(invoice InvoiceContext, discovered []Contr
 	return result, nil
 }
 
-func dateWithin(value, from, to time.Time) bool {
+func dateWithin(value, from time.Time, to *time.Time) bool {
 	day := dateOnly(value)
-	return !day.Before(dateOnly(from)) && !day.After(dateOnly(to))
+	return !day.Before(dateOnly(from)) && (to == nil || !day.After(dateOnly(*to)))
 }
 
 func dateOnly(value time.Time) time.Time {

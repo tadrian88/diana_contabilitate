@@ -20,6 +20,7 @@ import (
 	"diana-contabilitate/backend/ent/contractextractionattempt"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
@@ -62,6 +63,8 @@ type Client struct {
 	ContractMatchCandidate *ContractMatchCandidateClient
 	// ContractMatchRun is the client for interacting with the ContractMatchRun builders.
 	ContractMatchRun *ContractMatchRunClient
+	// ContractServiceTerm is the client for interacting with the ContractServiceTerm builders.
+	ContractServiceTerm *ContractServiceTermClient
 	// ContractSourceDocument is the client for interacting with the ContractSourceDocument builders.
 	ContractSourceDocument *ContractSourceDocumentClient
 	// Invoice is the client for interacting with the Invoice builders.
@@ -106,6 +109,7 @@ func (c *Client) init() {
 	c.ContractExtractionAttempt = NewContractExtractionAttemptClient(c.config)
 	c.ContractMatchCandidate = NewContractMatchCandidateClient(c.config)
 	c.ContractMatchRun = NewContractMatchRunClient(c.config)
+	c.ContractServiceTerm = NewContractServiceTermClient(c.config)
 	c.ContractSourceDocument = NewContractSourceDocumentClient(c.config)
 	c.Invoice = NewInvoiceClient(c.config)
 	c.InvoiceContractAssociation = NewInvoiceContractAssociationClient(c.config)
@@ -219,6 +223,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ContractExtractionAttempt:  NewContractExtractionAttemptClient(cfg),
 		ContractMatchCandidate:     NewContractMatchCandidateClient(cfg),
 		ContractMatchRun:           NewContractMatchRunClient(cfg),
+		ContractServiceTerm:        NewContractServiceTermClient(cfg),
 		ContractSourceDocument:     NewContractSourceDocumentClient(cfg),
 		Invoice:                    NewInvoiceClient(cfg),
 		InvoiceContractAssociation: NewInvoiceContractAssociationClient(cfg),
@@ -259,6 +264,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ContractExtractionAttempt:  NewContractExtractionAttemptClient(cfg),
 		ContractMatchCandidate:     NewContractMatchCandidateClient(cfg),
 		ContractMatchRun:           NewContractMatchRunClient(cfg),
+		ContractServiceTerm:        NewContractServiceTermClient(cfg),
 		ContractSourceDocument:     NewContractSourceDocumentClient(cfg),
 		Invoice:                    NewInvoiceClient(cfg),
 		InvoiceContractAssociation: NewInvoiceContractAssociationClient(cfg),
@@ -302,10 +308,11 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AccountingClient, c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
 		c.ClientAccountingProfile, c.Contract, c.ContractExtractionAttempt,
-		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractSourceDocument,
-		c.Invoice, c.InvoiceContractAssociation, c.InvoiceLine, c.LineClassification,
-		c.OutboxEntry, c.RuleVersion, c.SPVConnection, c.SPVOAuthState,
-		c.SPVSourceDocument, c.SagaExportAttempt, c.ValidationTask,
+		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractServiceTerm,
+		c.ContractSourceDocument, c.Invoice, c.InvoiceContractAssociation,
+		c.InvoiceLine, c.LineClassification, c.OutboxEntry, c.RuleVersion,
+		c.SPVConnection, c.SPVOAuthState, c.SPVSourceDocument, c.SagaExportAttempt,
+		c.ValidationTask,
 	} {
 		n.Use(hooks...)
 	}
@@ -317,10 +324,11 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AccountingClient, c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
 		c.ClientAccountingProfile, c.Contract, c.ContractExtractionAttempt,
-		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractSourceDocument,
-		c.Invoice, c.InvoiceContractAssociation, c.InvoiceLine, c.LineClassification,
-		c.OutboxEntry, c.RuleVersion, c.SPVConnection, c.SPVOAuthState,
-		c.SPVSourceDocument, c.SagaExportAttempt, c.ValidationTask,
+		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractServiceTerm,
+		c.ContractSourceDocument, c.Invoice, c.InvoiceContractAssociation,
+		c.InvoiceLine, c.LineClassification, c.OutboxEntry, c.RuleVersion,
+		c.SPVConnection, c.SPVOAuthState, c.SPVSourceDocument, c.SagaExportAttempt,
+		c.ValidationTask,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -347,6 +355,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ContractMatchCandidate.mutate(ctx, m)
 	case *ContractMatchRunMutation:
 		return c.ContractMatchRun.mutate(ctx, m)
+	case *ContractServiceTermMutation:
+		return c.ContractServiceTerm.mutate(ctx, m)
 	case *ContractSourceDocumentMutation:
 		return c.ContractSourceDocument.mutate(ctx, m)
 	case *InvoiceMutation:
@@ -1533,6 +1543,22 @@ func (c *ContractClient) QueryInvoiceAssociations(_m *Contract) *InvoiceContract
 	return query
 }
 
+// QueryServiceTerms queries the service_terms edge of a Contract.
+func (c *ContractClient) QueryServiceTerms(_m *Contract) *ContractServiceTermQuery {
+	query := (&ContractServiceTermClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contract.Table, contract.FieldID, id),
+			sqlgraph.To(contractserviceterm.Table, contractserviceterm.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, contract.ServiceTermsTable, contract.ServiceTermsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *ContractClient) Hooks() []Hook {
 	return c.hooks.Contract
@@ -2098,6 +2124,155 @@ func (c *ContractMatchRunClient) mutate(ctx context.Context, m *ContractMatchRun
 		return (&ContractMatchRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown ContractMatchRun mutation op: %q", m.Op())
+	}
+}
+
+// ContractServiceTermClient is a client for the ContractServiceTerm schema.
+type ContractServiceTermClient struct {
+	config
+}
+
+// NewContractServiceTermClient returns a client for the ContractServiceTerm from the given config.
+func NewContractServiceTermClient(c config) *ContractServiceTermClient {
+	return &ContractServiceTermClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contractserviceterm.Hooks(f(g(h())))`.
+func (c *ContractServiceTermClient) Use(hooks ...Hook) {
+	c.hooks.ContractServiceTerm = append(c.hooks.ContractServiceTerm, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contractserviceterm.Intercept(f(g(h())))`.
+func (c *ContractServiceTermClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContractServiceTerm = append(c.inters.ContractServiceTerm, interceptors...)
+}
+
+// Create returns a builder for creating a ContractServiceTerm entity.
+func (c *ContractServiceTermClient) Create() *ContractServiceTermCreate {
+	mutation := newContractServiceTermMutation(c.config, OpCreate)
+	return &ContractServiceTermCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContractServiceTerm entities.
+func (c *ContractServiceTermClient) CreateBulk(builders ...*ContractServiceTermCreate) *ContractServiceTermCreateBulk {
+	return &ContractServiceTermCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContractServiceTermClient) MapCreateBulk(slice any, setFunc func(*ContractServiceTermCreate, int)) *ContractServiceTermCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContractServiceTermCreateBulk{err: fmt.Errorf("calling to ContractServiceTermClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContractServiceTermCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContractServiceTermCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContractServiceTerm.
+func (c *ContractServiceTermClient) Update() *ContractServiceTermUpdate {
+	mutation := newContractServiceTermMutation(c.config, OpUpdate)
+	return &ContractServiceTermUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContractServiceTermClient) UpdateOne(_m *ContractServiceTerm) *ContractServiceTermUpdateOne {
+	mutation := newContractServiceTermMutation(c.config, OpUpdateOne, withContractServiceTerm(_m))
+	return &ContractServiceTermUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContractServiceTermClient) UpdateOneID(id string) *ContractServiceTermUpdateOne {
+	mutation := newContractServiceTermMutation(c.config, OpUpdateOne, withContractServiceTermID(id))
+	return &ContractServiceTermUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContractServiceTerm.
+func (c *ContractServiceTermClient) Delete() *ContractServiceTermDelete {
+	mutation := newContractServiceTermMutation(c.config, OpDelete)
+	return &ContractServiceTermDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContractServiceTermClient) DeleteOne(_m *ContractServiceTerm) *ContractServiceTermDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContractServiceTermClient) DeleteOneID(id string) *ContractServiceTermDeleteOne {
+	builder := c.Delete().Where(contractserviceterm.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContractServiceTermDeleteOne{builder}
+}
+
+// Query returns a query builder for ContractServiceTerm.
+func (c *ContractServiceTermClient) Query() *ContractServiceTermQuery {
+	return &ContractServiceTermQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContractServiceTerm},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContractServiceTerm entity by its id.
+func (c *ContractServiceTermClient) Get(ctx context.Context, id string) (*ContractServiceTerm, error) {
+	return c.Query().Where(contractserviceterm.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContractServiceTermClient) GetX(ctx context.Context, id string) *ContractServiceTerm {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryContract queries the contract edge of a ContractServiceTerm.
+func (c *ContractServiceTermClient) QueryContract(_m *ContractServiceTerm) *ContractQuery {
+	query := (&ContractClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contractserviceterm.Table, contractserviceterm.FieldID, id),
+			sqlgraph.To(contract.Table, contract.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, contractserviceterm.ContractTable, contractserviceterm.ContractColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ContractServiceTermClient) Hooks() []Hook {
+	return c.hooks.ContractServiceTerm
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContractServiceTermClient) Interceptors() []Interceptor {
+	return c.inters.ContractServiceTerm
+}
+
+func (c *ContractServiceTermClient) mutate(ctx context.Context, m *ContractServiceTermMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContractServiceTermCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContractServiceTermUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContractServiceTermUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContractServiceTermDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContractServiceTerm mutation op: %q", m.Op())
 	}
 }
 
@@ -4262,17 +4437,17 @@ type (
 	hooks struct {
 		AccountingClient, AccountingRulePack, ActivityEvent, ClassificationRule,
 		ClientAccountingProfile, Contract, ContractExtractionAttempt,
-		ContractMatchCandidate, ContractMatchRun, ContractSourceDocument, Invoice,
-		InvoiceContractAssociation, InvoiceLine, LineClassification, OutboxEntry,
-		RuleVersion, SPVConnection, SPVOAuthState, SPVSourceDocument,
-		SagaExportAttempt, ValidationTask []ent.Hook
+		ContractMatchCandidate, ContractMatchRun, ContractServiceTerm,
+		ContractSourceDocument, Invoice, InvoiceContractAssociation, InvoiceLine,
+		LineClassification, OutboxEntry, RuleVersion, SPVConnection, SPVOAuthState,
+		SPVSourceDocument, SagaExportAttempt, ValidationTask []ent.Hook
 	}
 	inters struct {
 		AccountingClient, AccountingRulePack, ActivityEvent, ClassificationRule,
 		ClientAccountingProfile, Contract, ContractExtractionAttempt,
-		ContractMatchCandidate, ContractMatchRun, ContractSourceDocument, Invoice,
-		InvoiceContractAssociation, InvoiceLine, LineClassification, OutboxEntry,
-		RuleVersion, SPVConnection, SPVOAuthState, SPVSourceDocument,
-		SagaExportAttempt, ValidationTask []ent.Interceptor
+		ContractMatchCandidate, ContractMatchRun, ContractServiceTerm,
+		ContractSourceDocument, Invoice, InvoiceContractAssociation, InvoiceLine,
+		LineClassification, OutboxEntry, RuleVersion, SPVConnection, SPVOAuthState,
+		SPVSourceDocument, SagaExportAttempt, ValidationTask []ent.Interceptor
 	}
 )

@@ -84,6 +84,28 @@ func (_c *InvoiceContractAssociationCreate) SetEffectiveTo(v time.Time) *Invoice
 	return _c
 }
 
+// SetNillableEffectiveTo sets the "effective_to" field if the given value is not nil.
+func (_c *InvoiceContractAssociationCreate) SetNillableEffectiveTo(v *time.Time) *InvoiceContractAssociationCreate {
+	if v != nil {
+		_c.SetEffectiveTo(*v)
+	}
+	return _c
+}
+
+// SetPeriodType sets the "period_type" field.
+func (_c *InvoiceContractAssociationCreate) SetPeriodType(v invoicecontractassociation.PeriodType) *InvoiceContractAssociationCreate {
+	_c.mutation.SetPeriodType(v)
+	return _c
+}
+
+// SetNillablePeriodType sets the "period_type" field if the given value is not nil.
+func (_c *InvoiceContractAssociationCreate) SetNillablePeriodType(v *invoicecontractassociation.PeriodType) *InvoiceContractAssociationCreate {
+	if v != nil {
+		_c.SetPeriodType(*v)
+	}
+	return _c
+}
+
 // SetTotalValue sets the "total_value" field.
 func (_c *InvoiceContractAssociationCreate) SetTotalValue(v string) *InvoiceContractAssociationCreate {
 	_c.mutation.SetTotalValue(v)
@@ -175,6 +197,7 @@ func (_c *InvoiceContractAssociationCreate) Mutation() *InvoiceContractAssociati
 
 // Save creates the InvoiceContractAssociation in the database.
 func (_c *InvoiceContractAssociationCreate) Save(ctx context.Context) (*InvoiceContractAssociation, error) {
+	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -197,6 +220,14 @@ func (_c *InvoiceContractAssociationCreate) Exec(ctx context.Context) error {
 func (_c *InvoiceContractAssociationCreate) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
 		panic(err)
+	}
+}
+
+// defaults sets the default values of the builder before save.
+func (_c *InvoiceContractAssociationCreate) defaults() {
+	if _, ok := _c.mutation.PeriodType(); !ok {
+		v := invoicecontractassociation.DefaultPeriodType
+		_c.mutation.SetPeriodType(v)
 	}
 }
 
@@ -249,8 +280,13 @@ func (_c *InvoiceContractAssociationCreate) check() error {
 	if _, ok := _c.mutation.EffectiveFrom(); !ok {
 		return &ValidationError{Name: "effective_from", err: errors.New(`ent: missing required field "InvoiceContractAssociation.effective_from"`)}
 	}
-	if _, ok := _c.mutation.EffectiveTo(); !ok {
-		return &ValidationError{Name: "effective_to", err: errors.New(`ent: missing required field "InvoiceContractAssociation.effective_to"`)}
+	if _, ok := _c.mutation.PeriodType(); !ok {
+		return &ValidationError{Name: "period_type", err: errors.New(`ent: missing required field "InvoiceContractAssociation.period_type"`)}
+	}
+	if v, ok := _c.mutation.PeriodType(); ok {
+		if err := invoicecontractassociation.PeriodTypeValidator(v); err != nil {
+			return &ValidationError{Name: "period_type", err: fmt.Errorf(`ent: validator failed for field "InvoiceContractAssociation.period_type": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.TotalValue(); !ok {
 		return &ValidationError{Name: "total_value", err: errors.New(`ent: missing required field "InvoiceContractAssociation.total_value"`)}
@@ -351,7 +387,11 @@ func (_c *InvoiceContractAssociationCreate) createSpec() (*InvoiceContractAssoci
 	}
 	if value, ok := _c.mutation.EffectiveTo(); ok {
 		_spec.SetField(invoicecontractassociation.FieldEffectiveTo, field.TypeTime, value)
-		_node.EffectiveTo = value
+		_node.EffectiveTo = &value
+	}
+	if value, ok := _c.mutation.PeriodType(); ok {
+		_spec.SetField(invoicecontractassociation.FieldPeriodType, field.TypeEnum, value)
+		_node.PeriodType = value
 	}
 	if value, ok := _c.mutation.TotalValue(); ok {
 		_spec.SetField(invoicecontractassociation.FieldTotalValue, field.TypeString, value)
@@ -470,6 +510,7 @@ func (_c *InvoiceContractAssociationCreateBulk) Save(ctx context.Context) ([]*In
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*InvoiceContractAssociationMutation)
 				if !ok {

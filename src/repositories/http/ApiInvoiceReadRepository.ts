@@ -152,6 +152,7 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
   async confirmContractDocument(clientId:string,document:ContractDocument,contract:ReviewedContract,key=crypto.randomUUID()){if(!document.extraction?.id)throw new Error('Extraction attempt is required.');const response=await this.http.post<{contractId:string;changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(document.id)}/confirm`,{extractionAttemptId:document.extraction.id,expectedDocumentRevision:document.revision,contract},{headers:{'Idempotency-Key':key}});return response.data}
   async getContractDocumentFile(clientId:string,documentId:string){const response=await this.http.get<Blob>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/file`,{responseType:'blob'});return response.data}
   async retryContractExtraction(clientId:string,documentId:string,revision:number){await this.http.post(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/reextract`,{expectedDocumentRevision:revision})}
+  async discardContractDocument(clientId:string,documentId:string,revision:number){await this.http.post(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/discard`,{expectedDocumentRevision:revision})}
 
   async resolveContractMatch(id: string, contractId: string): Promise<Invoice> {
     const invoice = await this.requireInvoice(id)

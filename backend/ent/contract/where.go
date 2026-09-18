@@ -105,6 +105,11 @@ func TotalValue(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldEQ(FieldTotalValue, v))
 }
 
+// HasLegacyTotalValue applies equality check predicate on the "has_legacy_total_value" field. It's identical to HasLegacyTotalValueEQ.
+func HasLegacyTotalValue(v bool) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldHasLegacyTotalValue, v))
+}
+
 // Currency applies equality check predicate on the "currency" field. It's identical to CurrencyEQ.
 func Currency(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldEQ(FieldCurrency, v))
@@ -560,6 +565,56 @@ func EffectiveToLTE(v time.Time) predicate.Contract {
 	return predicate.Contract(sql.FieldLTE(FieldEffectiveTo, v))
 }
 
+// EffectiveToIsNil applies the IsNil predicate on the "effective_to" field.
+func EffectiveToIsNil() predicate.Contract {
+	return predicate.Contract(sql.FieldIsNull(FieldEffectiveTo))
+}
+
+// EffectiveToNotNil applies the NotNil predicate on the "effective_to" field.
+func EffectiveToNotNil() predicate.Contract {
+	return predicate.Contract(sql.FieldNotNull(FieldEffectiveTo))
+}
+
+// PeriodTypeEQ applies the EQ predicate on the "period_type" field.
+func PeriodTypeEQ(v PeriodType) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldPeriodType, v))
+}
+
+// PeriodTypeNEQ applies the NEQ predicate on the "period_type" field.
+func PeriodTypeNEQ(v PeriodType) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldPeriodType, v))
+}
+
+// PeriodTypeIn applies the In predicate on the "period_type" field.
+func PeriodTypeIn(vs ...PeriodType) predicate.Contract {
+	return predicate.Contract(sql.FieldIn(FieldPeriodType, vs...))
+}
+
+// PeriodTypeNotIn applies the NotIn predicate on the "period_type" field.
+func PeriodTypeNotIn(vs ...PeriodType) predicate.Contract {
+	return predicate.Contract(sql.FieldNotIn(FieldPeriodType, vs...))
+}
+
+// LifecycleStateEQ applies the EQ predicate on the "lifecycle_state" field.
+func LifecycleStateEQ(v LifecycleState) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldLifecycleState, v))
+}
+
+// LifecycleStateNEQ applies the NEQ predicate on the "lifecycle_state" field.
+func LifecycleStateNEQ(v LifecycleState) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldLifecycleState, v))
+}
+
+// LifecycleStateIn applies the In predicate on the "lifecycle_state" field.
+func LifecycleStateIn(vs ...LifecycleState) predicate.Contract {
+	return predicate.Contract(sql.FieldIn(FieldLifecycleState, vs...))
+}
+
+// LifecycleStateNotIn applies the NotIn predicate on the "lifecycle_state" field.
+func LifecycleStateNotIn(vs ...LifecycleState) predicate.Contract {
+	return predicate.Contract(sql.FieldNotIn(FieldLifecycleState, vs...))
+}
+
 // TotalValueEQ applies the EQ predicate on the "total_value" field.
 func TotalValueEQ(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldEQ(FieldTotalValue, v))
@@ -623,6 +678,16 @@ func TotalValueEqualFold(v string) predicate.Contract {
 // TotalValueContainsFold applies the ContainsFold predicate on the "total_value" field.
 func TotalValueContainsFold(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldContainsFold(FieldTotalValue, v))
+}
+
+// HasLegacyTotalValueEQ applies the EQ predicate on the "has_legacy_total_value" field.
+func HasLegacyTotalValueEQ(v bool) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldHasLegacyTotalValue, v))
+}
+
+// HasLegacyTotalValueNEQ applies the NEQ predicate on the "has_legacy_total_value" field.
+func HasLegacyTotalValueNEQ(v bool) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldHasLegacyTotalValue, v))
 }
 
 // CurrencyEQ applies the EQ predicate on the "currency" field.
@@ -1301,6 +1366,29 @@ func HasInvoiceAssociations() predicate.Contract {
 func HasInvoiceAssociationsWith(preds ...predicate.InvoiceContractAssociation) predicate.Contract {
 	return predicate.Contract(func(s *sql.Selector) {
 		step := newInvoiceAssociationsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasServiceTerms applies the HasEdge predicate on the "service_terms" edge.
+func HasServiceTerms() predicate.Contract {
+	return predicate.Contract(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ServiceTermsTable, ServiceTermsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasServiceTermsWith applies the HasEdge predicate on the "service_terms" edge with a given conditions (other predicates).
+func HasServiceTermsWith(preds ...predicate.ContractServiceTerm) predicate.Contract {
+	return predicate.Contract(func(s *sql.Selector) {
+		step := newServiceTermsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

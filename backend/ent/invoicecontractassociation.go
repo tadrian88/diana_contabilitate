@@ -40,7 +40,9 @@ type InvoiceContractAssociation struct {
 	// EffectiveFrom holds the value of the "effective_from" field.
 	EffectiveFrom time.Time `json:"effective_from,omitempty"`
 	// EffectiveTo holds the value of the "effective_to" field.
-	EffectiveTo time.Time `json:"effective_to,omitempty"`
+	EffectiveTo *time.Time `json:"effective_to,omitempty"`
+	// PeriodType holds the value of the "period_type" field.
+	PeriodType invoicecontractassociation.PeriodType `json:"period_type,omitempty"`
 	// TotalValue holds the value of the "total_value" field.
 	TotalValue string `json:"total_value,omitempty"`
 	// Currency holds the value of the "currency" field.
@@ -125,7 +127,7 @@ func (*InvoiceContractAssociation) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case invoicecontractassociation.FieldID, invoicecontractassociation.FieldClientID, invoicecontractassociation.FieldInvoiceID, invoicecontractassociation.FieldContractID, invoicecontractassociation.FieldMatchRunID, invoicecontractassociation.FieldAssociationKind, invoicecontractassociation.FieldPolicyVersion, invoicecontractassociation.FieldContractReference, invoicecontractassociation.FieldSupplierName, invoicecontractassociation.FieldTotalValue, invoicecontractassociation.FieldCurrency, invoicecontractassociation.FieldUnitType, invoicecontractassociation.FieldPaymentTerms, invoicecontractassociation.FieldAssociatedByID, invoicecontractassociation.FieldAssociatedByDisplay:
+		case invoicecontractassociation.FieldID, invoicecontractassociation.FieldClientID, invoicecontractassociation.FieldInvoiceID, invoicecontractassociation.FieldContractID, invoicecontractassociation.FieldMatchRunID, invoicecontractassociation.FieldAssociationKind, invoicecontractassociation.FieldPolicyVersion, invoicecontractassociation.FieldContractReference, invoicecontractassociation.FieldSupplierName, invoicecontractassociation.FieldPeriodType, invoicecontractassociation.FieldTotalValue, invoicecontractassociation.FieldCurrency, invoicecontractassociation.FieldUnitType, invoicecontractassociation.FieldPaymentTerms, invoicecontractassociation.FieldAssociatedByID, invoicecontractassociation.FieldAssociatedByDisplay:
 			values[i] = new(sql.NullString)
 		case invoicecontractassociation.FieldEffectiveFrom, invoicecontractassociation.FieldEffectiveTo, invoicecontractassociation.FieldAssociatedAt:
 			values[i] = new(sql.NullTime)
@@ -208,7 +210,14 @@ func (_m *InvoiceContractAssociation) assignValues(columns []string, values []an
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field effective_to", values[i])
 			} else if value.Valid {
-				_m.EffectiveTo = value.Time
+				_m.EffectiveTo = new(time.Time)
+				*_m.EffectiveTo = value.Time
+			}
+		case invoicecontractassociation.FieldPeriodType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field period_type", values[i])
+			} else if value.Valid {
+				_m.PeriodType = invoicecontractassociation.PeriodType(value.String)
 			}
 		case invoicecontractassociation.FieldTotalValue:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -337,8 +346,13 @@ func (_m *InvoiceContractAssociation) String() string {
 	builder.WriteString("effective_from=")
 	builder.WriteString(_m.EffectiveFrom.Format(time.ANSIC))
 	builder.WriteString(", ")
-	builder.WriteString("effective_to=")
-	builder.WriteString(_m.EffectiveTo.Format(time.ANSIC))
+	if v := _m.EffectiveTo; v != nil {
+		builder.WriteString("effective_to=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("period_type=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PeriodType))
 	builder.WriteString(", ")
 	builder.WriteString("total_value=")
 	builder.WriteString(_m.TotalValue)

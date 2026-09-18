@@ -1,6 +1,7 @@
 package invoicing
 
 import (
+	"diana-contabilitate/backend/internal/fiscalidentity"
 	"strings"
 	"time"
 )
@@ -16,7 +17,7 @@ var ProvisionalDuplicatePolicy = DuplicatePolicy{Version: "PROVISIONAL_V1"}
 // casing and whitespace. More aggressive supplier/document canonicalization is
 // a product decision and must not be inferred by the ingestion layer.
 func NormalizeBusinessIdentifier(value string) string {
-	return ProvisionalDuplicatePolicy.NormalizeIdentifier(value)
+	return fiscalidentity.ForComparison(value, "")
 }
 
 func InvoiceIssueDay(value time.Time) time.Time {

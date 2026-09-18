@@ -69,6 +69,17 @@ func (m *memoryStore) RetryExtraction(context.Context, string, string, uint64, c
 	m.doc.Status = ci.StatusUploaded
 	return nil
 }
+func (m *memoryStore) DiscardDocument(_ context.Context, client, id string, revision uint64, _ ci.Actor, _ time.Time) error {
+	if client != m.doc.ClientID || id != m.doc.ID {
+		return apperrors.ErrNotFound
+	}
+	if m.doc.Status == ci.StatusConfirmed || revision != m.doc.Revision {
+		return apperrors.ErrConflict
+	}
+	m.doc.LifecycleState = "DISCARDED"
+	m.doc.Revision++
+	return nil
+}
 func (m *memoryStore) ConfirmDocument(_ context.Context, c ci.ConfirmCommand, value contracts.Contract, now time.Time) (string, bool, error) {
 	if m.doc.Status != ci.StatusReadyForReview || m.doc.Revision != c.ExpectedDocumentRevision || m.doc.LatestExtractionID == nil || *m.doc.LatestExtractionID != c.ExtractionAttemptID {
 		return "", false, apperrors.ErrConflict
@@ -104,7 +115,17 @@ func (f *flakyExtractor) Extract(context.Context, []byte, string) (ci.Extraction
 	return ci.ExtractionResult{Proposal: f.result}, nil
 }
 func reviewed(p ci.Proposal) ci.ReviewedContract {
-	return ci.ReviewedContract{SupplierName: *p.SupplierName.Value, SupplierCUI: *p.SupplierCUI.Value, Reference: *p.Reference.Value, EffectiveFrom: *p.EffectiveFrom.Value, EffectiveTo: *p.EffectiveTo.Value, TotalValue: *p.TotalValue.Value, Currency: *p.Currency.Value, UnitType: *p.UnitType.Value, PaymentTerms: *p.PaymentTerms.Value}
+	result := ci.ReviewedContract{SupplierName: *p.SupplierName.Value, SupplierCUI: *p.SupplierCUI.Value, Reference: *p.Reference.Value, EffectiveFrom: *p.EffectiveFrom.Value, EffectiveTo: valueOrEmpty(p.EffectiveTo.Value), TotalValue: valueOrEmpty(p.TotalValue.Value), Currency: *p.Currency.Value, UnitType: valueOrEmpty(p.UnitType.Value), PaymentTerms: valueOrEmpty(p.PaymentTerms.Value), BuyerCUI: *p.BuyerCUI.Value, PeriodType: valueOrEmpty(p.PeriodType.Value)}
+	for _, term := range p.ServiceTerms {
+		result.ServiceTerms = append(result.ServiceTerms, ci.ReviewedServiceTerm{ServiceDescription: valueOrEmpty(term.ServiceDescription.Value), PricingModel: valueOrEmpty(term.PricingModel.Value), UnitPrice: valueOrEmpty(term.UnitPrice.Value), Currency: valueOrEmpty(term.Currency.Value), Unit: valueOrEmpty(term.Unit.Value), QuantitySource: valueOrEmpty(term.QuantitySource.Value), QuantityValue: valueOrEmpty(term.QuantityValue.Value), QuantityDriver: valueOrEmpty(term.QuantityDriver.Value), BillingFrequency: valueOrEmpty(term.BillingFrequency.Value), Evidence: term.ServiceDescription.Evidence})
+	}
+	return result
+}
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func TestContractDocumentUploadValidation(t *testing.T) {
@@ -182,6 +203,50 @@ func TestContractExtractionHumanCorrectionPreservesProposal(t *testing.T) {
 		t.Fatalf("human boundary error=%v", err)
 	}
 }
+
+func TestReviewedBuyerCorrectionUsesCanonicalRomanianIdentity(t *testing.T) {
+	proposal := fixtures.Proposal("romanian")
+	wrong := "RO99999999"
+	proposal.BuyerCUI.Value = &wrong
+	store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client", ClientCUI: "RO21592770", Status: ci.StatusReadyForReview, Revision: 2}, proposal: &proposal}
+	attempt := "attempt"
+	store.doc.LatestExtractionID = &attempt
+	service := ci.NewService(store, nil, &availability{}, 0, nil)
+	reviewedValue := reviewed(proposal)
+	reviewedValue.BuyerCUI = "ro 21592770"
+	if _, _, err := service.Confirm(context.Background(), ci.ConfirmCommand{ClientID: "client", DocumentID: "doc", ExtractionAttemptID: attempt, ExpectedDocumentRevision: 2, Contract: reviewedValue, CommandID: "corrected", Actor: ci.Actor{AllClients: true}}); err != nil {
+		t.Fatalf("corrected reviewed value remained blocked: %v", err)
+	}
+}
+
+func TestIndefiniteServiceContractReadinessAndTerms(t *testing.T) {
+	proposal := fixtures.Proposal("service-indefinite")
+	reviewedValue := reviewed(proposal)
+	readiness := ci.ConfirmationReadinessFor(reviewedValue, "RO10000000")
+	if !readiness.CanConfirm || reviewedValue.EffectiveTo != "" {
+		t.Fatalf("readiness=%+v end=%q", readiness, reviewedValue.EffectiveTo)
+	}
+	store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client", ClientCUI: "RO10000000", Status: ci.StatusReadyForReview, Revision: 2}}
+	attempt := "attempt"
+	store.doc.LatestExtractionID = &attempt
+	service := ci.NewService(store, nil, &availability{}, 0, nil)
+	_, _, err := service.Confirm(context.Background(), ci.ConfirmCommand{ClientID: "client", DocumentID: "doc", ExtractionAttemptID: attempt, ExpectedDocumentRevision: 2, Contract: reviewedValue, CommandID: "indefinite", Actor: ci.Actor{AllClients: true}})
+	if err != nil || store.confirmed.EffectiveTo != nil || len(store.confirmed.ServiceTerms) != 2 || store.confirmed.ServiceTerms[1].PricingModel != "UNIT_RATE" || store.confirmed.ServiceTerms[1].Unit != "SALARIAT" {
+		t.Fatalf("contract=%+v err=%v", store.confirmed, err)
+	}
+}
+
+func TestDiscardUnconfirmedDocument(t *testing.T) {
+	store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client", Status: ci.StatusReadyForReview, Revision: 2}}
+	service := ci.NewService(store, nil, nil, 0, nil)
+	if err := service.Discard(context.Background(), "client", "doc", 2, ci.Actor{AllClients: true}); err != nil || store.doc.LifecycleState != "DISCARDED" {
+		t.Fatalf("discard=%v state=%s", err, store.doc.LifecycleState)
+	}
+	store.doc.Status = ci.StatusConfirmed
+	if err := service.Discard(context.Background(), "client", "doc", 3, ci.Actor{AllClients: true}); !errors.Is(err, apperrors.ErrConflict) {
+		t.Fatalf("confirmed discard=%v", err)
+	}
+}
 func TestContractExtractionTransientAndPermanentFailure(t *testing.T) {
 	for _, permanent := range []bool{false, true} {
 		store := &memoryStore{}
@@ -252,7 +317,7 @@ func TestContractExtractionSourceIntegrityGuard(t *testing.T) {
 	}
 }
 func TestContractConfirmationRejectsInvalidAndBuyerMismatch(t *testing.T) {
-	for _, change := range []func(*ci.ReviewedContract){func(v *ci.ReviewedContract) { v.SupplierCUI = "wrong" }, func(v *ci.ReviewedContract) { v.Currency = "XYZ" }, func(v *ci.ReviewedContract) { v.EffectiveTo = "01.01.2027" }, func(v *ci.ReviewedContract) { v.EffectiveFrom = "2028-01-01" }, func(v *ci.ReviewedContract) { v.TotalValue = "1.12345" }, func(v *ci.ReviewedContract) { v.UnitType = "" }} {
+	for _, change := range []func(*ci.ReviewedContract){func(v *ci.ReviewedContract) { v.SupplierCUI = "wrong" }, func(v *ci.ReviewedContract) { v.Currency = "XYZ" }, func(v *ci.ReviewedContract) { v.EffectiveTo = "01.01.2027" }, func(v *ci.ReviewedContract) { v.EffectiveFrom = "2028-01-01" }, func(v *ci.ReviewedContract) { v.TotalValue = "1.12345" }} {
 		store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client"}}
 		service := ci.NewService(store, nil, &availability{}, 0, nil)
 		value := reviewed(fixtures.Proposal("romanian"))
@@ -261,9 +326,11 @@ func TestContractConfirmationRejectsInvalidAndBuyerMismatch(t *testing.T) {
 			t.Fatalf("validation=%v", err)
 		}
 	}
-	store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client", BuyerMismatch: true}}
+	store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client", ClientCUI: "RO10000000", BuyerMismatch: true}}
 	service := ci.NewService(store, nil, &availability{}, 0, nil)
-	if _, _, err := service.Confirm(context.Background(), ci.ConfirmCommand{ClientID: "client", DocumentID: "doc", ExpectedDocumentRevision: 1, CommandID: "key", Actor: ci.Actor{AllClients: true}}); !errors.Is(err, ci.ErrBuyerMismatch) {
+	value := reviewed(fixtures.Proposal("romanian"))
+	value.BuyerCUI = "RO99999999"
+	if _, _, err := service.Confirm(context.Background(), ci.ConfirmCommand{ClientID: "client", DocumentID: "doc", Contract: value, ExpectedDocumentRevision: 1, CommandID: "key", Actor: ci.Actor{AllClients: true}}); !errors.Is(err, ci.ErrBuyerMismatch) {
 		t.Fatal("buyer mismatch ignored")
 	}
 }

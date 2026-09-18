@@ -8,16 +8,18 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
 	"diana-contabilitate/backend/ent"
 	"diana-contabilitate/backend/ent/activityevent"
+	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractextractionattempt"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/outboxentry"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contracts"
+	"diana-contabilitate/backend/internal/fiscalidentity"
 	"diana-contabilitate/backend/internal/outbox"
 )
 
@@ -90,7 +92,7 @@ func documentMetadataFields() []string {
 }
 
 func (s *Store) ListDocuments(ctx context.Context, clientID string) ([]contractingestion.Document, error) {
-	rows, err := s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(clientID)).Select(documentMetadataFields()...).Order(ent.Desc(contractsourcedocument.FieldUploadedAt)).All(ctx)
+	rows, err := s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(clientID), contractsourcedocument.LifecycleStateNEQ(contractsourcedocument.LifecycleStateDISCARDED)).Select(documentMetadataFields()...).Order(ent.Desc(contractsourcedocument.FieldUploadedAt)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +107,7 @@ func (s *Store) ListDocuments(ctx context.Context, clientID string) ([]contracti
 	return result, nil
 }
 func (s *Store) GetDocument(ctx context.Context, clientID, id string) (contractingestion.Document, error) {
-	row, err := s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.IDEQ(id), contractsourcedocument.ClientIDEQ(clientID)).Select(documentMetadataFields()...).Only(ctx)
+	row, err := s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.IDEQ(id), contractsourcedocument.ClientIDEQ(clientID), contractsourcedocument.LifecycleStateNEQ(contractsourcedocument.LifecycleStateDISCARDED)).Select(documentMetadataFields()...).Only(ctx)
 	if ent.IsNotFound(err) {
 		return contractingestion.Document{}, apperrors.ErrNotFound
 	}
@@ -263,7 +265,7 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 	if json.Unmarshal(attempt.Proposal, &proposal) != nil {
 		return "", false, apperrors.ErrConflict
 	}
-	if proposal.BuyerCUI.Value != nil && normalizeCUI(*proposal.BuyerCUI.Value) != normalizeCUI(client.Cui) {
+	if !fiscalidentity.Same(command.Contract.BuyerCUI, client.Cui) {
 		return "", false, contractingestion.ErrBuyerMismatch
 	}
 	if _, err = tx.ContractSourceDocument.UpdateOne(doc).Where(contractsourcedocument.RevisionEQ(command.ExpectedDocumentRevision), contractsourcedocument.StatusEQ(contractsourcedocument.StatusREADY_FOR_REVIEW)).AddRevision(1).SetUpdatedAt(now).Save(ctx); err != nil {
@@ -274,12 +276,25 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 	}
 	sourceRef := "Contract PDF: " + doc.OriginalFilename
 	sourceMeta := fmt.Sprintf("sha256=%s; extraction=%s; schema=%s", doc.Sha256, attempt.ID, attempt.SchemaVersion)
-	created, err := tx.Contract.Create().SetID(value.ID).SetClientID(value.ClientID).SetSupplierName(value.SupplierName).SetSupplierCui(value.SupplierCUI).SetNormalizedSupplierCui(value.NormalizedSupplierCUI).SetReference(value.Reference).SetEffectiveFrom(value.EffectiveFrom).SetEffectiveTo(value.EffectiveTo).SetTotalValue(value.Value.Amount.String()).SetCurrency(value.Value.Currency).SetUnitType(value.UnitType).SetPaymentTerms(value.PaymentTerms).SetSourceReference(sourceRef).SetSourceMetadata(sourceMeta).SetSourceDocumentID(doc.ID).SetExtractionAttemptID(attempt.ID).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
+	contractCreate := tx.Contract.Create().SetID(value.ID).SetClientID(value.ClientID).SetSupplierName(value.SupplierName).SetSupplierCui(value.SupplierCUI).SetNormalizedSupplierCui(value.NormalizedSupplierCUI).SetReference(value.Reference).SetEffectiveFrom(value.EffectiveFrom).SetNillableEffectiveTo(value.EffectiveTo).SetPeriodType(contract.PeriodType(value.PeriodType)).SetTotalValue(value.Value.Amount.String()).SetHasLegacyTotalValue(value.HasLegacyTotalValue).SetCurrency(value.Value.Currency).SetUnitType(value.UnitType).SetPaymentTerms(value.PaymentTerms).SetSourceReference(sourceRef).SetSourceMetadata(sourceMeta).SetSourceDocumentID(doc.ID).SetExtractionAttemptID(attempt.ID).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now)
+	created, err := contractCreate.Save(ctx)
 	if ent.IsConstraintError(err) {
 		return "", false, apperrors.ErrConflict
 	}
 	if err != nil {
 		return "", false, err
+	}
+	for _, term := range value.ServiceTerms {
+		create := tx.ContractServiceTerm.Create().SetID(term.ID).SetContractID(created.ID).SetPosition(term.Position).SetServiceDescription(term.ServiceDescription).SetPricingModel(contractserviceterm.PricingModel(term.PricingModel)).SetCurrency(term.Currency).SetUnit(term.Unit).SetQuantitySource(contractserviceterm.QuantitySource(term.QuantitySource)).SetQuantityDriver(term.QuantityDriver).SetBillingFrequency(contractserviceterm.BillingFrequency(term.BillingFrequency)).SetSourceEvidence(term.EvidenceJSON)
+		if term.UnitPrice != nil {
+			create.SetUnitPrice(term.UnitPrice.String())
+		}
+		if term.QuantityValue != nil {
+			create.SetQuantityValue(term.QuantityValue.String())
+		}
+		if _, err = create.Save(ctx); err != nil {
+			return "", false, err
+		}
 	}
 	doc, err = tx.ContractSourceDocument.UpdateOne(doc).SetStatus(contractsourcedocument.StatusCONFIRMED).SetConfirmedValues(confirmed).SetConfirmationKey(key).SetConfirmationFingerprint(fingerprint).SetConfirmedContractID(created.ID).SetConfirmedAt(now).SetNillableConfirmedByID(optional(command.Actor.ID)).SetNillableConfirmedByDisplay(optional(command.Actor.Display)).SetUpdatedAt(now).Save(ctx)
 	if err != nil {
@@ -287,6 +302,16 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 	}
 	if err = createIngestionAudit(ctx, tx, doc.ClientID, doc.ID, "CONTRACT_CONFIRMED", "Datele revizuite au devenit contractul autoritativ folosit pentru asocierea facturilor.", key, command.Actor, now, nil, nil); err != nil {
 		return "", false, err
+	}
+	if reviewedDiffers(proposal, command.Contract) {
+		if err = createIngestionAudit(ctx, tx, doc.ClientID, doc.ID, "CONTRACT_REVIEW_CORRECTED", "Utilizatorul a corectat propunerea AI înainte de confirmare; valorile și proveniența rămân în înregistrările dedicate.", key+":corrections", command.Actor, now, nil, nil); err != nil {
+			return "", false, err
+		}
+	}
+	if len(command.Contract.ServiceTerms) > 0 {
+		if err = createIngestionAudit(ctx, tx, doc.ClientID, doc.ID, "CONTRACT_SERVICE_TERMS_CONFIRMED", fmt.Sprintf("Au fost confirmate %d servicii și tarife structurate.", len(command.Contract.ServiceTerms)), key+":service-terms", command.Actor, now, nil, nil); err != nil {
+			return "", false, err
+		}
 	}
 	activationKey := "contract-ingestion:" + doc.ID + ":available"
 	payload, _ := json.Marshal(map[string]string{"contract_id": created.ID})
@@ -297,6 +322,23 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 		return "", false, err
 	}
 	return created.ID, true, nil
+}
+
+func reviewedDiffers(p contractingestion.Proposal, v contractingestion.ReviewedContract) bool {
+	pairs := []struct {
+		field contractingestion.Field
+		value string
+	}{{p.SupplierName, v.SupplierName}, {p.SupplierCUI, v.SupplierCUI}, {p.BuyerCUI, v.BuyerCUI}, {p.Reference, v.Reference}, {p.EffectiveFrom, v.EffectiveFrom}, {p.EffectiveTo, v.EffectiveTo}, {p.TotalValue, v.TotalValue}, {p.Currency, v.Currency}, {p.UnitType, v.UnitType}, {p.PaymentTerms, v.PaymentTerms}, {p.PeriodType, v.PeriodType}}
+	for _, pair := range pairs {
+		extracted := ""
+		if pair.field.Value != nil {
+			extracted = *pair.field.Value
+		}
+		if strings.TrimSpace(extracted) != strings.TrimSpace(pair.value) {
+			return true
+		}
+	}
+	return len(p.ServiceTerms) != len(v.ServiceTerms)
 }
 
 func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDocument) (contractingestion.Document, error) {
@@ -310,6 +352,9 @@ func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDoc
 		}
 	}
 	doc := documentDomain(row, attempt)
+	if client, err := s.Client.AccountingClient.Get(ctx, row.ClientID); err == nil {
+		doc.ClientCUI = client.Cui
+	}
 	if len(row.ConfirmedValues) > 0 {
 		var values contractingestion.ReviewedContract
 		if json.Unmarshal(row.ConfirmedValues, &values) == nil {
@@ -326,7 +371,7 @@ func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDoc
 	if attempt != nil && attempt.Proposal != nil && attempt.Proposal.BuyerCUI.Value != nil {
 		client, err := s.Client.AccountingClient.Get(ctx, row.ClientID)
 		if err == nil {
-			doc.BuyerMismatch = normalizeCUI(*attempt.Proposal.BuyerCUI.Value) != normalizeCUI(client.Cui)
+			doc.BuyerMismatch = !fiscalidentity.Same(*attempt.Proposal.BuyerCUI.Value, client.Cui)
 		}
 	}
 	return doc, nil
@@ -366,15 +411,6 @@ func createIngestionAudit(ctx context.Context, tx *ent.Tx, clientID, documentID,
 	_, err := create.Save(ctx)
 	return err
 }
-func normalizeCUI(value string) string {
-	value = strings.ToUpper(strings.Map(func(r rune) rune {
-		if unicode.IsSpace(r) {
-			return -1
-		}
-		return r
-	}, value))
-	return strings.TrimPrefix(value, "RO")
-}
 func optional(value string) *string {
 	if value == "" {
 		return nil
@@ -400,5 +436,25 @@ func (s *Store) RetryExtraction(ctx context.Context, clientID, documentID string
 	if _, err = tx.OutboxEntry.Create().SetID(stableID("outbox", key)).SetEventType(outbox.EventContractExtractionRequested).SetAggregateType("CONTRACT_SOURCE_DOCUMENT").SetAggregateID(documentID).SetPayload(payload).SetIdempotencyKey(key).SetCorrelationID(actor.CorrelationID).SetCreatedAt(now).SetAvailableAt(now).Save(ctx); err != nil {
 		return err
 	}
+	return tx.Commit()
+}
+
+func (s *Store) DiscardDocument(ctx context.Context, clientID, documentID string, revision uint64, actor contractingestion.Actor, now time.Time) error {
+	tx, err := s.Client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	row, err := tx.ContractSourceDocument.UpdateOneID(documentID).Where(contractsourcedocument.ClientIDEQ(clientID), contractsourcedocument.RevisionEQ(revision), contractsourcedocument.StatusNEQ(contractsourcedocument.StatusCONFIRMED), contractsourcedocument.LifecycleStateNEQ(contractsourcedocument.LifecycleStateDISCARDED)).SetLifecycleState(contractsourcedocument.LifecycleStateDISCARDED).SetUpdatedAt(now).AddRevision(1).Save(ctx)
+	if ent.IsNotFound(err) {
+		return apperrors.ErrConflict
+	}
+	if err != nil {
+		return err
+	}
+	if err = createIngestionAudit(ctx, tx, clientID, documentID, "CONTRACT_DOCUMENT_DISCARDED", "Documentul contractual neconfirmat a fost eliminat din fluxul activ; facturile în așteptare nu au fost modificate.", "contract-discard:"+documentID, actor, now, nil, nil); err != nil {
+		return err
+	}
+	_ = row
 	return tx.Commit()
 }

@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react'
 import type { AxiosInstance } from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiInvoiceReadRepository } from '../repositories/http/ApiInvoiceReadRepository'
+import { AutomaticWorkflowRunner } from './AutomaticWorkflowRunner'
 import { AppProviders } from './providers'
 
 describe('AutomaticWorkflowRunner authority boundary', () => {
@@ -17,7 +18,14 @@ describe('AutomaticWorkflowRunner authority boundary', () => {
     }] }))
     const repository = new ApiInvoiceReadRepository({ get, post } as unknown as Pick<AxiosInstance, 'get' | 'post'>)
 
-    render(<AppProviders repository={repository}><div>API runtime</div></AppProviders>)
+    render(
+      <AppProviders
+        repository={repository}
+        authUser={{ id: 'test-user', email: 'contabil.test@example.com', persona: 'CONTABIL' }}
+      >
+        <AutomaticWorkflowRunner />
+      </AppProviders>,
+    )
     await act(async () => { await Promise.resolve(); await Promise.resolve() })
     await act(async () => { vi.advanceTimersByTime(2_000); await Promise.resolve() })
 

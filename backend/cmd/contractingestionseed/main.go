@@ -38,7 +38,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = store.Client.Invoice.Create().SetID("inv-contract-ingestion-waiting").SetClientID("client-contract-ingestion").SetSupplierName("Furnizor extras SRL").SetSupplierCui("RO12345678").SetNormalizedSupplierCui("RO12345678").SetDocumentNumber("CI-TEST-001").SetNormalizedDocumentNumber("CI-TEST-001").SetIssueDate(now).SetIssueDay(now).SetTotalAmount("1190.0000").SetCurrency("RON").SetSpvReference("CI-TEST-SPV-001").SetIngestionSource("CONTRACT_INGESTION_TEST").SetExternalDeliveryID("CI-TEST-001").SetPipelineStatus(invoice.PipelineStatusMATCHING).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
+	_, err = store.Client.Invoice.Create().SetID("inv-contract-ingestion-waiting").SetClientID("client-contract-ingestion").SetSupplierName("Furnizor extras SRL").SetSupplierCui("RO12345678").SetNormalizedSupplierCui("12345678").SetDocumentNumber("CI-TEST-001").SetNormalizedDocumentNumber("CI-TEST-001").SetIssueDate(now).SetIssueDay(now).SetTotalAmount("1190.0000").SetCurrency("RON").SetSpvReference("CI-TEST-SPV-001").SetIngestionSource("CONTRACT_INGESTION_TEST").SetExternalDeliveryID("CI-TEST-001").SetPipelineStatus(invoice.PipelineStatusMATCHING).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
 	if err != nil {
 		panic(err)
 	}

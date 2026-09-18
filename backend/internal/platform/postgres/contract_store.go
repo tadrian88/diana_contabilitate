@@ -11,6 +11,7 @@ import (
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
 	"diana-contabilitate/backend/ent/outboxentry"
@@ -25,7 +26,7 @@ import (
 )
 
 func (s *Store) ListContracts(ctx context.Context, filter contracts.Filter) ([]contracts.Contract, error) {
-	query := s.Client.Contract.Query()
+	query := s.Client.Contract.Query().Where(contract.LifecycleStateEQ(contract.LifecycleStateACTIVE)).WithServiceTerms(func(q *ent.ContractServiceTermQuery) { q.Order(ent.Asc(contractserviceterm.FieldPosition)) })
 	if filter.ClientID != "" {
 		query.Where(contract.ClientIDEQ(filter.ClientID))
 	}
@@ -48,7 +49,7 @@ func (s *Store) ListContracts(ctx context.Context, filter contracts.Filter) ([]c
 }
 
 func (s *Store) GetContract(ctx context.Context, id string) (*contracts.Contract, error) {
-	row, err := s.Client.Contract.Query().Where(contract.IDEQ(id)).Only(ctx)
+	row, err := s.Client.Contract.Query().Where(contract.IDEQ(id), contract.LifecycleStateEQ(contract.LifecycleStateACTIVE)).WithServiceTerms(func(q *ent.ContractServiceTermQuery) { q.Order(ent.Asc(contractserviceterm.FieldPosition)) }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return nil, apperrors.ErrNotFound
 	}
@@ -665,7 +666,7 @@ func createAssociation(ctx context.Context, tx *ent.Tx, invoiceRow *ent.Invoice,
 		SetInvoiceID(invoiceRow.ID).SetContractID(contractRow.ID).SetMatchRunID(runID).
 		SetAssociationKind(invoicecontractassociation.AssociationKind(kind)).SetPolicyVersion(policyVersion).
 		SetContractReference(contractRow.Reference).SetSupplierName(contractRow.SupplierName).
-		SetEffectiveFrom(contractRow.EffectiveFrom).SetEffectiveTo(contractRow.EffectiveTo).
+		SetEffectiveFrom(contractRow.EffectiveFrom).SetNillableEffectiveTo(contractRow.EffectiveTo).SetPeriodType(invoicecontractassociation.PeriodType(contractRow.PeriodType)).
 		SetTotalValue(contractRow.TotalValue).SetCurrency(contractRow.Currency).SetUnitType(contractRow.UnitType).
 		SetPaymentTerms(contractRow.PaymentTerms).SetAssociatedAt(now)
 	if actorID != "" {
@@ -683,13 +684,33 @@ func contractDomain(row *ent.Contract) (*contracts.Contract, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read contract amount: %w", err)
 	}
-	return &contracts.Contract{
+	result := &contracts.Contract{
 		ID: row.ID, ClientID: row.ClientID, SupplierName: row.SupplierName, SupplierCUI: row.SupplierCui,
 		NormalizedSupplierCUI: row.NormalizedSupplierCui, Reference: row.Reference,
-		SourceDocumentID:row.SourceDocumentID,ExtractionAttemptID:row.ExtractionAttemptID,
-		EffectiveFrom: row.EffectiveFrom, EffectiveTo: row.EffectiveTo,
+		SourceDocumentID: row.SourceDocumentID, ExtractionAttemptID: row.ExtractionAttemptID,
+		EffectiveFrom: row.EffectiveFrom, EffectiveTo: row.EffectiveTo, PeriodType: string(row.PeriodType),
 		Value: money.Money{Amount: value, Currency: row.Currency}, UnitType: row.UnitType, PaymentTerms: row.PaymentTerms,
-		SourceReference: row.SourceReference, SourceMetadata: row.SourceMetadata, Revision: row.Revision,
+		HasLegacyTotalValue: row.HasLegacyTotalValue,
+		SourceReference:     row.SourceReference, SourceMetadata: row.SourceMetadata, Revision: row.Revision,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-	}, nil
+	}
+	for _, serviceRow := range row.Edges.ServiceTerms {
+		term := contracts.ServiceTerm{ID: serviceRow.ID, Position: serviceRow.Position, ServiceDescription: serviceRow.ServiceDescription, PricingModel: string(serviceRow.PricingModel), Currency: serviceRow.Currency, Unit: serviceRow.Unit, QuantitySource: string(serviceRow.QuantitySource), QuantityDriver: serviceRow.QuantityDriver, BillingFrequency: string(serviceRow.BillingFrequency), EvidenceJSON: serviceRow.SourceEvidence}
+		if serviceRow.UnitPrice != nil {
+			parsed, parseErr := money.Parse(*serviceRow.UnitPrice)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			term.UnitPrice = &parsed
+		}
+		if serviceRow.QuantityValue != nil {
+			parsed, parseErr := money.Parse(*serviceRow.QuantityValue)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			term.QuantityValue = &parsed
+		}
+		result.ServiceTerms = append(result.ServiceTerms, term)
+	}
+	return result, nil
 }

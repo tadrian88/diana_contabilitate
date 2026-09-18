@@ -1,6 +1,6 @@
 COMPOSE = docker compose
 
-.PHONY: setup check dev diagnose down status migrate migration-status reset
+.PHONY: setup check dev diagnose down status migrate migration-status release-local deploy-gcp-test reset
 
 setup:
 	@test -f .env.local || python3 scripts/prepare-local-env.py
@@ -27,6 +27,12 @@ migrate: setup
 
 migration-status: setup
 	$(COMPOSE) run --rm migrate migrate status --env local
+
+release-local:
+	./scripts/release-local.sh
+
+deploy-gcp-test:
+	./scripts/gcp/deploy-test.sh
 
 # Destructive and explicitly limited to the single local environment.
 reset:

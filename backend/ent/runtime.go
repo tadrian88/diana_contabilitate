@@ -12,6 +12,7 @@ import (
 	"diana-contabilitate/backend/ent/contractextractionattempt"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
@@ -160,8 +161,12 @@ func init() {
 	contractDescReference := contractFields[5].Descriptor()
 	// contract.ReferenceValidator is a validator for the "reference" field. It is called by the builders before save.
 	contract.ReferenceValidator = contractDescReference.Validators[0].(func(string) error)
+	// contractDescHasLegacyTotalValue is the schema descriptor for has_legacy_total_value field.
+	contractDescHasLegacyTotalValue := contractFields[11].Descriptor()
+	// contract.DefaultHasLegacyTotalValue holds the default value on creation for the has_legacy_total_value field.
+	contract.DefaultHasLegacyTotalValue = contractDescHasLegacyTotalValue.Default.(bool)
 	// contractDescCurrency is the schema descriptor for currency field.
-	contractDescCurrency := contractFields[9].Descriptor()
+	contractDescCurrency := contractFields[12].Descriptor()
 	// contract.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	contract.CurrencyValidator = func() func(string) error {
 		validators := contractDescCurrency.Validators
@@ -179,15 +184,15 @@ func init() {
 		}
 	}()
 	// contractDescUnitType is the schema descriptor for unit_type field.
-	contractDescUnitType := contractFields[10].Descriptor()
+	contractDescUnitType := contractFields[13].Descriptor()
 	// contract.UnitTypeValidator is a validator for the "unit_type" field. It is called by the builders before save.
 	contract.UnitTypeValidator = contractDescUnitType.Validators[0].(func(string) error)
 	// contractDescPaymentTerms is the schema descriptor for payment_terms field.
-	contractDescPaymentTerms := contractFields[11].Descriptor()
+	contractDescPaymentTerms := contractFields[14].Descriptor()
 	// contract.PaymentTermsValidator is a validator for the "payment_terms" field. It is called by the builders before save.
 	contract.PaymentTermsValidator = contractDescPaymentTerms.Validators[0].(func(string) error)
 	// contractDescRevision is the schema descriptor for revision field.
-	contractDescRevision := contractFields[16].Descriptor()
+	contractDescRevision := contractFields[19].Descriptor()
 	// contract.DefaultRevision holds the default value on creation for the revision field.
 	contract.DefaultRevision = contractDescRevision.Default.(uint64)
 	// contract.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
@@ -238,6 +243,34 @@ func init() {
 	contractmatchrunDescCommandKey := contractmatchrunFields[6].Descriptor()
 	// contractmatchrun.CommandKeyValidator is a validator for the "command_key" field. It is called by the builders before save.
 	contractmatchrun.CommandKeyValidator = contractmatchrunDescCommandKey.Validators[0].(func(string) error)
+	contractservicetermFields := schema.ContractServiceTerm{}.Fields()
+	_ = contractservicetermFields
+	// contractservicetermDescPosition is the schema descriptor for position field.
+	contractservicetermDescPosition := contractservicetermFields[2].Descriptor()
+	// contractserviceterm.PositionValidator is a validator for the "position" field. It is called by the builders before save.
+	contractserviceterm.PositionValidator = contractservicetermDescPosition.Validators[0].(func(int) error)
+	// contractservicetermDescServiceDescription is the schema descriptor for service_description field.
+	contractservicetermDescServiceDescription := contractservicetermFields[3].Descriptor()
+	// contractserviceterm.ServiceDescriptionValidator is a validator for the "service_description" field. It is called by the builders before save.
+	contractserviceterm.ServiceDescriptionValidator = contractservicetermDescServiceDescription.Validators[0].(func(string) error)
+	// contractservicetermDescCurrency is the schema descriptor for currency field.
+	contractservicetermDescCurrency := contractservicetermFields[6].Descriptor()
+	// contractserviceterm.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	contractserviceterm.CurrencyValidator = func() func(string) error {
+		validators := contractservicetermDescCurrency.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(currency string) error {
+			for _, fn := range fns {
+				if err := fn(currency); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	contractsourcedocumentFields := schema.ContractSourceDocument{}.Fields()
 	_ = contractsourcedocumentFields
 	// contractsourcedocumentDescOriginalFilename is the schema descriptor for original_filename field.
@@ -335,7 +368,7 @@ func init() {
 	// invoicecontractassociation.SupplierNameValidator is a validator for the "supplier_name" field. It is called by the builders before save.
 	invoicecontractassociation.SupplierNameValidator = invoicecontractassociationDescSupplierName.Validators[0].(func(string) error)
 	// invoicecontractassociationDescCurrency is the schema descriptor for currency field.
-	invoicecontractassociationDescCurrency := invoicecontractassociationFields[12].Descriptor()
+	invoicecontractassociationDescCurrency := invoicecontractassociationFields[13].Descriptor()
 	// invoicecontractassociation.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	invoicecontractassociation.CurrencyValidator = func() func(string) error {
 		validators := invoicecontractassociationDescCurrency.Validators
@@ -353,11 +386,11 @@ func init() {
 		}
 	}()
 	// invoicecontractassociationDescUnitType is the schema descriptor for unit_type field.
-	invoicecontractassociationDescUnitType := invoicecontractassociationFields[13].Descriptor()
+	invoicecontractassociationDescUnitType := invoicecontractassociationFields[14].Descriptor()
 	// invoicecontractassociation.UnitTypeValidator is a validator for the "unit_type" field. It is called by the builders before save.
 	invoicecontractassociation.UnitTypeValidator = invoicecontractassociationDescUnitType.Validators[0].(func(string) error)
 	// invoicecontractassociationDescPaymentTerms is the schema descriptor for payment_terms field.
-	invoicecontractassociationDescPaymentTerms := invoicecontractassociationFields[14].Descriptor()
+	invoicecontractassociationDescPaymentTerms := invoicecontractassociationFields[15].Descriptor()
 	// invoicecontractassociation.PaymentTermsValidator is a validator for the "payment_terms" field. It is called by the builders before save.
 	invoicecontractassociation.PaymentTermsValidator = invoicecontractassociationDescPaymentTerms.Validators[0].(func(string) error)
 	invoicelineFields := schema.InvoiceLine{}.Fields()

@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	ExtractionSchemaVersion = "CONTRACT_EXTRACTION_V1"
-	ExtractionPromptVersion = "CONTRACT_EXTRACTION_PROMPT_V1"
+	ExtractionSchemaVersion = "CONTRACT_EXTRACTION_V2"
+	ExtractionPromptVersion = "CONTRACT_EXTRACTION_PROMPT_V2"
 	ProviderGemini          = "GEMINI"
 )
 
@@ -49,16 +49,30 @@ type Field struct {
 // Proposal mirrors only the existing authoritative Contract model plus buyer
 // identity for deterministic tenant-consistency validation.
 type Proposal struct {
-	SupplierName  Field `json:"supplierName"`
-	SupplierCUI   Field `json:"supplierCui"`
-	Reference     Field `json:"reference"`
-	EffectiveFrom Field `json:"effectiveFrom"`
-	EffectiveTo   Field `json:"effectiveTo"`
-	TotalValue    Field `json:"totalValue"`
-	Currency      Field `json:"currency"`
-	UnitType      Field `json:"unitType"`
-	PaymentTerms  Field `json:"paymentTerms"`
-	BuyerCUI      Field `json:"buyerCui"`
+	SupplierName  Field                 `json:"supplierName"`
+	SupplierCUI   Field                 `json:"supplierCui"`
+	Reference     Field                 `json:"reference"`
+	EffectiveFrom Field                 `json:"effectiveFrom"`
+	EffectiveTo   Field                 `json:"effectiveTo"`
+	TotalValue    Field                 `json:"totalValue"`
+	Currency      Field                 `json:"currency"`
+	UnitType      Field                 `json:"unitType"`
+	PaymentTerms  Field                 `json:"paymentTerms"`
+	BuyerCUI      Field                 `json:"buyerCui"`
+	PeriodType    Field                 `json:"periodType"`
+	ServiceTerms  []ProposedServiceTerm `json:"serviceTerms"`
+}
+
+type ProposedServiceTerm struct {
+	ServiceDescription Field `json:"serviceDescription"`
+	PricingModel       Field `json:"pricingModel"`
+	UnitPrice          Field `json:"unitPrice"`
+	Currency           Field `json:"currency"`
+	Unit               Field `json:"unit"`
+	QuantitySource     Field `json:"quantitySource"`
+	QuantityValue      Field `json:"quantityValue"`
+	QuantityDriver     Field `json:"quantityDriver"`
+	BillingFrequency   Field `json:"billingFrequency"`
 }
 
 type Attempt struct {
@@ -85,6 +99,7 @@ type Document struct {
 	Attempts                                         []Attempt
 	ConfirmedValues                                  *ReviewedContract
 	BuyerMismatch                                    bool
+	ClientCUI                                        string
 }
 
 type Source struct {
@@ -107,15 +122,40 @@ type ExtractionResult struct {
 }
 
 type ReviewedContract struct {
-	SupplierName  string `json:"supplierName"`
-	SupplierCUI   string `json:"supplierCui"`
-	Reference     string `json:"reference"`
-	EffectiveFrom string `json:"effectiveFrom"`
-	EffectiveTo   string `json:"effectiveTo"`
-	TotalValue    string `json:"totalValue"`
-	Currency      string `json:"currency"`
-	UnitType      string `json:"unitType"`
-	PaymentTerms  string `json:"paymentTerms"`
+	SupplierName  string                `json:"supplierName"`
+	SupplierCUI   string                `json:"supplierCui"`
+	Reference     string                `json:"reference"`
+	EffectiveFrom string                `json:"effectiveFrom"`
+	EffectiveTo   string                `json:"effectiveTo"`
+	TotalValue    string                `json:"totalValue"`
+	Currency      string                `json:"currency"`
+	UnitType      string                `json:"unitType"`
+	PaymentTerms  string                `json:"paymentTerms"`
+	BuyerCUI      string                `json:"buyerCui"`
+	PeriodType    string                `json:"periodType"`
+	ServiceTerms  []ReviewedServiceTerm `json:"serviceTerms"`
+}
+
+type ReviewedServiceTerm struct {
+	ServiceDescription string   `json:"serviceDescription"`
+	PricingModel       string   `json:"pricingModel"`
+	UnitPrice          string   `json:"unitPrice"`
+	Currency           string   `json:"currency"`
+	Unit               string   `json:"unit"`
+	QuantitySource     string   `json:"quantitySource"`
+	QuantityValue      string   `json:"quantityValue"`
+	QuantityDriver     string   `json:"quantityDriver"`
+	BillingFrequency   string   `json:"billingFrequency"`
+	Evidence           Evidence `json:"evidence"`
+}
+
+type ConfirmationBlocker struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+type ConfirmationReadiness struct {
+	CanConfirm bool                  `json:"canConfirm"`
+	Blockers   []ConfirmationBlocker `json:"blockers"`
 }
 
 type ConfirmCommand struct {
@@ -144,6 +184,7 @@ type Store interface {
 	CompleteExtraction(context.Context, string, string, ExtractionResult, time.Time) error
 	FailExtraction(context.Context, string, string, string, time.Time) error
 	RetryExtraction(context.Context, string, string, uint64, Actor, time.Time) error
+	DiscardDocument(context.Context, string, string, uint64, Actor, time.Time) error
 	ConfirmDocument(context.Context, ConfirmCommand, contracts.Contract, time.Time) (string, bool, error)
 }
 

@@ -116,7 +116,9 @@ Extract only facts explicitly present. Never infer missing currency, dates, iden
 For each field use status PRESENT, MISSING, or AMBIGUOUS. MISSING requires a null value. AMBIGUOUS lists plausible exact-source alternatives.
 Evidence is a short source snippet and a one-based PDF page, never private reasoning. Preserve legal names, CUI, and references exactly.
 Dates must be YYYY-MM-DD only when their meaning is explicit. Monetary values must be base-10 strings without grouping separators.
-Confidence must be HIGH, MEDIUM, LOW, or UNKNOWN; it is categorical, not a probability.`
+Confidence must be HIGH, MEDIUM, LOW, or UNKNOWN; it is categorical, not a probability.
+periodType is FIXED_TERM only with an explicit end date, or INDEFINITE_TERM only with explicit indefinite wording.
+Extract each explicitly evidenced service into serviceTerms. pricingModel is FIXED_FEE, UNIT_RATE, or FIXED_TOTAL. quantitySource is CONTRACT_FIXED_QUANTITY, INVOICE_REPORTED_QUANTITY, USER_CONFIRMED_QUANTITY, EXTERNAL_SOURCE_FUTURE, or UNKNOWN. billingFrequency is MONTHLY, QUARTERLY, ANNUAL, PER_OCCURRENCE, or UNKNOWN. Never infer frequency, unit, or quantity. Never create executable formulas.`
 
 func proposalJSONSchema() map[string]any {
 	field := func() map[string]any {
@@ -126,10 +128,17 @@ func proposalJSONSchema() map[string]any {
 			"alternatives": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"value", "status", "confidence", "evidence", "alternatives"}}
 	}
 	properties := map[string]any{}
-	required := []string{"supplierName", "supplierCui", "reference", "effectiveFrom", "effectiveTo", "totalValue", "currency", "unitType", "paymentTerms", "buyerCui"}
+	required := []string{"supplierName", "supplierCui", "reference", "effectiveFrom", "effectiveTo", "totalValue", "currency", "unitType", "paymentTerms", "buyerCui", "periodType"}
 	for _, name := range required {
 		properties[name] = field()
 	}
+	termNames := []string{"serviceDescription", "pricingModel", "unitPrice", "currency", "unit", "quantitySource", "quantityValue", "quantityDriver", "billingFrequency"}
+	termProperties := map[string]any{}
+	for _, name := range termNames {
+		termProperties[name] = field()
+	}
+	properties["serviceTerms"] = map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": false, "properties": termProperties, "required": termNames}}
+	required = append(required, "serviceTerms")
 	return map[string]any{"type": "object", "additionalProperties": false, "properties": properties, "required": required}
 }
 

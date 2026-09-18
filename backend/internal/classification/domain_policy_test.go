@@ -9,7 +9,7 @@ import (
 
 func domainInput() InvoiceContext {
 	f, l, p, pack := accountingtest.Fixture("A")
-	return InvoiceContext{ModelVersion: accounting.ModelVersion, ClientID: "A", SupplierID: "RO-TEST-SUPPLIER", IssueDate: "2026-09-15", DocumentType: "INVOICE", Currency: "RON", SourceFacts: f, Snapshot: &accounting.Snapshot{Profile: p, Pack: pack}, Lines: []LineContext{{ID: "line", Description: "TEST_ONLY service", VATRate: money.MustParse("21"), VATValue: money.MustParse("21"), SourceFacts: l}}}
+	return InvoiceContext{ModelVersion: accounting.ModelVersion, ClientID: "A", SupplierID: accountingtest.SupplierCUI, IssueDate: "2026-09-15", DocumentType: "INVOICE", Currency: "RON", SourceFacts: f, Snapshot: &accounting.Snapshot{Profile: p, Pack: pack}, Lines: []LineContext{{ID: "line", Description: "TEST_ONLY service", VATRate: money.MustParse("21"), VATValue: money.MustParse("21"), SourceFacts: l}}}
 }
 func TestDomainFourDecisionsAndNoProductionSynthetic(t *testing.T) {
 	in := domainInput()

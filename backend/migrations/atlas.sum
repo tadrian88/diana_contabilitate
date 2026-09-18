@@ -1,4 +1,4 @@
-h1:++0UTL6jzNNDycKRbMV/K8it4jg3fzt4bya5bJjUoM4=
+h1:UZpJSOMJYFPuAauKP49asxGzMG7mAPFNqsL2RanK5vg=
 000001_foundation.sql h1:1LvkBtffbjWi2YVKW0qGZciJYWvAxKI8su7C3IkgNws=
 000002_invoice_pipeline.sql h1:5NTZwA70HYrkGCZPFDbVk/k2ZqpklocyXKsDWtvfTKU=
 000003_duplicate_status_invariant.sql h1:jbmP08VPjY9Ci+3DbpbCM8Bs/EvLxuHXNuh8EWCW45A=
@@ -15,3 +15,4 @@ h1:++0UTL6jzNNDycKRbMV/K8it4jg3fzt4bya5bJjUoM4=
 000014_accounting_domain_v2.sql h1:JNYlwLdoz+5mZle41ya/39Qj2FM/3aDso9FRC+5YniE=
 000015_client_management_onboarding.sql h1:VhqXi962tM6Vfx0OFxwvTbVLVovdZLnGV92aX1zxJIY=
 000016_authentication_v1.sql h1:h8t9QqRZ0P2bmDHj/uMLySTDwKW0lCllU5QIVDhoNbs=
+000017_contract_ingestion_hardening.sql h1:q4HBkw/9RrjclUK6LXZKxdvpy1aDuPReZsE8XfIUJiQ=

@@ -17,12 +17,14 @@ import (
 	entcontract "diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
 	"diana-contabilitate/backend/ent/outboxentry"
 	"diana-contabilitate/backend/ent/validationtask"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/contracts"
+	"diana-contabilitate/backend/internal/fiscalidentity"
 	"diana-contabilitate/backend/internal/invoicing"
 	"diana-contabilitate/backend/internal/outbox"
 	"diana-contabilitate/backend/internal/validationtasks"
@@ -71,6 +73,7 @@ func newContractTestContext(t *testing.T) *contractTestContext {
 		if len(tc.contractIDs) > 0 {
 			_, _ = store.Client.OutboxEntry.Delete().Where(outboxentry.AggregateIDIn(tc.contractIDs...)).Exec(tc.ctx)
 		}
+		_, _ = store.Client.ContractServiceTerm.Delete().Where(contractserviceterm.ContractIDIn(tc.contractIDs...)).Exec(tc.ctx)
 		_, _ = store.Client.Contract.Delete().Where(entcontract.ClientIDEQ(tc.clientID)).Exec(tc.ctx)
 		_ = store.Client.AccountingClient.DeleteOneID(tc.clientID).Exec(tc.ctx)
 		_ = store.Close()
@@ -82,7 +85,7 @@ func (tc *contractTestContext) createInvoice(t *testing.T, suffix, supplierCUI, 
 	t.Helper()
 	id := fmt.Sprintf("contract-invoice-%d-%s", contractTestSequence.Load(), suffix)
 	_, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("Contract supplier").SetSupplierCui(supplierCUI).
-		SetNormalizedSupplierCui(supplierCUI).SetDocumentNumber("INV-" + suffix).SetNormalizedDocumentNumber("INV-" + suffix).
+		SetNormalizedSupplierCui(fiscalidentity.ForComparison(supplierCUI, "")).SetDocumentNumber("INV-" + suffix).SetNormalizedDocumentNumber("INV-" + suffix).
 		SetIssueDate(tc.now).SetIssueDay(time.Date(tc.now.Year(), tc.now.Month(), tc.now.Day(), 0, 0, 0, 0, time.UTC)).
 		SetTotalAmount("100.0000").SetCurrency(currency).SetSpvReference("SPV-" + id).SetIngestionSource("CONTRACT_TEST").
 		SetExternalDeliveryID("DELIVERY-" + id).SetPipelineStatus(invoice.PipelineStatusMATCHING).SetSagaStatus(invoice.SagaStatusNOT_READY).
@@ -98,7 +101,7 @@ func (tc *contractTestContext) createContract(t *testing.T, suffix, supplierCUI,
 	t.Helper()
 	id := fmt.Sprintf("contract-%d-%s", contractTestSequence.Load(), suffix)
 	_, err := tc.store.Client.Contract.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("Contract supplier").SetSupplierCui(supplierCUI).
-		SetNormalizedSupplierCui(supplierCUI).SetReference("CTR-" + suffix).
+		SetNormalizedSupplierCui(fiscalidentity.ForComparison(supplierCUI, "")).SetReference("CTR-" + suffix).
 		SetEffectiveFrom(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)).SetEffectiveTo(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)).
 		SetTotalValue("100.0000").SetCurrency(currency).SetUnitType("BUC").SetPaymentTerms("30 zile").
 		SetRevision(1).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx)

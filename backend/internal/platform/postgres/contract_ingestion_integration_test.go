@@ -13,6 +13,7 @@ import (
 
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractextractionattempt"
+	"diana-contabilitate/backend/ent/contractserviceterm"
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/outboxentry"
@@ -21,6 +22,7 @@ import (
 	ci "diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contractingestion/fixtures"
 	"diana-contabilitate/backend/internal/contracts"
+	"diana-contabilitate/backend/internal/invoicing"
 	"diana-contabilitate/backend/internal/outbox"
 	"diana-contabilitate/backend/internal/validationtasks"
 )
@@ -51,6 +53,7 @@ func contractIngestionFixture(t *testing.T, tc *contractTestContext) (*ci.Servic
 		ids, _ := tc.store.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(tc.clientID)).IDs(tc.ctx)
 		contractIDs, _ := tc.store.Client.Contract.Query().Where(contract.ClientIDEQ(tc.clientID)).IDs(tc.ctx)
 		_, _ = tc.store.Client.OutboxEntry.Delete().Where(outboxentry.AggregateIDIn(append(ids, contractIDs...)...)).Exec(tc.ctx)
+		_, _ = tc.store.Client.ContractServiceTerm.Delete().Where(contractserviceterm.ContractIDIn(contractIDs...)).Exec(tc.ctx)
 		_, _ = tc.store.Client.ContractExtractionAttempt.Delete().Where(contractextractionattempt.DocumentIDIn(ids...)).Exec(tc.ctx)
 		_, _ = tc.store.Client.ContractSourceDocument.Delete().Where(contractsourcedocument.ClientIDEQ(tc.clientID)).Exec(tc.ctx)
 	})
@@ -74,7 +77,17 @@ func ingestionReview(t *testing.T, tc *contractTestContext, s *ci.Service, doc c
 		t.Fatal(err)
 	}
 	p := doc.LatestAttempt.Proposal
-	return ci.ConfirmCommand{ClientID: tc.clientID, DocumentID: doc.ID, ExtractionAttemptID: doc.LatestAttempt.ID, ExpectedDocumentRevision: doc.Revision, CommandID: "confirm-" + doc.ID, Actor: ci.Actor{ID: "reviewer", Display: "Reviewer", AllClients: true}, Contract: ci.ReviewedContract{SupplierName: *p.SupplierName.Value, SupplierCUI: *p.SupplierCUI.Value, Reference: *p.Reference.Value, EffectiveFrom: *p.EffectiveFrom.Value, EffectiveTo: *p.EffectiveTo.Value, TotalValue: *p.TotalValue.Value, Currency: *p.Currency.Value, UnitType: *p.UnitType.Value, PaymentTerms: *p.PaymentTerms.Value}}
+	field := func(value *string) string {
+		if value == nil {
+			return ""
+		}
+		return *value
+	}
+	reviewed := ci.ReviewedContract{SupplierName: field(p.SupplierName.Value), SupplierCUI: field(p.SupplierCUI.Value), BuyerCUI: field(p.BuyerCUI.Value), Reference: field(p.Reference.Value), EffectiveFrom: field(p.EffectiveFrom.Value), EffectiveTo: field(p.EffectiveTo.Value), PeriodType: field(p.PeriodType.Value), TotalValue: field(p.TotalValue.Value), Currency: field(p.Currency.Value), UnitType: field(p.UnitType.Value), PaymentTerms: field(p.PaymentTerms.Value)}
+	for _, term := range p.ServiceTerms {
+		reviewed.ServiceTerms = append(reviewed.ServiceTerms, ci.ReviewedServiceTerm{ServiceDescription: field(term.ServiceDescription.Value), PricingModel: field(term.PricingModel.Value), UnitPrice: field(term.UnitPrice.Value), Currency: field(term.Currency.Value), Unit: field(term.Unit.Value), QuantitySource: field(term.QuantitySource.Value), QuantityValue: field(term.QuantityValue.Value), QuantityDriver: field(term.QuantityDriver.Value), BillingFrequency: field(term.BillingFrequency.Value), Evidence: term.ServiceDescription.Evidence})
+	}
+	return ci.ConfirmCommand{ClientID: tc.clientID, DocumentID: doc.ID, ExtractionAttemptID: doc.LatestAttempt.ID, ExpectedDocumentRevision: doc.Revision, CommandID: "confirm-" + doc.ID, Actor: ci.Actor{ID: "reviewer", Display: "Reviewer", AllClients: true}, Contract: reviewed}
 }
 
 func TestContractIngestionPersistenceDuplicateAndProvenance(t *testing.T) {
@@ -120,6 +133,34 @@ func TestContractIngestionPersistenceDuplicateAndProvenance(t *testing.T) {
 		t.Fatalf("available events=%d", count)
 	}
 }
+
+func TestIndefiniteMultipleServiceTermsPersistWithProvenance(t *testing.T) {
+	tc := newContractTestContext(t)
+	service, _, extractor := contractIngestionFixture(t, tc)
+	extractor.proposal = fixtures.Proposal("service-indefinite")
+	client, err := tc.store.Client.AccountingClient.Get(tc.ctx, tc.clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor.proposal.BuyerCUI.Value = &client.Cui
+	extractor.proposal.BuyerCUI.Evidence.Snippet = client.Cui
+	doc := ingestionUpload(t, tc, service)
+	contractID, _, err := service.Confirm(tc.ctx, ingestionReview(t, tc, service, doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := tc.store.Client.Contract.Query().Where(contract.IDEQ(contractID)).WithServiceTerms().Only(tc.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.EffectiveTo != nil || row.PeriodType != contract.PeriodTypeINDEFINITE_TERM || row.HasLegacyTotalValue || len(row.Edges.ServiceTerms) != 2 {
+		t.Fatalf("contract period=%s end=%v legacy=%t terms=%d", row.PeriodType, row.EffectiveTo, row.HasLegacyTotalValue, len(row.Edges.ServiceTerms))
+	}
+	terms := row.Edges.ServiceTerms
+	if len(terms[0].SourceEvidence) == 0 || len(terms[1].SourceEvidence) == 0 {
+		t.Fatal("service evidence missing")
+	}
+}
 func TestContractIngestionExtractionFailureRetryAndStaleReview(t *testing.T) {
 	tc := newContractTestContext(t)
 	service, _, extractor := contractIngestionFixture(t, tc)
@@ -151,8 +192,14 @@ func TestContractIngestionBuyerMismatchAndCrossClient(t *testing.T) {
 	wrong := "RO99999999"
 	extractor.proposal.BuyerCUI.Value = &wrong
 	command := ingestionReview(t, tc, service, doc)
+	command.Contract.BuyerCUI = wrong
 	if _, _, err := service.Confirm(tc.ctx, command); !errors.Is(err, ci.ErrBuyerMismatch) {
 		t.Fatal("buyer mismatch activated")
+	}
+	client, _ := tc.store.Client.AccountingClient.Get(tc.ctx, tc.clientID)
+	command.Contract.BuyerCUI = client.Cui
+	if _, _, err := service.Confirm(tc.ctx, command); err != nil {
+		t.Fatalf("reviewed buyer correction did not unblock: %v", err)
 	}
 	actor := ci.Actor{AuthorizedClientIDs: []string{"another-client"}}
 	if _, err := service.File(tc.ctx, tc.clientID, doc.ID, actor); !errors.Is(err, apperrors.ErrNotFound) {
@@ -256,5 +303,75 @@ func TestContractIngestionMissingContractResumeE2E(t *testing.T) {
 				t.Fatalf("missing task=%s want=%s", task.Status, wantTask)
 			}
 		})
+	}
+}
+
+func TestOneConfirmedContractReevaluatesTwoWaitingInvoices(t *testing.T) {
+	tc := newContractTestContext(t)
+	service, matching, _ := contractIngestionFixture(t, tc)
+	invoiceIDs := []string{tc.createInvoice(t, "shared-a", "RO12345678", "RON"), tc.createInvoice(t, "shared-b", "RO12345678", "RON")}
+	for _, invoiceID := range invoiceIDs {
+		if _, _, err := matching.MatchInvoice(tc.ctx, contracts.MatchCommand{InvoiceID: invoiceID, ExpectedRevision: 1, CommandID: "missing:" + invoiceID}); err != nil {
+			t.Fatal(err)
+		}
+		item, err := tc.store.GetInvoice(tc.ctx, invoiceID)
+		if err != nil || item.ActiveTask == nil {
+			t.Fatal("missing-contract setup")
+		}
+		if _, _, err = validationtasks.NewService(tc.store, func() time.Time { return tc.now }).RequestMissingContract(tc.ctx, validationtasks.RequestMissingContractCommand{InvoiceID: invoiceID, TaskID: item.ActiveTask.ID, ExpectedRevision: item.ActiveTask.Revision, CommandID: "request:" + invoiceID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := ingestionUpload(t, tc, service)
+	contractID, _, err := service.Confirm(tc.ctx, ingestionReview(t, tc, service, doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := tc.store.Client.OutboxEntry.Query().Where(outboxentry.AggregateIDEQ(contractID), outboxentry.EventTypeEQ(outbox.EventContractAvailable)).Only(tc.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := matching.ProcessContractAvailable(tc.ctx, contractID, event.IdempotencyKey, "shared-contract")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Evaluated != 2 {
+		t.Fatalf("evaluated=%d summary=%+v", summary.Evaluated, summary)
+	}
+	for _, invoiceID := range invoiceIDs {
+		row, err := tc.store.Client.Invoice.Get(tc.ctx, invoiceID)
+		if err != nil || row.PipelineStatus == invoice.PipelineStatusAWAITING_CONTRACT {
+			t.Fatalf("invoice %s was not reevaluated: status=%s err=%v", invoiceID, row.PipelineStatus, err)
+		}
+	}
+}
+
+func TestDiscardUnconfirmedDocumentLeavesInvoiceWaiting(t *testing.T) {
+	tc := newContractTestContext(t)
+	service, matching, _ := contractIngestionFixture(t, tc)
+	invoiceID := tc.createInvoice(t, "discard-waiting", "RO12345678", "RON")
+	if _, _, err := matching.MatchInvoice(tc.ctx, contracts.MatchCommand{InvoiceID: invoiceID, ExpectedRevision: 1, CommandID: "missing:" + invoiceID}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := tc.store.GetInvoice(tc.ctx, invoiceID)
+	if err != nil || before.ActiveTask == nil {
+		t.Fatal("missing-contract setup")
+	}
+	if _, _, err = validationtasks.NewService(tc.store, func() time.Time { return tc.now }).RequestMissingContract(tc.ctx, validationtasks.RequestMissingContractCommand{InvoiceID: invoiceID, TaskID: before.ActiveTask.ID, ExpectedRevision: before.ActiveTask.Revision, CommandID: "request:" + invoiceID}); err != nil {
+		t.Fatal(err)
+	}
+	doc := ingestionUpload(t, tc, service)
+	if err = service.Discard(tc.ctx, tc.clientID, doc.ID, doc.Revision, ci.Actor{AllClients: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.Get(tc.ctx, tc.clientID, doc.ID, ci.Actor{AllClients: true}); !errors.Is(err, apperrors.ErrNotFound) {
+		t.Fatalf("discarded document remained active: %v", err)
+	}
+	after, err := tc.store.GetInvoice(tc.ctx, invoiceID)
+	if err != nil || after.PipelineStatus != invoicing.StatusAwaitingContract || after.ActiveTask == nil || after.ActiveTask.Status != validationtasks.StatusWaiting {
+		t.Fatalf("waiting workflow changed: %+v err=%v", after, err)
+	}
+	if err = service.Discard(tc.ctx, "another-client", doc.ID, doc.Revision, ci.Actor{AuthorizedClientIDs: []string{"another-client"}}); !errors.Is(err, apperrors.ErrNotFound) {
+		t.Fatalf("cross-client discard=%v", err)
 	}
 }

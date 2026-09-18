@@ -700,6 +700,36 @@ func EffectiveToLTE(v time.Time) predicate.InvoiceContractAssociation {
 	return predicate.InvoiceContractAssociation(sql.FieldLTE(FieldEffectiveTo, v))
 }
 
+// EffectiveToIsNil applies the IsNil predicate on the "effective_to" field.
+func EffectiveToIsNil() predicate.InvoiceContractAssociation {
+	return predicate.InvoiceContractAssociation(sql.FieldIsNull(FieldEffectiveTo))
+}
+
+// EffectiveToNotNil applies the NotNil predicate on the "effective_to" field.
+func EffectiveToNotNil() predicate.InvoiceContractAssociation {
+	return predicate.InvoiceContractAssociation(sql.FieldNotNull(FieldEffectiveTo))
+}
+
+// PeriodTypeEQ applies the EQ predicate on the "period_type" field.
+func PeriodTypeEQ(v PeriodType) predicate.InvoiceContractAssociation {
+	return predicate.InvoiceContractAssociation(sql.FieldEQ(FieldPeriodType, v))
+}
+
+// PeriodTypeNEQ applies the NEQ predicate on the "period_type" field.
+func PeriodTypeNEQ(v PeriodType) predicate.InvoiceContractAssociation {
+	return predicate.InvoiceContractAssociation(sql.FieldNEQ(FieldPeriodType, v))
+}
+
+// PeriodTypeIn applies the In predicate on the "period_type" field.
+func PeriodTypeIn(vs ...PeriodType) predicate.InvoiceContractAssociation {
+	return predicate.InvoiceContractAssociation(sql.FieldIn(FieldPeriodType, vs...))
+}
+
+// PeriodTypeNotIn applies the NotIn predicate on the "period_type" field.
+func PeriodTypeNotIn(vs ...PeriodType) predicate.InvoiceContractAssociation {
+	return predicate.InvoiceContractAssociation(sql.FieldNotIn(FieldPeriodType, vs...))
+}
+
 // TotalValueEQ applies the EQ predicate on the "total_value" field.
 func TotalValueEQ(v string) predicate.InvoiceContractAssociation {
 	return predicate.InvoiceContractAssociation(sql.FieldEQ(FieldTotalValue, v))

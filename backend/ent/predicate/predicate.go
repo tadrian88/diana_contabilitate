@@ -33,6 +33,9 @@ type ContractMatchCandidate func(*sql.Selector)
 // ContractMatchRun is the predicate function for contractmatchrun builders.
 type ContractMatchRun func(*sql.Selector)
 
+// ContractServiceTerm is the predicate function for contractserviceterm builders.
+type ContractServiceTerm func(*sql.Selector)
+
 // ContractSourceDocument is the predicate function for contractsourcedocument builders.
 type ContractSourceDocument func(*sql.Selector)
 

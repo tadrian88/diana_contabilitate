@@ -31,12 +31,13 @@ export function ContractDetailPage() {
     {contract.sourceDocumentId&&<Link to={`/contracts/documents/${contract.clientId}/${contract.sourceDocumentId}`} className="inline-block font-semibold text-[var(--accent)]">Document original · propunere AI și istoric confirmare</Link>}
     <section className="grid grid-cols-3 gap-4" aria-label="Date contractuale">
       <InfoCard icon={CalendarRange} label="Perioadă efectivă" value={contract.period} />
-      <InfoCard icon={Landmark} label="Valoare și monedă" value={formatMoney(contract.value.amount, contract.currency)} />
+      <InfoCard icon={Landmark} label="Valoare contractuală totală (legacy)" value={contract.hasLegacyTotalValue===false?'Nespecificată — vezi serviciile și tarifele':formatMoney(contract.value.amount, contract.currency)} />
       <InfoCard icon={ReceiptText} label="Tip unitate / bază comercială" value={contract.unitType || 'Informație indisponibilă'} />
       <InfoCard icon={FileText} label="Termeni de plată" value={contract.paymentTerms || 'Informație indisponibilă'} />
       <InfoCard icon={FileText} label="Referință sursă" value={contract.sourceReference ?? 'Referință indisponibilă'} />
       <InfoCard icon={FileText} label="Metadate sursă" value={contract.sourceMetadata ?? 'Metadate opționale indisponibile'} />
     </section>
+    {contract.serviceTerms&&contract.serviceTerms.length>0&&<section className="card p-5"><h3 className="font-bold">Servicii și tarife</h3><div className="mt-4 space-y-3">{contract.serviceTerms.map((term,index)=><div key={`${term.serviceDescription}-${index}`} className="rounded-lg border border-[var(--border)] p-4"><div className="font-semibold">{term.serviceDescription}</div><div className="mt-1 text-sm text-[var(--text-secondary)]">{term.unitPrice} {term.currency}{term.pricingModel==='UNIT_RATE'?` / ${term.unit||'unitate nespecificată'}`:''} · {term.pricingModel==='FIXED_FEE'?'Tarif fix':term.pricingModel==='UNIT_RATE'?'Tarif unitar':'Valoare totală'} · {term.billingFrequency==='UNKNOWN'?'Periodicitate nespecificată':term.billingFrequency}</div>{term.quantityDriver&&<div className="mt-1 text-xs">Cantitate: {term.quantityDriver}</div>}</div>)}</div></section>}
 
     {matchCandidate && <section className="card p-5"><div className="flex items-center justify-between"><div><p className="eyebrow">Context asociere pentru {contextInvoice?.documentNumber}</p><h3 className="mt-1 font-bold">Semnale demonstrative disponibile</h3></div><Badge tone="info">Încredere: {matchCandidate.confidence}</Badge></div><ul className="mt-4 grid grid-cols-2 gap-3">{matchCandidate.reasons.map((reason) => <li key={reason} className="rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] p-3 text-sm text-[var(--text-secondary)]">{reason}</li>)}</ul><p className="mt-4 text-xs text-[var(--text-muted)]">Semnalele sunt fictive și nu demonstrează o potrivire juridică sau contabilă. Vizualizarea nu rezolvă task-ul.</p></section>}
 
