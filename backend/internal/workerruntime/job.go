@@ -25,6 +25,7 @@ const (
 	ContractAvailableTask  = "workflow:contract_available"
 	ContractExtractionTask = "workflow:contract_extraction"
 	ContractActivationTask = "workflow:activate_ingested_contract"
+	AccountingAnalysisTask = "workflow:accounting_analysis"
 )
 
 type Job struct {

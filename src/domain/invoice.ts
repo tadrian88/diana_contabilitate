@@ -9,6 +9,9 @@ export type PipelineStatus =
   | 'DEDUPE_CHECKED'
   | 'HEADER_READ'
   | 'LINES_READ'
+	| 'COMMERCIAL_VALIDATING'
+	| 'AWAITING_COMMERCIAL_REVIEW'
+	| 'COMMERCIALLY_VALIDATED'
   | 'CLASSIFIED'
   | 'AWAITING_REVIEW'
   | 'READY_FOR_SAGA'
@@ -17,9 +20,13 @@ export type PipelineStatus =
   | 'DUPLICATE'
 
 export type SagaStatus = 'NOT_READY' | 'READY' | 'EXPORTING' | 'EXPORTED' | 'FAILED'
-export type TaskType = 'CONTRACT_MATCH' | 'MISSING_CONTRACT' | 'CLASSIFICATION'
+export type TaskType = 'CONTRACT_MATCH' | 'MISSING_CONTRACT' | 'COMMERCIAL_REVIEW' | 'CLASSIFICATION'
 export type TaskStatus = 'OPEN' | 'WAITING' | 'RESOLVED'
 export type ReviewStatus = 'PENDING' | 'ACCEPTED' | 'CORRECTED'
+export type ClassificationSource = 'RULE' | 'NO_MATCH' | 'AMBIGUOUS' | 'LEARNED_MAPPING'
+export type AccountMappingAction = 'NONE' | 'CREATE' | 'VALIDATE' | 'OCCURRENCE_ONLY' | 'CORRECT' | 'POLICY_CHANGE'
+export interface AccountMappingReference { mappingId: string; version: number; accountCode: string; serviceIdentityKind: string; serviceIdentityValue: string; normalizerVersion: string; revision: number }
+export interface AccountMappingScopePreview { clientDisplay:string; supplierDisplay:string; serviceIdentityKind:string; serviceIdentityValue:string; normalizerVersion:string }
 export type RuleCategory = 'ACCOUNT' | 'VAT' | 'DEDUCTIBILITY' | 'VAT_TREATMENT' | 'VAT_DEDUCTIBILITY' | 'EXPENSE_TAX_TREATMENT'
 export type RuleScope = 'GLOBAL' | 'CLIENT_OVERRIDE'
 
@@ -67,6 +74,8 @@ export interface ContractSummary {
 
 export interface Contract extends ContractSummary {
   clientId: string
+  revision?:number
+  lifecycleState?:'ACTIVE'|'ARCHIVED'
   sourceReference?: string
   sourceMetadata?: string
   sourceDocumentId?:string
@@ -149,6 +158,9 @@ export interface LineClassification {
   status: ReviewStatus
   rule?: RuleReference
   revision?: number
+  source?: ClassificationSource
+  mapping?: AccountMappingReference
+  mappingScope?: AccountMappingScopePreview
 }
 
 export interface ClassificationReviewItem {
@@ -171,6 +183,9 @@ export interface ClassificationReviewItem {
   resolvedValue?: string
   rule?: RuleReference
   revision?: number
+  source?: ClassificationSource
+  mapping?: AccountMappingReference
+  mappingScope?: AccountMappingScopePreview
 }
 
 export interface ValidationTask {
@@ -273,6 +288,9 @@ export const PIPELINE_LABELS: Record<PipelineStatus, string> = {
   DEDUPE_CHECKED: 'Duplicate verificate',
   HEADER_READ: 'Antet citit',
   LINES_READ: 'Linii citite',
+  COMMERCIAL_VALIDATING: 'Validare comercială',
+  AWAITING_COMMERCIAL_REVIEW: 'Așteaptă review comercial',
+  COMMERCIALLY_VALIDATED: 'Validată comercial',
   CLASSIFIED: 'Clasificată',
   AWAITING_REVIEW: 'Așteaptă revizuirea',
   READY_FOR_SAGA: 'Pregătită pentru SAGA',
@@ -284,6 +302,7 @@ export const PIPELINE_LABELS: Record<PipelineStatus, string> = {
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   CONTRACT_MATCH: 'Verificare contract',
   MISSING_CONTRACT: 'Contract lipsă',
+  COMMERCIAL_REVIEW: 'Review comercial',
   CLASSIFICATION: 'Revizuire clasificare',
 }
 

@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"diana-contabilitate/backend/ent/outboxentry"
 	"diana-contabilitate/backend/ent/validationtask"
 	"diana-contabilitate/backend/internal/apperrors"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	ci "diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contractingestion/fixtures"
 	"diana-contabilitate/backend/internal/contracts"
@@ -26,6 +28,248 @@ import (
 	"diana-contabilitate/backend/internal/outbox"
 	"diana-contabilitate/backend/internal/validationtasks"
 )
+
+func TestPendingCommercialClausePersistsWithoutExecutablePriceFallback(t *testing.T) {
+	tc := newContractTestContext(t)
+	service, _, extractor := contractIngestionFixture(t, tc)
+	var rule map[string]any
+	if err := json.Unmarshal(extractor.proposal.CommercialClauses[0].Rule, &rule); err != nil {
+		t.Fatal(err)
+	}
+	delete(rule, "expression")
+	delete(rule, "blocking") // The extractor may omit this internal flag.
+	extractor.proposal.CommercialClauses[0].Rule, _ = json.Marshal(rule)
+	doc := ingestionUpload(t, tc, service)
+	command := ingestionReview(t, tc, service, doc)
+	command.Contract.Coverage = commercialvalidation.CoverageComplete // A client cannot promote an unresolved clause.
+	contractID, _, err := service.Confirm(tc.ctx, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var coverage string
+	var rulesJSON []byte
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT coverage,rules FROM contract_commercial_snapshots WHERE contract_id=$1`, contractID).Scan(&coverage, &rulesJSON); err != nil {
+		t.Fatal(err)
+	}
+	var rules []commercialvalidation.Rule
+	if err = json.Unmarshal(rulesJSON, &rules); err != nil {
+		t.Fatal(err)
+	}
+	if coverage != string(commercialvalidation.CoveragePartial) || len(rules) != 1 || rules[0].Kind != commercialvalidation.RuleContractReference {
+		t.Fatalf("unsafe active snapshot coverage=%s rules=%+v", coverage, rules)
+	}
+	var pendingCount int
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT COUNT(*) FROM contract_clause_candidates WHERE document_id=$1 AND review_status='PROPOSED' AND normalized_rule IS NULL`, doc.ID).Scan(&pendingCount); err != nil {
+		t.Fatal(err)
+	}
+	if pendingCount != 1 {
+		t.Fatalf("pending narrative clause count=%d", pendingCount)
+	}
+	if replayID, changed, replayErr := service.Confirm(tc.ctx, command); replayErr != nil || changed || replayID != contractID {
+		t.Fatalf("confirmation replay id=%s changed=%t err=%v", replayID, changed, replayErr)
+	}
+	var snapshotCount int
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT COUNT(*) FROM contract_commercial_snapshots WHERE contract_id=$1`, contractID).Scan(&snapshotCount); err != nil || snapshotCount != 1 {
+		t.Fatalf("replay created another snapshot count=%d err=%v", snapshotCount, err)
+	}
+	var reviewed commercialvalidation.Rule
+	if err = json.Unmarshal(extractor.proposal.CommercialClauses[0].Rule, &reviewed); err != nil {
+		t.Fatal(err)
+	}
+	reviewed.Expression = &commercialvalidation.Expression{Op: "literal", Value: "125000.00", Scale: 2}
+	reviewed.Blocking = true
+	commercial := commercialvalidation.NewService(tc.store, func() time.Time { return tc.now.Add(time.Minute) })
+	changed, err := commercial.ConfirmProposedRule(tc.ctx, commercialvalidation.RuleConfirmation{ClientID: tc.clientID, DocumentID: doc.ID, RuleID: reviewed.ID, Rule: &reviewed, CommandID: "complete-narrative-" + doc.ID, ActorID: "reviewer"})
+	if err != nil || !changed {
+		t.Fatalf("complete narrative rule changed=%t err=%v", changed, err)
+	}
+	var latestCoverage string
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT coverage FROM contract_commercial_snapshots WHERE contract_id=$1 ORDER BY version DESC LIMIT 1`, contractID).Scan(&latestCoverage); err != nil || latestCoverage != string(commercialvalidation.CoverageComplete) {
+		t.Fatalf("completed rule coverage=%s err=%v", latestCoverage, err)
+	}
+}
+
+func TestApplicableVATNarrativeCanBeConfirmedWithFiscalRateVariable(t *testing.T) {
+	tc := newContractTestContext(t)
+	ingestion, _, extractor := contractIngestionFixture(t, tc)
+	kind := string(commercialvalidation.RuleVAT)
+	narrative := "Prețurile sunt fără TVA; se adaugă TVA aferent."
+	clause := &extractor.proposal.CommercialClauses[0]
+	clause.Kind.Value = &kind
+	clause.Narrative.Value = &narrative
+	clause.Evidence.Snippet = narrative
+	var proposed commercialvalidation.Rule
+	if err := json.Unmarshal(clause.Rule, &proposed); err != nil {
+		t.Fatal(err)
+	}
+	proposed.Kind = commercialvalidation.RuleVAT
+	proposed.Narrative = narrative
+	proposed.DateBasis = ""
+	proposed.Currency = ""
+	proposed.Expression = nil
+	proposed.RequiredVariables = nil
+	proposed.Blocking = false
+	proposed.Evidence = []commercialvalidation.Evidence{{Snippet: narrative}}
+	clause.Rule, _ = json.Marshal(proposed)
+
+	doc := ingestionUpload(t, tc, ingestion)
+	command := ingestionReview(t, tc, ingestion, doc)
+	contractID, _, err := ingestion.Confirm(tc.ctx, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewed := proposed
+	reviewed.DateBasis = commercialvalidation.DateInvoiceIssue
+	reviewed.Expression = &commercialvalidation.Expression{Op: "variable", Variable: "applicable_vat_rate"}
+	reviewed.RequiredVariables = []string{"applicable_vat_rate"}
+	reviewed.Blocking = true
+	commercial := commercialvalidation.NewService(tc.store, func() time.Time { return tc.now.Add(time.Minute) })
+	changed, err := commercial.ConfirmProposedRule(tc.ctx, commercialvalidation.RuleConfirmation{ClientID: tc.clientID, DocumentID: doc.ID, RuleID: reviewed.ID, Rule: &reviewed, CommandID: "confirm-applicable-vat-" + doc.ID, ActorID: "reviewer"})
+	if err != nil || !changed {
+		t.Fatalf("confirm applicable VAT changed=%t err=%v", changed, err)
+	}
+	var coverage string
+	var variableCount int
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT coverage FROM contract_commercial_snapshots WHERE contract_id=$1 ORDER BY version DESC LIMIT 1`, contractID).Scan(&coverage); err != nil {
+		t.Fatal(err)
+	}
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT COUNT(*) FROM contract_variable_definitions v JOIN contract_dossiers d ON d.id=v.dossier_id WHERE d.contract_id=$1 AND v.name='applicable_vat_rate'`, contractID).Scan(&variableCount); err != nil {
+		t.Fatal(err)
+	}
+	if coverage != string(commercialvalidation.CoverageComplete) || variableCount != 1 {
+		t.Fatalf("coverage=%s applicable VAT variables=%d", coverage, variableCount)
+	}
+}
+
+func TestNormalizedCommercialClauseRequiresHumanSelection(t *testing.T) {
+	for _, selected := range []bool{false, true} {
+		t.Run(fmt.Sprintf("selected=%t", selected), func(t *testing.T) {
+			tc := newContractTestContext(t)
+			service, _, extractor := contractIngestionFixture(t, tc)
+			var proposed commercialvalidation.Rule
+			if err := json.Unmarshal(extractor.proposal.CommercialClauses[0].Rule, &proposed); err != nil {
+				t.Fatal(err)
+			}
+			doc := ingestionUpload(t, tc, service)
+			command := ingestionReview(t, tc, service, doc)
+			command.Contract.Coverage = commercialvalidation.CoverageComplete
+			if selected {
+				command.Contract.CommercialRules = []commercialvalidation.Rule{proposed}
+			}
+			contractID, _, err := service.Confirm(tc.ctx, command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var coverage string
+			var rulesJSON []byte
+			if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT coverage,rules FROM contract_commercial_snapshots WHERE contract_id=$1`, contractID).Scan(&coverage, &rulesJSON); err != nil {
+				t.Fatal(err)
+			}
+			var rules []commercialvalidation.Rule
+			if err = json.Unmarshal(rulesJSON, &rules); err != nil {
+				t.Fatal(err)
+			}
+			if selected {
+				if coverage != string(commercialvalidation.CoverageComplete) || len(rules) != 2 {
+					t.Fatalf("confirmed normalized rule coverage=%s rules=%+v", coverage, rules)
+				}
+			} else {
+				if coverage != string(commercialvalidation.CoveragePartial) || len(rules) != 1 || rules[0].Kind != commercialvalidation.RuleContractReference {
+					t.Fatalf("unconfirmed normalized rule activated coverage=%s rules=%+v", coverage, rules)
+				}
+				var proposedCount int
+				if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT COUNT(*) FROM contract_clause_candidates WHERE document_id=$1 AND review_status='PROPOSED' AND normalized_rule IS NOT NULL`, doc.ID).Scan(&proposedCount); err != nil || proposedCount != 1 {
+					t.Fatalf("normalized proposal not retained count=%d err=%v", proposedCount, err)
+				}
+			}
+		})
+	}
+}
+
+func TestExecutableProposalCanBeConfirmedAfterContractConfirmation(t *testing.T) {
+	tc := newContractTestContext(t)
+	ingestion, _, extractor := contractIngestionFixture(t, tc)
+	var proposed commercialvalidation.Rule
+	if err := json.Unmarshal(extractor.proposal.CommercialClauses[0].Rule, &proposed); err != nil {
+		t.Fatal(err)
+	}
+	doc := ingestionUpload(t, tc, ingestion)
+	command := ingestionReview(t, tc, ingestion, doc)
+	command.Contract.Coverage = commercialvalidation.CoverageComplete
+	contractID, _, err := ingestion.Confirm(tc.ctx, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commercial := commercialvalidation.NewService(tc.store, func() time.Time { return tc.now.Add(time.Minute) })
+	confirmation := commercialvalidation.RuleConfirmation{ClientID: tc.clientID, DocumentID: doc.ID, RuleID: proposed.ID, CommandID: "confirm-proposed-" + doc.ID, ActorID: "reviewer", ActorDisplay: "Reviewer"}
+	changed, err := commercial.ConfirmProposedRule(tc.ctx, confirmation)
+	if err != nil || !changed {
+		t.Fatalf("confirm proposed changed=%t err=%v", changed, err)
+	}
+	if replay, replayErr := commercial.ConfirmProposedRule(tc.ctx, confirmation); replayErr != nil || replay {
+		t.Fatalf("confirmation replay changed=%t err=%v", replay, replayErr)
+	}
+	var version int
+	var coverage string
+	var rulesJSON []byte
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT version,coverage,rules FROM contract_commercial_snapshots WHERE contract_id=$1 ORDER BY version DESC LIMIT 1`, contractID).Scan(&version, &coverage, &rulesJSON); err != nil {
+		t.Fatal(err)
+	}
+	var rules []commercialvalidation.Rule
+	if err = json.Unmarshal(rulesJSON, &rules); err != nil {
+		t.Fatal(err)
+	}
+	if version != 2 || coverage != string(commercialvalidation.CoverageComplete) || len(rules) != 2 {
+		t.Fatalf("version=%d coverage=%s rules=%+v", version, coverage, rules)
+	}
+	refreshed, err := ingestion.Get(tc.ctx, tc.clientID, doc.ID, ci.Actor{AllClients: true})
+	found := false
+	if err == nil && refreshed.ConfirmedValues != nil {
+		for _, rule := range refreshed.ConfirmedValues.CommercialRules {
+			found = found || rule.ID == proposed.ID
+		}
+	}
+	if err != nil || refreshed.ConfirmedValues == nil || !found {
+		t.Fatalf("confirmed document did not expose activated rule: %+v err=%v", refreshed.ConfirmedValues, err)
+	}
+}
+
+func TestReviewedServicePricesCanBeActivatedForAnExistingConfirmedContract(t *testing.T) {
+	tc := newContractTestContext(t)
+	ingestion, _, extractor := contractIngestionFixture(t, tc)
+	// The older extraction had a price field but no source text that included
+	// its currency, so it correctly could not create an executable price rule.
+	doc := ingestionUpload(t, tc, ingestion)
+	command := ingestionReview(t, tc, ingestion, doc)
+	contractID, _, err := ingestion.Confirm(tc.ctx, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before int
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT jsonb_array_length(rules) FROM contract_commercial_snapshots WHERE contract_id=$1 ORDER BY version DESC LIMIT 1`, contractID).Scan(&before); err != nil || before != 1 {
+		t.Fatalf("unexpected initial rules=%d err=%v", before, err)
+	}
+	// Model a pre-existing, already-reviewed document whose extraction evidence
+	// has been corrected by an extraction retry, without changing the user's
+	// reviewed amount. Only the cited source now supports activation.
+	extractor.proposal.ServiceTerms[0].UnitPrice.Evidence.Snippet = "Servicii 125000.00 RON"
+	proposalJSON, _ := json.Marshal(extractor.proposal)
+	if _, err = tc.store.DB.ExecContext(tc.ctx, `UPDATE contract_extraction_attempts SET proposal=$2 WHERE document_id=$1 AND status='SUCCEEDED'`, doc.ID, proposalJSON); err != nil {
+		t.Fatal(err)
+	}
+	commercial := commercialvalidation.NewService(tc.store, func() time.Time { return tc.now.Add(time.Minute) })
+	count, err := commercial.ActivateReviewedServicePrices(tc.ctx, tc.clientID, doc.ID, "reviewer", "activate-prices-"+doc.ID)
+	if err != nil || count != 1 {
+		t.Fatalf("activate reviewed prices count=%d err=%v", count, err)
+	}
+	if count, err = commercial.ActivateReviewedServicePrices(tc.ctx, tc.clientID, doc.ID, "reviewer", "activate-prices-"+doc.ID); err != nil || count != 0 {
+		t.Fatalf("idempotent replay count=%d err=%v", count, err)
+	}
+	var version, after int
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT version,jsonb_array_length(rules) FROM contract_commercial_snapshots WHERE contract_id=$1 ORDER BY version DESC LIMIT 1`, contractID).Scan(&version, &after); err != nil || version != 2 || after != 2 {
+		t.Fatalf("activated snapshot version=%d rules=%d err=%v", version, after, err)
+	}
+}
 
 type ingestionIntegrationExtractor struct {
 	proposal ci.Proposal
@@ -50,6 +294,7 @@ func contractIngestionFixture(t *testing.T, tc *contractTestContext) (*ci.Servic
 	matching := contracts.NewService(tc.store, contracts.BaselinePolicy{}, func() time.Time { return tc.now })
 	service := ci.NewService(tc.store, extractor, matching, 0, func() time.Time { return tc.now })
 	t.Cleanup(func() {
+		cleanupCommercialFixture(t, tc)
 		ids, _ := tc.store.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(tc.clientID)).IDs(tc.ctx)
 		contractIDs, _ := tc.store.Client.Contract.Query().Where(contract.ClientIDEQ(tc.clientID)).IDs(tc.ctx)
 		_, _ = tc.store.Client.OutboxEntry.Delete().Where(outboxentry.AggregateIDIn(append(ids, contractIDs...)...)).Exec(tc.ctx)
@@ -58,6 +303,31 @@ func contractIngestionFixture(t *testing.T, tc *contractTestContext) (*ci.Servic
 		_, _ = tc.store.Client.ContractSourceDocument.Delete().Where(contractsourcedocument.ClientIDEQ(tc.clientID)).Exec(tc.ctx)
 	})
 	return service, matching, extractor
+}
+
+func cleanupCommercialFixture(t *testing.T, tc *contractTestContext) {
+	t.Helper()
+	queries := []string{
+		`DELETE FROM commercial_review_commands WHERE client_id=$1`,
+		`DELETE FROM invoice_commercial_overrides WHERE finding_id IN (SELECT f.id FROM invoice_commercial_findings f JOIN invoice_commercial_validation_runs r ON r.id=f.run_id JOIN invoices i ON i.id=r.invoice_id WHERE i.client_id=$1)`,
+		`DELETE FROM invoice_commercial_findings WHERE run_id IN (SELECT r.id FROM invoice_commercial_validation_runs r JOIN invoices i ON i.id=r.invoice_id WHERE i.client_id=$1)`,
+		`DELETE FROM invoice_commercial_validation_runs WHERE invoice_id IN (SELECT id FROM invoices WHERE client_id=$1)`,
+		`DELETE FROM contract_commercial_ledger WHERE dossier_id IN (SELECT id FROM contract_dossiers WHERE client_id=$1)`,
+		`DELETE FROM contract_snapshot_sources WHERE snapshot_id IN (SELECT s.id FROM contract_commercial_snapshots s JOIN contract_dossiers d ON d.id=s.dossier_id WHERE d.client_id=$1)`,
+		`UPDATE contract_dossiers SET active_snapshot_id=NULL WHERE client_id=$1`,
+		`DELETE FROM contract_clause_candidates WHERE dossier_id IN (SELECT id FROM contract_dossiers WHERE client_id=$1)`,
+		`DELETE FROM contract_commercial_snapshots WHERE dossier_id IN (SELECT id FROM contract_dossiers WHERE client_id=$1)`,
+		`DELETE FROM contract_variable_values WHERE definition_id IN (SELECT v.id FROM contract_variable_definitions v JOIN contract_dossiers d ON d.id=v.dossier_id WHERE d.client_id=$1)`,
+		`DELETE FROM contract_variable_definitions WHERE dossier_id IN (SELECT id FROM contract_dossiers WHERE client_id=$1)`,
+		`DELETE FROM contract_service_aliases WHERE client_id=$1`,
+		`UPDATE contract_source_documents SET dossier_id=NULL,parent_document_id=NULL WHERE client_id=$1`,
+		`DELETE FROM contract_dossiers WHERE client_id=$1`,
+	}
+	for _, query := range queries {
+		if _, err := tc.store.DB.ExecContext(tc.ctx, query, tc.clientID); err != nil {
+			t.Errorf("commercial fixture cleanup for %s: %v", tc.clientID, err)
+		}
+	}
 }
 func ingestionUpload(t *testing.T, tc *contractTestContext, s *ci.Service) ci.Document {
 	t.Helper()
@@ -131,6 +401,76 @@ func TestContractIngestionPersistenceDuplicateAndProvenance(t *testing.T) {
 	count, _ = tc.store.Client.OutboxEntry.Query().Where(outboxentry.AggregateIDEQ(id), outboxentry.EventTypeEQ(outbox.EventContractAvailable)).Count(tc.ctx)
 	if count != 1 {
 		t.Fatalf("available events=%d", count)
+	}
+}
+
+func TestMistakenContractCanBeDiscardedAndSamePDFReferenceReingested(t *testing.T) {
+	tc := newContractTestContext(t)
+	service, matching, _ := contractIngestionFixture(t, tc)
+	first := ingestionUpload(t, tc, service)
+	firstID, _, err := service.Confirm(tc.ctx, ingestionReview(t, tc, service, first))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := matching.DeleteMistaken(tc.ctx, firstID, 1, "reviewer", "Reviewer"); err != nil || !changed {
+		t.Fatalf("discard changed=%v err=%v", changed, err)
+	}
+	old, err := tc.store.Client.ContractSourceDocument.Get(tc.ctx, first.ID)
+	if err != nil || old.LifecycleState != contractsourcedocument.LifecycleStateDISCARDED {
+		t.Fatalf("old source=%+v err=%v", old, err)
+	}
+	second, duplicate, err := service.Upload(tc.ctx, ci.Upload{ClientID: tc.clientID, Filename: "contract-retry.pdf", Bytes: fixtures.PDF("romanian"), Actor: ci.Actor{ID: "reviewer", Display: "Reviewer", AllClients: true}})
+	if err != nil || duplicate || second.ID == first.ID {
+		t.Fatalf("reupload doc=%+v duplicate=%t err=%v", second, duplicate, err)
+	}
+	secondID, _, err := service.Confirm(tc.ctx, ingestionReview(t, tc, service, second))
+	if err != nil || secondID == firstID {
+		t.Fatalf("reconfirm id=%s first=%s err=%v", secondID, firstID, err)
+	}
+	var oldStatus, newStatus string
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT status FROM contract_dossiers WHERE contract_id=$1`, firstID).Scan(&oldStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT status FROM contract_dossiers WHERE contract_id=$1`, secondID).Scan(&newStatus); err != nil {
+		t.Fatal(err)
+	}
+	if oldStatus != "ARCHIVED" || newStatus == "ARCHIVED" {
+		t.Fatalf("dossier statuses old=%s new=%s", oldStatus, newStatus)
+	}
+}
+
+func TestArchivedValidContractCanBeRenewedUnderSameReference(t *testing.T) {
+	tc := newContractTestContext(t)
+	service, matching, _ := contractIngestionFixture(t, tc)
+	first := ingestionUpload(t, tc, service)
+	firstID, _, err := service.Confirm(tc.ctx, ingestionReview(t, tc, service, first))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := matching.Archive(tc.ctx, firstID, 1, "reviewer", "Reviewer"); err != nil || !changed {
+		t.Fatalf("archive changed=%v err=%v", changed, err)
+	}
+	second, duplicate, err := service.Upload(tc.ctx, ci.Upload{ClientID: tc.clientID, Filename: "renewed.pdf", Bytes: fixtures.PDF("service-indefinite"), Actor: ci.Actor{ID: "reviewer", Display: "Reviewer", AllClients: true}})
+	if err != nil || duplicate {
+		t.Fatalf("renewed upload duplicate=%t err=%v", duplicate, err)
+	}
+	secondID, _, err := service.Confirm(tc.ctx, ingestionReview(t, tc, service, second))
+	if err != nil || secondID == firstID {
+		t.Fatalf("renewed confirmation id=%s first=%s err=%v", secondID, firstID, err)
+	}
+	oldDoc, err := tc.store.Client.ContractSourceDocument.Get(tc.ctx, first.ID)
+	if err != nil || oldDoc.LifecycleState == contractsourcedocument.LifecycleStateDISCARDED {
+		t.Fatalf("old valid source=%+v err=%v", oldDoc, err)
+	}
+	var oldStatus, newStatus string
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT status FROM contract_dossiers WHERE contract_id=$1`, firstID).Scan(&oldStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT status FROM contract_dossiers WHERE contract_id=$1`, secondID).Scan(&newStatus); err != nil {
+		t.Fatal(err)
+	}
+	if oldStatus != "ARCHIVED" || newStatus == "ARCHIVED" {
+		t.Fatalf("dossier statuses old=%s new=%s", oldStatus, newStatus)
 	}
 }
 

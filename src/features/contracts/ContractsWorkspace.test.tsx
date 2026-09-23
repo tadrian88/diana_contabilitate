@@ -96,4 +96,25 @@ describe('Contracts workspace', () => {
     renderApp(new MockInvoiceRepository(), '/contracts/does-not-exist')
     expect(await screen.findByText('Contractul nu a fost găsit')).toBeInTheDocument()
   })
+
+  it('requires confirmation and removes a contract from the active list while retaining its history', async () => {
+    const user = userEvent.setup()
+    const repository = new MockInvoiceRepository()
+    renderApp(repository, '/contracts/contract-demo-100')
+    await user.click(await screen.findByRole('button', { name: 'Scoate din utilizare' }))
+    expect(await repository.listContracts('all')).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'contract-demo-100' })]))
+    await user.click(screen.getByRole('button', { name: 'Confirmă arhivarea' }))
+    await waitFor(async () => expect((await repository.listContracts('all')).some(contract => contract.id === 'contract-demo-100')).toBe(false))
+    expect((await repository.getContract('contract-demo-100'))?.lifecycleState).toBe('ARCHIVED')
+    expect((await repository.listContractInvoices('contract-demo-100')).length).toBeGreaterThan(0)
+  })
+
+  it('separates mistaken upload removal from archiving a used contract', async () => {
+    const user = userEvent.setup()
+    const repository = new MockInvoiceRepository()
+    renderApp(repository, '/contracts/contract-demo-501')
+    await user.click(await screen.findByRole('button', { name: 'Șterge încărcarea greșită' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmă ștergerea' }))
+    await waitFor(async () => expect((await repository.listContracts('all')).some(contract=>contract.id==='contract-demo-501')).toBe(false))
+  })
 })

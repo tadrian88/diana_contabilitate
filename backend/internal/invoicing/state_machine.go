@@ -7,18 +7,21 @@ import (
 type TransitionTrigger string
 
 const (
-	TriggerArchiveCompleted       TransitionTrigger = "ARCHIVE_COMPLETED"
-	TriggerStartMatching          TransitionTrigger = "START_MATCHING"
-	TriggerMatchingDecision       TransitionTrigger = "MATCHING_DECISION"
-	TriggerContractConfirmed      TransitionTrigger = "CONTRACT_CONFIRMED"
-	TriggerDuplicateDetected      TransitionTrigger = "DUPLICATE_DETECTED"
-	TriggerDuplicateCleared       TransitionTrigger = "DUPLICATE_CLEARED"
-	TriggerHeaderParsed           TransitionTrigger = "HEADER_PARSED"
-	TriggerLinesParsed            TransitionTrigger = "LINES_PARSED"
-	TriggerClassificationDecision TransitionTrigger = "CLASSIFICATION_DECISION"
-	TriggerReviewCompleted        TransitionTrigger = "REVIEW_COMPLETED"
-	TriggerSagaHandoff            TransitionTrigger = "SAGA_HANDOFF"
-	TriggerSagaExported           TransitionTrigger = "SAGA_EXPORTED"
+	TriggerArchiveCompleted             TransitionTrigger = "ARCHIVE_COMPLETED"
+	TriggerStartMatching                TransitionTrigger = "START_MATCHING"
+	TriggerMatchingDecision             TransitionTrigger = "MATCHING_DECISION"
+	TriggerContractConfirmed            TransitionTrigger = "CONTRACT_CONFIRMED"
+	TriggerDuplicateDetected            TransitionTrigger = "DUPLICATE_DETECTED"
+	TriggerDuplicateCleared             TransitionTrigger = "DUPLICATE_CLEARED"
+	TriggerHeaderParsed                 TransitionTrigger = "HEADER_PARSED"
+	TriggerLinesParsed                  TransitionTrigger = "LINES_PARSED"
+	TriggerCommercialValidationStarted  TransitionTrigger = "COMMERCIAL_VALIDATION_STARTED"
+	TriggerCommercialValidationDecision TransitionTrigger = "COMMERCIAL_VALIDATION_DECISION"
+	TriggerCommercialReviewCompleted    TransitionTrigger = "COMMERCIAL_REVIEW_COMPLETED"
+	TriggerClassificationDecision       TransitionTrigger = "CLASSIFICATION_DECISION"
+	TriggerReviewCompleted              TransitionTrigger = "REVIEW_COMPLETED"
+	TriggerSagaHandoff                  TransitionTrigger = "SAGA_HANDOFF"
+	TriggerSagaExported                 TransitionTrigger = "SAGA_EXPORTED"
 )
 
 type TransitionDefinition struct {
@@ -40,7 +43,11 @@ var transitionDefinitions = []TransitionDefinition{
 	{StatusDedupeChecked, StatusDuplicate, TriggerDuplicateDetected, true, false, false},
 	{StatusDedupeChecked, StatusHeaderRead, TriggerDuplicateCleared, true, true, true},
 	{StatusHeaderRead, StatusLinesRead, TriggerLinesParsed, true, true, true},
-	{StatusLinesRead, StatusClassified, TriggerClassificationDecision, true, false, false},
+	{StatusLinesRead, StatusCommercialValidating, TriggerCommercialValidationStarted, true, true, true},
+	{StatusCommercialValidating, StatusAwaitingCommercialReview, TriggerCommercialValidationDecision, false, false, false},
+	{StatusCommercialValidating, StatusCommerciallyValidated, TriggerCommercialValidationDecision, true, false, true},
+	{StatusAwaitingCommercialReview, StatusCommerciallyValidated, TriggerCommercialReviewCompleted, false, false, true},
+	{StatusCommerciallyValidated, StatusClassified, TriggerClassificationDecision, true, false, false},
 	{StatusClassified, StatusAwaitingReview, TriggerClassificationDecision, false, false, false},
 	{StatusClassified, StatusReadyForSAGA, TriggerClassificationDecision, true, false, true},
 	{StatusAwaitingReview, StatusReadyForSAGA, TriggerReviewCompleted, false, false, true},

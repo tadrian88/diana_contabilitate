@@ -15,7 +15,7 @@ export function ContractTask({ invoice }: { invoice: Invoice }) {
   const location = useLocation()
   const invoiceReturnTo = `${location.pathname}${location.search}`
 
-  if (!task || task.type === 'CLASSIFICATION') return <ContractResolved invoice={invoice} returnTo={invoiceReturnTo} />
+  if (!task || task.type === 'CLASSIFICATION' || task.type === 'COMMERCIAL_REVIEW') return <ContractResolved invoice={invoice} returnTo={invoiceReturnTo} />
 
   if (task.type === 'MISSING_CONTRACT') {
     return (

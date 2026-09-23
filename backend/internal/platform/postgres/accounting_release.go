@@ -23,6 +23,16 @@ func (s *Store) ApproveAccountingProfile(ctx context.Context, p accounting.Profi
 	if p.TestOnly || !p.Valid(p.ClientID, p.EffectiveFrom) {
 		return fmt.Errorf("invalid approved accounting profile")
 	}
+	var selectable int
+	if err := s.DB.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM accounts
+		WHERE code = ANY($1::text[]) AND is_active AND postable`, p.AccountCodes).Scan(&selectable); err != nil {
+		return fmt.Errorf("validate approved profile accounts: %w", err)
+	}
+	if selectable != len(p.AccountCodes) {
+		return fmt.Errorf("approved profile contains missing, inactive, or non-postable accounts")
+	}
 	tx, err := s.Client.Tx(ctx)
 	if err != nil {
 		return err

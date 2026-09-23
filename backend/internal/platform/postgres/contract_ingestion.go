@@ -17,6 +17,7 @@ import (
 	"diana-contabilitate/backend/ent/contractsourcedocument"
 	"diana-contabilitate/backend/ent/outboxentry"
 	"diana-contabilitate/backend/internal/apperrors"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/fiscalidentity"
@@ -24,7 +25,7 @@ import (
 )
 
 func (s *Store) CreateDocument(ctx context.Context, input contractingestion.Upload, id, hash string, now time.Time) (contractingestion.Document, bool, error) {
-	existing, err := s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(input.ClientID), contractsourcedocument.Sha256EQ(hash)).Only(ctx)
+	existing, err := s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(input.ClientID), contractsourcedocument.Sha256EQ(hash), contractsourcedocument.LifecycleStateNEQ(contractsourcedocument.LifecycleStateDISCARDED)).Only(ctx)
 	if err == nil {
 		doc, convertErr := s.contractDocument(ctx, existing)
 		return doc, true, convertErr
@@ -56,7 +57,7 @@ func (s *Store) CreateDocument(ctx context.Context, input contractingestion.Uplo
 	row, err := create.Save(ctx)
 	if ent.IsConstraintError(err) {
 		_ = tx.Rollback()
-		existing, err = s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(input.ClientID), contractsourcedocument.Sha256EQ(hash)).Only(ctx)
+		existing, err = s.Client.ContractSourceDocument.Query().Where(contractsourcedocument.ClientIDEQ(input.ClientID), contractsourcedocument.Sha256EQ(hash), contractsourcedocument.LifecycleStateNEQ(contractsourcedocument.LifecycleStateDISCARDED)).Only(ctx)
 		if err != nil {
 			return contractingestion.Document{}, false, err
 		}
@@ -160,7 +161,7 @@ func (s *Store) BeginExtraction(ctx context.Context, documentID, attemptID, prov
 		return contractingestion.Document{}, false, err
 	}
 	if wasExtracting && expiredAttempt != nil {
-		if _, err = tx.ContractExtractionAttempt.Update().Where(contractextractionattempt.IDEQ(*expiredAttempt), contractextractionattempt.StatusEQ(contractextractionattempt.StatusSTARTED)).SetStatus(contractextractionattempt.StatusFAILED).SetSafeErrorCategory("LEASE_EXPIRED").SetCompletedAt(now).Save(ctx); err != nil {
+		if _, err = tx.ContractExtractionAttempt.Update().Where(contractextractionattempt.IDEQ(*expiredAttempt), contractextractionattempt.StatusEQ(contractextractionattempt.StatusSTARTED)).SetStatus(contractextractionattempt.StatusFAILED).SetSafeErrorCategory(contractingestion.FailureLeaseExpired).SetCompletedAt(now).Save(ctx); err != nil {
 			return contractingestion.Document{}, false, err
 		}
 	}
@@ -276,15 +277,34 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 	}
 	sourceRef := "Contract PDF: " + doc.OriginalFilename
 	sourceMeta := fmt.Sprintf("sha256=%s; extraction=%s; schema=%s", doc.Sha256, attempt.ID, attempt.SchemaVersion)
-	contractCreate := tx.Contract.Create().SetID(value.ID).SetClientID(value.ClientID).SetSupplierName(value.SupplierName).SetSupplierCui(value.SupplierCUI).SetNormalizedSupplierCui(value.NormalizedSupplierCUI).SetReference(value.Reference).SetEffectiveFrom(value.EffectiveFrom).SetNillableEffectiveTo(value.EffectiveTo).SetPeriodType(contract.PeriodType(value.PeriodType)).SetTotalValue(value.Value.Amount.String()).SetHasLegacyTotalValue(value.HasLegacyTotalValue).SetCurrency(value.Value.Currency).SetUnitType(value.UnitType).SetPaymentTerms(value.PaymentTerms).SetSourceReference(sourceRef).SetSourceMetadata(sourceMeta).SetSourceDocumentID(doc.ID).SetExtractionAttemptID(attempt.ID).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now)
-	created, err := contractCreate.Save(ctx)
-	if ent.IsConstraintError(err) {
-		return "", false, apperrors.ErrConflict
-	}
-	if err != nil {
-		return "", false, err
+	var created *ent.Contract
+	supplemental := command.Contract.DocumentRole != "" && command.Contract.DocumentRole != "BASE_CONTRACT"
+	if supplemental {
+		related := strings.TrimSpace(command.Contract.RelatedReference)
+		if related == "" {
+			return "", false, apperrors.ErrValidation
+		}
+		created, err = tx.Contract.Query().Where(contract.ClientIDEQ(value.ClientID), contract.ReferenceEQ(related), contract.LifecycleStateEQ(contract.LifecycleStateACTIVE)).Only(ctx)
+		if ent.IsNotFound(err) {
+			return "", false, apperrors.ErrValidation
+		}
+		if err != nil {
+			return "", false, err
+		}
+	} else {
+		contractCreate := tx.Contract.Create().SetID(value.ID).SetClientID(value.ClientID).SetSupplierName(value.SupplierName).SetSupplierCui(value.SupplierCUI).SetNormalizedSupplierCui(value.NormalizedSupplierCUI).SetReference(value.Reference).SetEffectiveFrom(value.EffectiveFrom).SetNillableEffectiveTo(value.EffectiveTo).SetPeriodType(contract.PeriodType(value.PeriodType)).SetTotalValue(value.Value.Amount.String()).SetHasLegacyTotalValue(value.HasLegacyTotalValue).SetCurrency(value.Value.Currency).SetUnitType(value.UnitType).SetPaymentTerms(value.PaymentTerms).SetSourceReference(sourceRef).SetSourceMetadata(sourceMeta).SetSourceDocumentID(doc.ID).SetExtractionAttemptID(attempt.ID).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now)
+		created, err = contractCreate.Save(ctx)
+		if ent.IsConstraintError(err) {
+			return "", false, apperrors.ErrConflict
+		}
+		if err != nil {
+			return "", false, err
+		}
 	}
 	for _, term := range value.ServiceTerms {
+		if supplemental {
+			break
+		}
 		create := tx.ContractServiceTerm.Create().SetID(term.ID).SetContractID(created.ID).SetPosition(term.Position).SetServiceDescription(term.ServiceDescription).SetPricingModel(contractserviceterm.PricingModel(term.PricingModel)).SetCurrency(term.Currency).SetUnit(term.Unit).SetQuantitySource(contractserviceterm.QuantitySource(term.QuantitySource)).SetQuantityDriver(term.QuantityDriver).SetBillingFrequency(contractserviceterm.BillingFrequency(term.BillingFrequency)).SetSourceEvidence(term.EvidenceJSON)
 		if term.UnitPrice != nil {
 			create.SetUnitPrice(term.UnitPrice.String())
@@ -313,10 +333,12 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 			return "", false, err
 		}
 	}
-	activationKey := "contract-ingestion:" + doc.ID + ":available"
-	payload, _ := json.Marshal(map[string]string{"contract_id": created.ID})
-	if _, err = tx.OutboxEntry.Create().SetID(stableID("outbox", activationKey)).SetEventType(outbox.EventContractActivationRequested).SetAggregateType("CONTRACT").SetAggregateID(created.ID).SetPayload(payload).SetIdempotencyKey(activationKey).SetCorrelationID(command.Actor.CorrelationID).SetCreatedAt(now).SetAvailableAt(now).Save(ctx); err != nil {
-		return "", false, err
+	if !supplemental {
+		activationKey := "contract-ingestion:" + doc.ID + ":available"
+		payload, _ := json.Marshal(map[string]string{"contract_id": created.ID})
+		if _, err = tx.OutboxEntry.Create().SetID(stableID("outbox", activationKey)).SetEventType(outbox.EventContractActivationRequested).SetAggregateType("CONTRACT").SetAggregateID(created.ID).SetPayload(payload).SetIdempotencyKey(activationKey).SetCorrelationID(command.Actor.CorrelationID).SetCreatedAt(now).SetAvailableAt(now).Save(ctx); err != nil {
+			return "", false, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return "", false, err
@@ -328,7 +350,7 @@ func reviewedDiffers(p contractingestion.Proposal, v contractingestion.ReviewedC
 	pairs := []struct {
 		field contractingestion.Field
 		value string
-	}{{p.SupplierName, v.SupplierName}, {p.SupplierCUI, v.SupplierCUI}, {p.BuyerCUI, v.BuyerCUI}, {p.Reference, v.Reference}, {p.EffectiveFrom, v.EffectiveFrom}, {p.EffectiveTo, v.EffectiveTo}, {p.TotalValue, v.TotalValue}, {p.Currency, v.Currency}, {p.UnitType, v.UnitType}, {p.PaymentTerms, v.PaymentTerms}, {p.PeriodType, v.PeriodType}}
+	}{{p.SupplierName, v.SupplierName}, {p.SupplierCUI, v.SupplierCUI}, {p.BuyerCUI, v.BuyerCUI}, {p.Reference, v.Reference}, {p.EffectiveFrom, v.EffectiveFrom}, {p.EffectiveTo, v.EffectiveTo}, {p.TotalValue, v.TotalValue}, {p.Currency, v.Currency}, {p.UnitType, v.UnitType}, {p.PaymentTerms, v.PaymentTerms}, {p.PeriodType, v.PeriodType}, {p.DocumentRole, v.DocumentRole}, {p.RelatedReference, v.RelatedReference}}
 	for _, pair := range pairs {
 		extracted := ""
 		if pair.field.Value != nil {
@@ -337,6 +359,9 @@ func reviewedDiffers(p contractingestion.Proposal, v contractingestion.ReviewedC
 		if strings.TrimSpace(extracted) != strings.TrimSpace(pair.value) {
 			return true
 		}
+	}
+	if len(contractingestion.UnconfirmedCommercialClauses(p, v.CommercialRules)) > 0 {
+		return true
 	}
 	return len(p.ServiceTerms) != len(v.ServiceTerms)
 }
@@ -358,6 +383,25 @@ func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDoc
 	if len(row.ConfirmedValues) > 0 {
 		var values contractingestion.ReviewedContract
 		if json.Unmarshal(row.ConfirmedValues, &values) == nil {
+			confirmedIDs := make(map[string]bool, len(values.CommercialRules))
+			for _, rule := range values.CommercialRules {
+				confirmedIDs[rule.ID] = true
+			}
+			rows, queryErr := s.DB.QueryContext(ctx, `SELECT normalized_rule FROM contract_clause_candidates WHERE document_id=$1 AND review_status='CONFIRMED' AND normalized_rule IS NOT NULL ORDER BY reviewed_at,created_at`, row.ID)
+			if queryErr != nil {
+				return contractingestion.Document{}, queryErr
+			}
+			for rows.Next() {
+				var encoded []byte
+				var rule commercialvalidation.Rule
+				if rows.Scan(&encoded) == nil && json.Unmarshal(encoded, &rule) == nil && !confirmedIDs[rule.ID] {
+					values.CommercialRules = append(values.CommercialRules, rule)
+					confirmedIDs[rule.ID] = true
+				}
+			}
+			if closeErr := rows.Close(); closeErr != nil {
+				return contractingestion.Document{}, closeErr
+			}
 			doc.ConfirmedValues = &values
 		}
 	}

@@ -20,25 +20,27 @@ const maxXMLBytes = 12 << 20
 type UBLParser struct{}
 
 type ublDocument struct {
-	TypeCode         string          `xml:"InvoiceTypeCode"`
-	CreditTypeCode   string          `xml:"CreditNoteTypeCode"`
-	TaxCurrency      string          `xml:"TaxCurrencyCode"`
-	TaxPointDate     string          `xml:"TaxPointDate"`
-	Period           ublPeriod       `xml:"InvoicePeriod"`
-	Adjustments      []ublAdjustment `xml:"AllowanceCharge"`
-	Notes            []string        `xml:"Note"`
-	PrecedingInvoice string          `xml:"BillingReference>InvoiceDocumentReference>ID"`
-	XMLName          xml.Name
-	ID               string        `xml:"ID"`
-	IssueDate        string        `xml:"IssueDate"`
-	DueDate          string        `xml:"DueDate"`
-	Currency         string        `xml:"DocumentCurrencyCode"`
-	Supplier         ublParty      `xml:"AccountingSupplierParty>Party"`
-	Buyer            ublParty      `xml:"AccountingCustomerParty>Party"`
-	Monetary         ublMonetary   `xml:"LegalMonetaryTotal"`
-	TaxTotals        []ublTaxTotal `xml:"TaxTotal"`
-	InvoiceLines     []ublLine     `xml:"InvoiceLine"`
-	CreditLines      []ublLine     `xml:"CreditNoteLine"`
+	TypeCode           string          `xml:"InvoiceTypeCode"`
+	CreditTypeCode     string          `xml:"CreditNoteTypeCode"`
+	TaxCurrency        string          `xml:"TaxCurrencyCode"`
+	TaxPointDate       string          `xml:"TaxPointDate"`
+	Period             ublPeriod       `xml:"InvoicePeriod"`
+	Adjustments        []ublAdjustment `xml:"AllowanceCharge"`
+	Notes              []string        `xml:"Note"`
+	PrecedingInvoice   string          `xml:"BillingReference>InvoiceDocumentReference>ID"`
+	BuyerReference     string          `xml:"BuyerReference"`
+	ContractReferences []string        `xml:"ContractDocumentReference>ID"`
+	XMLName            xml.Name
+	ID                 string        `xml:"ID"`
+	IssueDate          string        `xml:"IssueDate"`
+	DueDate            string        `xml:"DueDate"`
+	Currency           string        `xml:"DocumentCurrencyCode"`
+	Supplier           ublParty      `xml:"AccountingSupplierParty>Party"`
+	Buyer              ublParty      `xml:"AccountingCustomerParty>Party"`
+	Monetary           ublMonetary   `xml:"LegalMonetaryTotal"`
+	TaxTotals          []ublTaxTotal `xml:"TaxTotal"`
+	InvoiceLines       []ublLine     `xml:"InvoiceLine"`
+	CreditLines        []ublLine     `xml:"CreditNoteLine"`
 }
 type ublParty struct {
 	Country          string `xml:"PostalAddress>Country>IdentificationCode"`
@@ -201,7 +203,7 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 	if root == "CreditNote" {
 		documentType = invoicing.DocumentTypeCreditNote
 	}
-	facts := &accounting.SourceFacts{ParserVersion: ParserVersion + "_ACCOUNTING_V2", TypeCode: first(document.TypeCode, document.CreditTypeCode), SupplierVATID: document.Supplier.TaxID, SupplierLegalID: document.Supplier.LegalID, BuyerVATID: document.Buyer.TaxID, BuyerLegalID: document.Buyer.LegalID, SupplierCountry: document.Supplier.Country, BuyerCountry: document.Buyer.Country, TaxCurrency: document.TaxCurrency, TaxPointDate: document.TaxPointDate, PeriodStart: document.Period.Start, PeriodEnd: document.Period.End, TaxPointCode: document.Period.Code, CashAccounting: "UNKNOWN", PrecedingInvoice: document.PrecedingInvoice}
+	facts := &accounting.SourceFacts{ParserVersion: ParserVersion + "_ACCOUNTING_V2", TypeCode: first(document.TypeCode, document.CreditTypeCode), SupplierVATID: document.Supplier.TaxID, SupplierLegalID: document.Supplier.LegalID, BuyerVATID: document.Buyer.TaxID, BuyerLegalID: document.Buyer.LegalID, SupplierCountry: document.Supplier.Country, BuyerCountry: document.Buyer.Country, TaxCurrency: document.TaxCurrency, TaxPointDate: document.TaxPointDate, PeriodStart: document.Period.Start, PeriodEnd: document.Period.End, TaxPointCode: document.Period.Code, CashAccounting: "UNKNOWN", PrecedingInvoice: document.PrecedingInvoice, BuyerReference: strings.TrimSpace(document.BuyerReference), ContractReferences: nonemptyTrimmed(document.ContractReferences), Notes: nonemptyTrimmed(document.Notes)}
 	for _, date := range []string{facts.TaxPointDate, facts.PeriodStart, facts.PeriodEnd} {
 		if date != "" {
 			if _, err := parseDate(date); err != nil {
@@ -307,11 +309,14 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 		if external.Note != "" {
 			parts = append(parts, "note="+external.Note)
 		}
+		if external.Item.Description != "" && external.Item.Description != description {
+			parts = append(parts, "item_description="+external.Item.Description)
+		}
 		if len(parts) > 0 {
 			value := strings.Join(parts, "; ")
 			additional = &value
 		}
-		lineFacts := &accounting.LineFacts{SourceID: external.ID, Path: fmt.Sprintf("/%s/%sLine[%d]", root, root, index+1), TaxCategory: category, VATOrigin: origin, SellerItemID: external.Item.SellerID, StandardItemID: external.Item.StandardID}
+		lineFacts := &accounting.LineFacts{SourceID: external.ID, Path: fmt.Sprintf("/%s/%sLine[%d]", root, root, index+1), TaxCategory: category, VATOrigin: origin, SellerItemID: external.Item.SellerID, StandardItemID: external.Item.StandardID, ItemName: strings.TrimSpace(external.Item.Name), ItemDescription: strings.TrimSpace(external.Item.Description), Note: strings.TrimSpace(external.Note)}
 		lineFacts.NetAmount, err = amountFact(external.LineExtension, currency)
 		if err != nil {
 			return ParsedDocument{}, err
@@ -337,6 +342,16 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 		input.Lines = append(input.Lines, invoicing.Line{SourceFacts: lineFacts, Position: index + 1, Description: description, Unit: q.Unit, VATRate: rate, VATValue: vat, Quantity: quantityValue, UnitPrice: unitPrice, NetValue: net, TotalValue: lineTotal, AdditionalInfo: additional})
 	}
 	return ParsedDocument{Invoice: input, BuyerCUI: buyerCUI, Format: ParserTypeUBL, Version: facts.ParserVersion}, nil
+}
+
+func nonemptyTrimmed(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func safeInvoiceXML(data []byte) ([]byte, error) {

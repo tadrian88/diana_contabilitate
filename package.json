@@ -20,6 +20,7 @@
     "test:e2e:backend6": "playwright test --config=playwright.backend6.config.ts",
     "test:e2e:backend7": "playwright test --config=playwright.backend7.config.ts",
     "test:e2e:accounting-v2": "playwright test --config=playwright.accounting-v2.config.ts",
+    "test:e2e:account-learning": "playwright test --config=playwright.account-learning.config.ts",
     "test:e2e:spv-connection": "playwright test --config=playwright.spv-connection.config.ts",
     "test:e2e:saga-export-ux": "playwright test --config=playwright.saga-export-ux.config.ts",
     "test:all": "npm run typecheck && npm run test && npm run test:backend",

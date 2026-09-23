@@ -49,6 +49,11 @@ type Metrics struct {
 	contractExtractionFailures atomic.Uint64
 	contractExtractionDuration atomic.Uint64
 	contractConfirmations      atomic.Uint64
+	accountingAnalysisCalls    atomic.Uint64
+	accountingAnalysisDuration atomic.Uint64
+	accountingAnalysisInput    atomic.Uint64
+	accountingAnalysisOutput   atomic.Uint64
+	accountingAnalysisInvalid  atomic.Uint64
 	mu                         sync.Mutex
 	jobResults                 map[string]uint64
 }
@@ -108,6 +113,15 @@ func (m *Metrics) ContractExtractionFailed() {
 	m.contractExtractionFailures.Add(1)
 }
 func (m *Metrics) ContractConfirmed() { m.contractConfirmations.Add(1) }
+func (m *Metrics) AccountingAnalysisCompleted(duration time.Duration, inputTokens, outputTokens int64, validationFailures int) {
+	m.accountingAnalysisCalls.Add(1)
+	m.accountingAnalysisDuration.Add(uint64(max(duration.Milliseconds(), 0)))
+	m.accountingAnalysisInput.Add(uint64(max(inputTokens, 0)))
+	m.accountingAnalysisOutput.Add(uint64(max(outputTokens, 0)))
+	if validationFailures > 0 {
+		m.accountingAnalysisInvalid.Add(1)
+	}
+}
 func (m *Metrics) JobCompleted(result string, duration time.Duration) {
 	m.jobs.Add(1)
 	m.jobDuration.Add(uint64(max(duration.Milliseconds(), 0)))
@@ -159,6 +173,11 @@ func (m *Metrics) Handler(stats OutboxStats) http.Handler {
 		writeCounter(&builder, "contract_extraction_failures_total", m.contractExtractionFailures.Load())
 		writeCounter(&builder, "contract_extraction_duration_milliseconds_total", m.contractExtractionDuration.Load())
 		writeCounter(&builder, "contract_extraction_confirmed_total", m.contractConfirmations.Load())
+		writeCounter(&builder, "accounting_analysis_calls_total", m.accountingAnalysisCalls.Load())
+		writeCounter(&builder, "accounting_analysis_duration_milliseconds_total", m.accountingAnalysisDuration.Load())
+		writeCounter(&builder, "accounting_analysis_input_tokens_total", m.accountingAnalysisInput.Load())
+		writeCounter(&builder, "accounting_analysis_output_tokens_total", m.accountingAnalysisOutput.Load())
+		writeCounter(&builder, "accounting_analysis_validation_failures_total", m.accountingAnalysisInvalid.Load())
 		m.mu.Lock()
 		for result, value := range m.jobResults {
 			builder.WriteString("diana_worker_job_results_total{result=\"")

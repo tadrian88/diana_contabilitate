@@ -61,6 +61,10 @@ type LineClassification struct {
 	Source lineclassification.Source `json:"source,omitempty"`
 	// RuleVersionID holds the value of the "rule_version_id" field.
 	RuleVersionID *string `json:"rule_version_id,omitempty"`
+	// AccountMappingID holds the value of the "account_mapping_id" field.
+	AccountMappingID *string `json:"account_mapping_id,omitempty"`
+	// AccountMappingVersion holds the value of the "account_mapping_version" field.
+	AccountMappingVersion *int `json:"account_mapping_version,omitempty"`
 	// PolicyVersion holds the value of the "policy_version" field.
 	PolicyVersion string `json:"policy_version,omitempty"`
 	// ReviewedByID holds the value of the "reviewed_by_id" field.
@@ -149,9 +153,9 @@ func (*LineClassification) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case lineclassification.FieldRequiredReview:
 			values[i] = new(sql.NullBool)
-		case lineclassification.FieldRevision:
+		case lineclassification.FieldAccountMappingVersion, lineclassification.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case lineclassification.FieldID, lineclassification.FieldModelVersion, lineclassification.FieldReviewReason, lineclassification.FieldClientID, lineclassification.FieldInvoiceID, lineclassification.FieldInvoiceLineID, lineclassification.FieldDimension, lineclassification.FieldProposedValue, lineclassification.FieldEffectiveValue, lineclassification.FieldConfidenceDisplay, lineclassification.FieldExplanation, lineclassification.FieldLegalBasis, lineclassification.FieldReviewStatus, lineclassification.FieldSource, lineclassification.FieldRuleVersionID, lineclassification.FieldPolicyVersion, lineclassification.FieldReviewedByID, lineclassification.FieldReviewedByDisplay:
+		case lineclassification.FieldID, lineclassification.FieldModelVersion, lineclassification.FieldReviewReason, lineclassification.FieldClientID, lineclassification.FieldInvoiceID, lineclassification.FieldInvoiceLineID, lineclassification.FieldDimension, lineclassification.FieldProposedValue, lineclassification.FieldEffectiveValue, lineclassification.FieldConfidenceDisplay, lineclassification.FieldExplanation, lineclassification.FieldLegalBasis, lineclassification.FieldReviewStatus, lineclassification.FieldSource, lineclassification.FieldRuleVersionID, lineclassification.FieldAccountMappingID, lineclassification.FieldPolicyVersion, lineclassification.FieldReviewedByID, lineclassification.FieldReviewedByDisplay:
 			values[i] = new(sql.NullString)
 		case lineclassification.FieldInvoiceDateUsed, lineclassification.FieldReviewedAt, lineclassification.FieldCreatedAt, lineclassification.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -298,6 +302,20 @@ func (_m *LineClassification) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.RuleVersionID = new(string)
 				*_m.RuleVersionID = value.String
+			}
+		case lineclassification.FieldAccountMappingID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field account_mapping_id", values[i])
+			} else if value.Valid {
+				_m.AccountMappingID = new(string)
+				*_m.AccountMappingID = value.String
+			}
+		case lineclassification.FieldAccountMappingVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field account_mapping_version", values[i])
+			} else if value.Valid {
+				_m.AccountMappingVersion = new(int)
+				*_m.AccountMappingVersion = int(value.Int64)
 			}
 		case lineclassification.FieldPolicyVersion:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -461,6 +479,16 @@ func (_m *LineClassification) String() string {
 	if v := _m.RuleVersionID; v != nil {
 		builder.WriteString("rule_version_id=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.AccountMappingID; v != nil {
+		builder.WriteString("account_mapping_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.AccountMappingVersion; v != nil {
+		builder.WriteString("account_mapping_version=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("policy_version=")

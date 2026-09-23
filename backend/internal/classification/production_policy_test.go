@@ -18,7 +18,13 @@ func productionVATFixture() RuleCandidate {
 	return RuleCandidate{RuleID: "rate", RuleVersionID: "rate-v1", Reference: "TEST-RATE", Version: 1, Category: rules.CategoryVAT, Scope: rules.ScopeGlobal, Result: value, MatchKind: rules.MatchVATSourceRateEquals, MatchValue: &value, Explanation: "Confirmare a cotei declarate; nu concluzie asupra tratamentului fiscal.", LegalBasis: "Fixture: Legea 141/2025, art. II, modificarea art. 291; doar confirmare sursă", ProductionEligible: true, RulePackVersion: "TEST_ONLY_NOT_A_PRODUCTION_PACK", EffectiveFrom: "2025-08-01", Provenance: &rules.Provenance{SourceType: "LEGISLATION", SourceTitle: "Legea 141/2025", Issuer: "Parlamentul României", LegalInstrument: "Legea 141/2025", Reference: "art. II / art. 291", SourceURL: "https://legislatie.just.ro/Public/DetaliiDocument/300022", EffectiveFrom: "2025-08-01", VerifiedAt: "2026-09-15", VerifiedBy: "Fixture reviewer", Notes: "Explicit synthetic engineering fixture; not approved production accounting policy."}}
 }
 func productionInput(candidates ...RuleCandidate) InvoiceContext {
-	return InvoiceContext{ID: "invoice", ClientID: "client", PipelineStatus: "LINES_READ", Revision: 1, IssueDate: "2025-08-01", DocumentType: "INVOICE", Lines: []LineContext{{ID: "line", Description: "not a VAT description", VATRate: money.MustParse("21.00"), VATValue: money.MustParse("21")}}, Rules: candidates}
+	selectable := make(map[string]bool)
+	for _, candidate := range candidates {
+		if candidate.Category == rules.CategoryAccount {
+			selectable[candidate.Result] = true
+		}
+	}
+	return InvoiceContext{ID: "invoice", ClientID: "client", PipelineStatus: "COMMERCIALLY_VALIDATED", Revision: 1, IssueDate: "2025-08-01", DocumentType: "INVOICE", Lines: []LineContext{{ID: "line", Description: "not a VAT description", VATRate: money.MustParse("21.00"), VATValue: money.MustParse("21")}}, Rules: candidates, SelectableAccounts: selectable}
 }
 func evaluatedVAT(t *testing.T, input InvoiceContext) Proposal {
 	t.Helper()
@@ -194,6 +200,12 @@ func TestProductionAccountRequiresExplicitClientPolicyAndVocabulary(t *testing.T
 	result, _ := (ProductionPolicy{}).Evaluate(input)
 	if result.Proposals[0].RequiresReview {
 		t.Fatalf("explicit fixture=%+v", result.Proposals[0])
+	}
+	withoutCatalogEvidence := input
+	withoutCatalogEvidence.SelectableAccounts = nil
+	result, _ = (ProductionPolicy{}).Evaluate(withoutCatalogEvidence)
+	if !result.Proposals[0].RequiresReview {
+		t.Fatalf("account without catalog evidence was accepted: %+v", result.Proposals[0])
 	}
 	for _, change := range []func(*RuleCandidate){func(c *RuleCandidate) { c.Scope = rules.ScopeGlobal }, func(c *RuleCandidate) { c.MatchKind = rules.MatchAlways }, func(c *RuleCandidate) { c.Provenance.ClientPolicyReference = "" }, func(c *RuleCandidate) { c.Provenance.AccountingRegime = "" }, func(c *RuleCandidate) { c.Result = "999" }} {
 		copy := c

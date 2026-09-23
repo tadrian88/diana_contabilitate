@@ -52,32 +52,35 @@ type Adjustment struct {
 	Reason   string      `json:"reason,omitempty"`
 }
 type SourceFacts struct {
-	ParserVersion    string        `json:"parserVersion"`
-	SourceDocumentID string        `json:"sourceDocumentId,omitempty"`
-	SourceHash       string        `json:"sourceHash,omitempty"`
-	TypeCode         string        `json:"typeCode,omitempty"`
-	SupplierVATID    string        `json:"supplierVatId,omitempty"`
-	SupplierLegalID  string        `json:"supplierLegalId,omitempty"`
-	BuyerVATID       string        `json:"buyerVatId,omitempty"`
-	BuyerLegalID     string        `json:"buyerLegalId,omitempty"`
-	SupplierCountry  string        `json:"supplierCountry,omitempty"`
-	BuyerCountry     string        `json:"buyerCountry,omitempty"`
-	TaxCurrency      string        `json:"taxCurrency,omitempty"`
-	TaxPointDate     string        `json:"taxPointDate,omitempty"`
-	PeriodStart      string        `json:"periodStart,omitempty"`
-	PeriodEnd        string        `json:"periodEnd,omitempty"`
-	TaxPointCode     string        `json:"taxPointCode,omitempty"`
-	CashAccounting   string        `json:"cashAccounting"`
-	PrecedingInvoice string        `json:"precedingInvoice,omitempty"`
-	VATTotals        []AmountFact  `json:"vatTotals,omitempty"`
-	Subtotals        []TaxSubtotal `json:"subtotals,omitempty"`
-	Adjustments      []Adjustment  `json:"adjustments,omitempty"`
-	LineExtension    *AmountFact   `json:"lineExtension,omitempty"`
-	TaxExclusive     *AmountFact   `json:"taxExclusive,omitempty"`
-	TaxInclusive     *AmountFact   `json:"taxInclusive,omitempty"`
-	Payable          *AmountFact   `json:"payable,omitempty"`
-	Prepaid          *AmountFact   `json:"prepaid,omitempty"`
-	Rounding         *AmountFact   `json:"rounding,omitempty"`
+	ParserVersion      string        `json:"parserVersion"`
+	SourceDocumentID   string        `json:"sourceDocumentId,omitempty"`
+	SourceHash         string        `json:"sourceHash,omitempty"`
+	TypeCode           string        `json:"typeCode,omitempty"`
+	SupplierVATID      string        `json:"supplierVatId,omitempty"`
+	SupplierLegalID    string        `json:"supplierLegalId,omitempty"`
+	BuyerVATID         string        `json:"buyerVatId,omitempty"`
+	BuyerLegalID       string        `json:"buyerLegalId,omitempty"`
+	SupplierCountry    string        `json:"supplierCountry,omitempty"`
+	BuyerCountry       string        `json:"buyerCountry,omitempty"`
+	TaxCurrency        string        `json:"taxCurrency,omitempty"`
+	TaxPointDate       string        `json:"taxPointDate,omitempty"`
+	PeriodStart        string        `json:"periodStart,omitempty"`
+	PeriodEnd          string        `json:"periodEnd,omitempty"`
+	TaxPointCode       string        `json:"taxPointCode,omitempty"`
+	CashAccounting     string        `json:"cashAccounting"`
+	PrecedingInvoice   string        `json:"precedingInvoice,omitempty"`
+	BuyerReference     string        `json:"buyerReference,omitempty"`
+	ContractReferences []string      `json:"contractReferences,omitempty"`
+	Notes              []string      `json:"notes,omitempty"`
+	VATTotals          []AmountFact  `json:"vatTotals,omitempty"`
+	Subtotals          []TaxSubtotal `json:"subtotals,omitempty"`
+	Adjustments        []Adjustment  `json:"adjustments,omitempty"`
+	LineExtension      *AmountFact   `json:"lineExtension,omitempty"`
+	TaxExclusive       *AmountFact   `json:"taxExclusive,omitempty"`
+	TaxInclusive       *AmountFact   `json:"taxInclusive,omitempty"`
+	Payable            *AmountFact   `json:"payable,omitempty"`
+	Prepaid            *AmountFact   `json:"prepaid,omitempty"`
+	Rounding           *AmountFact   `json:"rounding,omitempty"`
 }
 type LineFacts struct {
 	NetAmount   *AmountFact `json:"netAmount,omitempty"`
@@ -86,11 +89,14 @@ type LineFacts struct {
 	SourceID    string      `json:"sourceId"`
 	Path        string      `json:"path"`
 	TaxCategory
-	VATOrigin      Origin        `json:"vatOrigin"`
-	SellerItemID   string        `json:"sellerItemId,omitempty"`
-	StandardItemID string        `json:"standardItemId,omitempty"`
-	PriceBase      *money.Amount `json:"priceBase,omitempty"`
-	Adjustments    []Adjustment  `json:"adjustments,omitempty"`
+	VATOrigin       Origin        `json:"vatOrigin"`
+	SellerItemID    string        `json:"sellerItemId,omitempty"`
+	StandardItemID  string        `json:"standardItemId,omitempty"`
+	ItemName        string        `json:"itemName,omitempty"`
+	ItemDescription string        `json:"itemDescription,omitempty"`
+	Note            string        `json:"note,omitempty"`
+	PriceBase       *money.Amount `json:"priceBase,omitempty"`
+	Adjustments     []Adjustment  `json:"adjustments,omitempty"`
 }
 
 // Value is a tagged union. Validate rejects unrelated fields and arbitrary text.

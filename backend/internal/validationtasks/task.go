@@ -11,12 +11,13 @@ import (
 type Type string
 
 const (
-	TypeContractMatch   Type = "CONTRACT_MATCH"
-	TypeMissingContract Type = "MISSING_CONTRACT"
-	TypeClassification  Type = "CLASSIFICATION"
+	TypeContractMatch    Type = "CONTRACT_MATCH"
+	TypeMissingContract  Type = "MISSING_CONTRACT"
+	TypeCommercialReview Type = "COMMERCIAL_REVIEW"
+	TypeClassification   Type = "CLASSIFICATION"
 )
 
-var Types = []Type{TypeContractMatch, TypeMissingContract, TypeClassification}
+var Types = []Type{TypeContractMatch, TypeMissingContract, TypeCommercialReview, TypeClassification}
 
 type Status string
 

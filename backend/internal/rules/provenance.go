@@ -3,6 +3,7 @@ package rules
 import (
 	"diana-contabilitate/backend/internal/accountingdate"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -48,24 +49,13 @@ const ProductionRulePackVersion = "RO_INCOMING_ACCOUNTING_V1_REVIEW_ONLY"
 // unresolved deductibility semantics are deliberate accounting gates.
 func ProductionPack() []Rule { return []Rule{} }
 
-// AccountVocabularyVersion is a deliberately partial vocabulary, not adoption
-// of OMFP 1802 by every client. Source: OMFP 1802/2014 chapter 14 and account 628.
-const AccountVocabularyVersion = "OMFP_1802_2014_628_V1"
+// AccountVocabularyVersion identifies the catalogue-backed vocabulary. This
+// lexical guard is deliberately not the catalogue or a client authorization;
+// approved profiles and the active account catalogue provide those controls.
+const AccountVocabularyVersion = "OMFP_1802_2014_CATALOG_V2"
+
+var productionAccountCode = regexp.MustCompile(`^[0-9]{3,4}(?:\.[0-9A-Za-z]+)*$`)
 
 func ValidProductionAccount(value string) bool {
-	parts := strings.Split(value, ".")
-	if parts[0] != "628" {
-		return false
-	}
-	for _, part := range parts[1:] {
-		if part == "" {
-			return false
-		}
-		for _, c := range part {
-			if !(c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
-				return false
-			}
-		}
-	}
-	return true
+	return productionAccountCode.MatchString(value)
 }

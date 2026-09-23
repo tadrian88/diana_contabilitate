@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata"
 )
 
 const (
@@ -147,7 +148,46 @@ func decodeMessage(data []byte) (Message, error) {
 		return Message{}, fmt.Errorf("%w: list item has invalid message id", ErrPermanent)
 	}
 	upload, _ := flexibleID(raw.Upload)
-	return Message{ID: id, UploadID: upload, RequestID: raw.RequestID, Type: raw.Type, CreatedRaw: raw.Created}, nil
+	createdAt, _ := ParseMessageCreatedAt(raw.Created)
+	return Message{ID: id, UploadID: upload, RequestID: raw.RequestID, Type: raw.Type, CreatedRaw: raw.Created, CreatedAt: createdAt}, nil
+}
+
+// ParseMessageCreatedAt converts the ANAF data_creare value to an absolute
+// timestamp. Compact values are Romanian civil time; malformed metadata is
+// preserved as raw text by the caller but is never guessed.
+func ParseMessageCreatedAt(raw string) (*time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+	location, err := time.LoadLocation("Europe/Bucharest")
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range []struct {
+		layout   string
+		location *time.Location
+	}{
+		{"200601021504", location},
+		{"20060102150405", location},
+		{time.RFC3339, time.UTC},
+		{"2006-01-02 15:04:05", location},
+	} {
+		parsed, parseErr := time.ParseInLocation(candidate.layout, value, candidate.location)
+		if parseErr == nil {
+			return &parsed, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: invalid ANAF data_creare", ErrPermanent)
+}
+
+func RomanianCalendarDay(value time.Time) time.Time {
+	location, err := time.LoadLocation("Europe/Bucharest")
+	if err != nil {
+		location = time.UTC
+	}
+	local := value.In(location)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func flexibleID(raw []byte) (string, error) {

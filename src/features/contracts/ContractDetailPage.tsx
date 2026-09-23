@@ -1,13 +1,19 @@
-import { ArrowLeft, Building2, CalendarRange, FileText, Landmark, ReceiptText } from 'lucide-react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Building2, CalendarRange, FileText, Landmark, ReceiptText, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/ui/badge'
+import { Button } from '../../components/ui/button'
 import { useClients, useInvoice } from '../invoices/invoice-hooks'
 import { AttentionBadge, PipelineBadge } from '../invoices/InvoiceStatusBadges'
-import { useContract, useContractInvoices } from './contract-hooks'
+import { useArchiveContract, useContract, useContractInvoices, useDeleteContract } from './contract-hooks'
 
 export function ContractDetailPage() {
   const { contractId = '' } = useParams()
   const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const [confirmAction, setConfirmAction] = useState<'discard'|'archive'|null>(null)
+  const deleteContract = useDeleteContract()
+  const archiveContract = useArchiveContract()
   const { data: contract, isLoading, isError } = useContract(contractId)
   const { data: associatedInvoices = [] } = useContractInvoices(contractId)
   const { data: clients = [] } = useClients()
@@ -26,7 +32,25 @@ export function ContractDetailPage() {
 
   return <div className="space-y-5">
     <Link to={returnTo} className="inline-flex items-center gap-2 rounded text-sm font-semibold text-[var(--text-secondary)] outline-none hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><ArrowLeft className="size-4" />{returnTo.startsWith('/invoices/') ? 'Înapoi la revizuirea facturii' : 'Înapoi la lista contractelor'}</Link>
-<section className="flex items-end justify-between gap-8"><div><div className="flex items-center gap-2"><Badge tone="neutral">{contract.sourceDocumentId?'Contract confirmat':'Contract demonstrativ'}</Badge>{matchCandidate?.recommended && <Badge tone="info">Recomandat pentru revizuire</Badge>}</div><h2 className="mt-3 text-2xl font-bold tracking-tight">{contract.reference}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{contract.supplierName}</p></div><div className="text-right"><div className="eyebrow">Client</div><div className="mt-1 flex items-center gap-2 font-semibold"><Building2 className="size-4 text-[var(--accent)]" />{client?.name ?? 'Client indisponibil'}</div></div></section>
+<section className="flex items-end justify-between gap-8"><div><div className="flex items-center gap-2"><Badge tone="neutral">{contract.lifecycleState==='ARCHIVED'?'Contract arhivat':contract.sourceDocumentId?'Contract confirmat':'Contract demonstrativ'}</Badge>{matchCandidate?.recommended && <Badge tone="info">Recomandat pentru revizuire</Badge>}</div><h2 className="mt-3 text-2xl font-bold tracking-tight">{contract.reference}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{contract.supplierName}</p></div><div className="text-right"><div className="eyebrow">Client</div><div className="mt-1 flex items-center gap-2 font-semibold"><Building2 className="size-4 text-[var(--accent)]" />{client?.name ?? 'Client indisponibil'}</div></div></section>
+
+    <section className="card p-5" aria-label="Gestionare contract">
+      <h3 className="font-semibold">Gestionare contract</h3>
+      <p className="mt-1 text-sm text-[var(--text-secondary)]">Alege acțiunea potrivită: înlocuirea unui contract valid sau corectarea unei încărcări greșite.</p>
+      {!confirmAction&&<div className="mt-4 flex flex-wrap gap-2">
+        {contract.lifecycleState!=='ARCHIVED'&&<Button type="button" variant="secondary" onClick={()=>setConfirmAction('archive')}>Scoate din utilizare</Button>}
+        <Button type="button" variant="secondary" onClick={()=>setConfirmAction('discard')}><Trash2 className="mr-2 size-4"/>Șterge încărcarea greșită</Button>
+      </div>}
+      {confirmAction&&<div className="mt-4 rounded-lg border border-[var(--danger)] p-4">
+        <p className="text-sm">Confirmi {confirmAction==='archive'?'scoaterea din utilizare':'ștergerea încărcării greșite'} pentru <strong>{contract.reference}</strong> — {client?.name??contract.clientId}?</p>
+        <p className="mt-2 text-xs text-[var(--text-secondary)]">{confirmAction==='archive'?'Contractul și documentele rămân în istoric, dar nu mai sunt folosite la facturi noi. Poți încărca o versiune nouă cu aceeași referință.':'Disponibilă doar dacă nu există facturi, candidați sau validări istorice. PDF-ul rămâne ca dovadă, dar este ascuns și același fișier poate fi încărcat din nou.'}</p>
+        <div className="mt-3 flex gap-2">
+          <Button type="button" disabled={deleteContract.isPending||archiveContract.isPending} onClick={()=>{const mutation=confirmAction==='archive'?archiveContract:deleteContract;mutation.mutate({id:contract.id,revision:contract.revision??1},{onSuccess:()=>navigate('/contracts')})}}>{deleteContract.isPending||archiveContract.isPending?'Se procesează…':confirmAction==='archive'?'Confirmă arhivarea':'Confirmă ștergerea'}</Button>
+          <Button type="button" variant="secondary" disabled={deleteContract.isPending||archiveContract.isPending} onClick={()=>setConfirmAction(null)}>Renunță</Button>
+        </div>
+      </div>}
+      {(deleteContract.isError||archiveContract.isError)&&<p role="alert" className="mt-3 text-sm text-[var(--danger)]">Operația nu a reușit. Dacă acest contract are deja istoric, scoate-l din utilizare; altfel reîncarcă pagina și încearcă din nou.</p>}
+    </section>
 
     {contract.sourceDocumentId&&<Link to={`/contracts/documents/${contract.clientId}/${contract.sourceDocumentId}`} className="inline-block font-semibold text-[var(--accent)]">Document original · propunere AI și istoric confirmare</Link>}
     <section className="grid grid-cols-3 gap-4" aria-label="Date contractuale">

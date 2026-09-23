@@ -80,7 +80,7 @@ func domainReleaseFixture(t *testing.T, tc *module5TestContext, edit func(*accou
 func domainPersistedInvoice(t *testing.T, tc *module5TestContext, f *accounting.SourceFacts, l *accounting.LineFacts, suffix string) string {
 	t.Helper()
 	id := "domain-" + tc.clientID + "-" + suffix
-	if _, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber(id).SetNormalizedDocumentNumber(id).SetIssueDate(tc.now).SetIssueDay(invoicing.InvoiceIssueDay(tc.now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber(id).SetNormalizedDocumentNumber(id).SetIssueDate(tc.now).SetIssueDay(invoicing.InvoiceIssueDay(tc.now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusCOMMERCIALLY_VALIDATED).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	tc.invoices = append(tc.invoices, id)
@@ -288,6 +288,7 @@ func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing
 	pipeline := invoicing.NewPipelineService(tc.store, exporter, func() time.Time { return tc.now })
 	pipeline.SetContractMatchingProcessor(contracts.NewService(tc.store, nil, func() time.Time { return tc.now }))
 	pipeline.SetClassificationProcessor(classification.NewService(tc.store, classification.DomainPolicy{AllowTestOnly: true}, func() time.Time { return tc.now }))
+	pipeline.SetCommercialValidationProcessor(conformingCommercialProcessor{store: tc.store, clock: func() time.Time { return tc.now }})
 	service := spv.NewService(tc.store, spv.NewHTTPClient(server.Client(), server.URL, server.URL), spv.UBLParser{}, pipeline, clearTestCipher{}, spv.ServiceConfig{InitialWindow: 60 * 24 * time.Hour, Overlap: 72 * time.Hour})
 	result, err := service.Sync(tc.ctx, cid)
 	if err != nil || len(result.Documents) != 1 {
@@ -302,6 +303,7 @@ func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing
 	scoped := invoicing.NewPipelineService(scopedPipelineStore{Store: tc.store, aggregateID: id}, exporter, func() time.Time { return tc.now.Add(24 * time.Hour) })
 	scoped.SetContractMatchingProcessor(contracts.NewService(tc.store, nil, func() time.Time { return tc.now }))
 	scoped.SetClassificationProcessor(classification.NewService(tc.store, classification.DomainPolicy{AllowTestOnly: true}, func() time.Time { return tc.now }))
+	scoped.SetCommercialValidationProcessor(conformingCommercialProcessor{store: tc.store, clock: func() time.Time { return tc.now }})
 	if err := scoped.Drain(tc.ctx, 20); err != nil {
 		t.Fatal(err)
 	}

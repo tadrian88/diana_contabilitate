@@ -11,8 +11,11 @@ import (
 
 	"diana-contabilitate/backend/ent/migrate"
 
+	"diana-contabilitate/backend/ent/account"
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/accountingrulepack"
+	"diana-contabilitate/backend/ent/accountmapping"
+	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
@@ -45,6 +48,12 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// Account is the client for interacting with the Account builders.
+	Account *AccountClient
+	// AccountMapping is the client for interacting with the AccountMapping builders.
+	AccountMapping *AccountMappingClient
+	// AccountMappingVersion is the client for interacting with the AccountMappingVersion builders.
+	AccountMappingVersion *AccountMappingVersionClient
 	// AccountingClient is the client for interacting with the AccountingClient builders.
 	AccountingClient *AccountingClientClient
 	// AccountingRulePack is the client for interacting with the AccountingRulePack builders.
@@ -100,6 +109,9 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.Account = NewAccountClient(c.config)
+	c.AccountMapping = NewAccountMappingClient(c.config)
+	c.AccountMappingVersion = NewAccountMappingVersionClient(c.config)
 	c.AccountingClient = NewAccountingClientClient(c.config)
 	c.AccountingRulePack = NewAccountingRulePackClient(c.config)
 	c.ActivityEvent = NewActivityEventClient(c.config)
@@ -214,6 +226,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                        ctx,
 		config:                     cfg,
+		Account:                    NewAccountClient(cfg),
+		AccountMapping:             NewAccountMappingClient(cfg),
+		AccountMappingVersion:      NewAccountMappingVersionClient(cfg),
 		AccountingClient:           NewAccountingClientClient(cfg),
 		AccountingRulePack:         NewAccountingRulePackClient(cfg),
 		ActivityEvent:              NewActivityEventClient(cfg),
@@ -255,6 +270,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                        ctx,
 		config:                     cfg,
+		Account:                    NewAccountClient(cfg),
+		AccountMapping:             NewAccountMappingClient(cfg),
+		AccountMappingVersion:      NewAccountMappingVersionClient(cfg),
 		AccountingClient:           NewAccountingClientClient(cfg),
 		AccountingRulePack:         NewAccountingRulePackClient(cfg),
 		ActivityEvent:              NewActivityEventClient(cfg),
@@ -283,7 +301,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		AccountingClient.
+//		Account.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -306,7 +324,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AccountingClient, c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
+		c.Account, c.AccountMapping, c.AccountMappingVersion, c.AccountingClient,
+		c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
 		c.ClientAccountingProfile, c.Contract, c.ContractExtractionAttempt,
 		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractServiceTerm,
 		c.ContractSourceDocument, c.Invoice, c.InvoiceContractAssociation,
@@ -322,7 +341,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AccountingClient, c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
+		c.Account, c.AccountMapping, c.AccountMappingVersion, c.AccountingClient,
+		c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
 		c.ClientAccountingProfile, c.Contract, c.ContractExtractionAttempt,
 		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractServiceTerm,
 		c.ContractSourceDocument, c.Invoice, c.InvoiceContractAssociation,
@@ -337,6 +357,12 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *AccountMutation:
+		return c.Account.mutate(ctx, m)
+	case *AccountMappingMutation:
+		return c.AccountMapping.mutate(ctx, m)
+	case *AccountMappingVersionMutation:
+		return c.AccountMappingVersion.mutate(ctx, m)
 	case *AccountingClientMutation:
 		return c.AccountingClient.mutate(ctx, m)
 	case *AccountingRulePackMutation:
@@ -383,6 +409,405 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ValidationTask.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// AccountClient is a client for the Account schema.
+type AccountClient struct {
+	config
+}
+
+// NewAccountClient returns a client for the Account from the given config.
+func NewAccountClient(c config) *AccountClient {
+	return &AccountClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `account.Hooks(f(g(h())))`.
+func (c *AccountClient) Use(hooks ...Hook) {
+	c.hooks.Account = append(c.hooks.Account, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `account.Intercept(f(g(h())))`.
+func (c *AccountClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Account = append(c.inters.Account, interceptors...)
+}
+
+// Create returns a builder for creating a Account entity.
+func (c *AccountClient) Create() *AccountCreate {
+	mutation := newAccountMutation(c.config, OpCreate)
+	return &AccountCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Account entities.
+func (c *AccountClient) CreateBulk(builders ...*AccountCreate) *AccountCreateBulk {
+	return &AccountCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountClient) MapCreateBulk(slice any, setFunc func(*AccountCreate, int)) *AccountCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountCreateBulk{err: fmt.Errorf("calling to AccountClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Account.
+func (c *AccountClient) Update() *AccountUpdate {
+	mutation := newAccountMutation(c.config, OpUpdate)
+	return &AccountUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountClient) UpdateOne(_m *Account) *AccountUpdateOne {
+	mutation := newAccountMutation(c.config, OpUpdateOne, withAccount(_m))
+	return &AccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountClient) UpdateOneID(id string) *AccountUpdateOne {
+	mutation := newAccountMutation(c.config, OpUpdateOne, withAccountID(id))
+	return &AccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Account.
+func (c *AccountClient) Delete() *AccountDelete {
+	mutation := newAccountMutation(c.config, OpDelete)
+	return &AccountDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountClient) DeleteOne(_m *Account) *AccountDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountClient) DeleteOneID(id string) *AccountDeleteOne {
+	builder := c.Delete().Where(account.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountDeleteOne{builder}
+}
+
+// Query returns a query builder for Account.
+func (c *AccountClient) Query() *AccountQuery {
+	return &AccountQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccount},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Account entity by its id.
+func (c *AccountClient) Get(ctx context.Context, id string) (*Account, error) {
+	return c.Query().Where(account.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountClient) GetX(ctx context.Context, id string) *Account {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountClient) Hooks() []Hook {
+	return c.hooks.Account
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountClient) Interceptors() []Interceptor {
+	return c.inters.Account
+}
+
+func (c *AccountClient) mutate(ctx context.Context, m *AccountMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Account mutation op: %q", m.Op())
+	}
+}
+
+// AccountMappingClient is a client for the AccountMapping schema.
+type AccountMappingClient struct {
+	config
+}
+
+// NewAccountMappingClient returns a client for the AccountMapping from the given config.
+func NewAccountMappingClient(c config) *AccountMappingClient {
+	return &AccountMappingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accountmapping.Hooks(f(g(h())))`.
+func (c *AccountMappingClient) Use(hooks ...Hook) {
+	c.hooks.AccountMapping = append(c.hooks.AccountMapping, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accountmapping.Intercept(f(g(h())))`.
+func (c *AccountMappingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountMapping = append(c.inters.AccountMapping, interceptors...)
+}
+
+// Create returns a builder for creating a AccountMapping entity.
+func (c *AccountMappingClient) Create() *AccountMappingCreate {
+	mutation := newAccountMappingMutation(c.config, OpCreate)
+	return &AccountMappingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountMapping entities.
+func (c *AccountMappingClient) CreateBulk(builders ...*AccountMappingCreate) *AccountMappingCreateBulk {
+	return &AccountMappingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountMappingClient) MapCreateBulk(slice any, setFunc func(*AccountMappingCreate, int)) *AccountMappingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountMappingCreateBulk{err: fmt.Errorf("calling to AccountMappingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountMappingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountMappingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountMapping.
+func (c *AccountMappingClient) Update() *AccountMappingUpdate {
+	mutation := newAccountMappingMutation(c.config, OpUpdate)
+	return &AccountMappingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountMappingClient) UpdateOne(_m *AccountMapping) *AccountMappingUpdateOne {
+	mutation := newAccountMappingMutation(c.config, OpUpdateOne, withAccountMapping(_m))
+	return &AccountMappingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountMappingClient) UpdateOneID(id string) *AccountMappingUpdateOne {
+	mutation := newAccountMappingMutation(c.config, OpUpdateOne, withAccountMappingID(id))
+	return &AccountMappingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountMapping.
+func (c *AccountMappingClient) Delete() *AccountMappingDelete {
+	mutation := newAccountMappingMutation(c.config, OpDelete)
+	return &AccountMappingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountMappingClient) DeleteOne(_m *AccountMapping) *AccountMappingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountMappingClient) DeleteOneID(id string) *AccountMappingDeleteOne {
+	builder := c.Delete().Where(accountmapping.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountMappingDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountMapping.
+func (c *AccountMappingClient) Query() *AccountMappingQuery {
+	return &AccountMappingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountMapping},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountMapping entity by its id.
+func (c *AccountMappingClient) Get(ctx context.Context, id string) (*AccountMapping, error) {
+	return c.Query().Where(accountmapping.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountMappingClient) GetX(ctx context.Context, id string) *AccountMapping {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountMappingClient) Hooks() []Hook {
+	return c.hooks.AccountMapping
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountMappingClient) Interceptors() []Interceptor {
+	return c.inters.AccountMapping
+}
+
+func (c *AccountMappingClient) mutate(ctx context.Context, m *AccountMappingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountMappingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountMappingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountMappingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountMappingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountMapping mutation op: %q", m.Op())
+	}
+}
+
+// AccountMappingVersionClient is a client for the AccountMappingVersion schema.
+type AccountMappingVersionClient struct {
+	config
+}
+
+// NewAccountMappingVersionClient returns a client for the AccountMappingVersion from the given config.
+func NewAccountMappingVersionClient(c config) *AccountMappingVersionClient {
+	return &AccountMappingVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accountmappingversion.Hooks(f(g(h())))`.
+func (c *AccountMappingVersionClient) Use(hooks ...Hook) {
+	c.hooks.AccountMappingVersion = append(c.hooks.AccountMappingVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accountmappingversion.Intercept(f(g(h())))`.
+func (c *AccountMappingVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountMappingVersion = append(c.inters.AccountMappingVersion, interceptors...)
+}
+
+// Create returns a builder for creating a AccountMappingVersion entity.
+func (c *AccountMappingVersionClient) Create() *AccountMappingVersionCreate {
+	mutation := newAccountMappingVersionMutation(c.config, OpCreate)
+	return &AccountMappingVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountMappingVersion entities.
+func (c *AccountMappingVersionClient) CreateBulk(builders ...*AccountMappingVersionCreate) *AccountMappingVersionCreateBulk {
+	return &AccountMappingVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountMappingVersionClient) MapCreateBulk(slice any, setFunc func(*AccountMappingVersionCreate, int)) *AccountMappingVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountMappingVersionCreateBulk{err: fmt.Errorf("calling to AccountMappingVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountMappingVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountMappingVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountMappingVersion.
+func (c *AccountMappingVersionClient) Update() *AccountMappingVersionUpdate {
+	mutation := newAccountMappingVersionMutation(c.config, OpUpdate)
+	return &AccountMappingVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountMappingVersionClient) UpdateOne(_m *AccountMappingVersion) *AccountMappingVersionUpdateOne {
+	mutation := newAccountMappingVersionMutation(c.config, OpUpdateOne, withAccountMappingVersion(_m))
+	return &AccountMappingVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountMappingVersionClient) UpdateOneID(id string) *AccountMappingVersionUpdateOne {
+	mutation := newAccountMappingVersionMutation(c.config, OpUpdateOne, withAccountMappingVersionID(id))
+	return &AccountMappingVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountMappingVersion.
+func (c *AccountMappingVersionClient) Delete() *AccountMappingVersionDelete {
+	mutation := newAccountMappingVersionMutation(c.config, OpDelete)
+	return &AccountMappingVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountMappingVersionClient) DeleteOne(_m *AccountMappingVersion) *AccountMappingVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountMappingVersionClient) DeleteOneID(id string) *AccountMappingVersionDeleteOne {
+	builder := c.Delete().Where(accountmappingversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountMappingVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountMappingVersion.
+func (c *AccountMappingVersionClient) Query() *AccountMappingVersionQuery {
+	return &AccountMappingVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountMappingVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountMappingVersion entity by its id.
+func (c *AccountMappingVersionClient) Get(ctx context.Context, id string) (*AccountMappingVersion, error) {
+	return c.Query().Where(accountmappingversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountMappingVersionClient) GetX(ctx context.Context, id string) *AccountMappingVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountMappingVersionClient) Hooks() []Hook {
+	return c.hooks.AccountMappingVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountMappingVersionClient) Interceptors() []Interceptor {
+	return c.inters.AccountMappingVersion
+}
+
+func (c *AccountMappingVersionClient) mutate(ctx context.Context, m *AccountMappingVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountMappingVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountMappingVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountMappingVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountMappingVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountMappingVersion mutation op: %q", m.Op())
 	}
 }
 
@@ -4435,19 +4860,21 @@ func (c *ValidationTaskClient) mutate(ctx context.Context, m *ValidationTaskMuta
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AccountingClient, AccountingRulePack, ActivityEvent, ClassificationRule,
-		ClientAccountingProfile, Contract, ContractExtractionAttempt,
-		ContractMatchCandidate, ContractMatchRun, ContractServiceTerm,
-		ContractSourceDocument, Invoice, InvoiceContractAssociation, InvoiceLine,
-		LineClassification, OutboxEntry, RuleVersion, SPVConnection, SPVOAuthState,
-		SPVSourceDocument, SagaExportAttempt, ValidationTask []ent.Hook
+		Account, AccountMapping, AccountMappingVersion, AccountingClient,
+		AccountingRulePack, ActivityEvent, ClassificationRule, ClientAccountingProfile,
+		Contract, ContractExtractionAttempt, ContractMatchCandidate, ContractMatchRun,
+		ContractServiceTerm, ContractSourceDocument, Invoice,
+		InvoiceContractAssociation, InvoiceLine, LineClassification, OutboxEntry,
+		RuleVersion, SPVConnection, SPVOAuthState, SPVSourceDocument,
+		SagaExportAttempt, ValidationTask []ent.Hook
 	}
 	inters struct {
-		AccountingClient, AccountingRulePack, ActivityEvent, ClassificationRule,
-		ClientAccountingProfile, Contract, ContractExtractionAttempt,
-		ContractMatchCandidate, ContractMatchRun, ContractServiceTerm,
-		ContractSourceDocument, Invoice, InvoiceContractAssociation, InvoiceLine,
-		LineClassification, OutboxEntry, RuleVersion, SPVConnection, SPVOAuthState,
-		SPVSourceDocument, SagaExportAttempt, ValidationTask []ent.Interceptor
+		Account, AccountMapping, AccountMappingVersion, AccountingClient,
+		AccountingRulePack, ActivityEvent, ClassificationRule, ClientAccountingProfile,
+		Contract, ContractExtractionAttempt, ContractMatchCandidate, ContractMatchRun,
+		ContractServiceTerm, ContractSourceDocument, Invoice,
+		InvoiceContractAssociation, InvoiceLine, LineClassification, OutboxEntry,
+		RuleVersion, SPVConnection, SPVOAuthState, SPVSourceDocument,
+		SagaExportAttempt, ValidationTask []ent.Interceptor
 	}
 )

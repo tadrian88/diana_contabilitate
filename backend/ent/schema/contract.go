@@ -48,7 +48,7 @@ func (Contract) Edges() []ent.Edge {
 
 func (Contract) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("client_id", "reference").Unique(),
+		// Active-only uniqueness is enforced by migration 000019.
 		index.Fields("id", "client_id").Unique(),
 		index.Fields("client_id", "normalized_supplier_cui"),
 		index.Fields("source_document_id").Unique(),

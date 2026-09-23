@@ -9,6 +9,102 @@ import (
 )
 
 var (
+	// AccountsColumns holds the columns for the "accounts" table.
+	AccountsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "code", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "account_type", Type: field.TypeString},
+		{Name: "parent_code", Type: field.TypeString, Nullable: true},
+		{Name: "level", Type: field.TypeInt},
+		{Name: "is_synthetic", Type: field.TypeBool, Default: false},
+		{Name: "postable", Type: field.TypeBool, Default: false},
+		{Name: "is_active", Type: field.TypeBool, Default: true},
+	}
+	// AccountsTable holds the schema information for the "accounts" table.
+	AccountsTable = &schema.Table{
+		Name:       "accounts",
+		Columns:    AccountsColumns,
+		PrimaryKey: []*schema.Column{AccountsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "account_code",
+				Unique:  true,
+				Columns: []*schema.Column{AccountsColumns[1]},
+			},
+			{
+				Name:    "account_is_active_postable_code",
+				Unique:  false,
+				Columns: []*schema.Column{AccountsColumns[8], AccountsColumns[7], AccountsColumns[1]},
+			},
+		},
+	}
+	// AccountMappingsColumns holds the columns for the "account_mappings" table.
+	AccountMappingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "client_id", Type: field.TypeString},
+		{Name: "normalized_supplier_id", Type: field.TypeString},
+		{Name: "service_identity_kind", Type: field.TypeEnum, Enums: []string{"SELLER_ITEM_ID", "STANDARD_ITEM_ID", "NORMALIZED_DESCRIPTION"}},
+		{Name: "service_identity_value", Type: field.TypeString},
+		{Name: "normalizer_version", Type: field.TypeString},
+		{Name: "current_version", Type: field.TypeInt},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"ACTIVE", "INACTIVE"}, Default: "ACTIVE"},
+		{Name: "revision", Type: field.TypeUint64, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// AccountMappingsTable holds the schema information for the "account_mappings" table.
+	AccountMappingsTable = &schema.Table{
+		Name:       "account_mappings",
+		Columns:    AccountMappingsColumns,
+		PrimaryKey: []*schema.Column{AccountMappingsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accountmapping_client_id_normalized_supplier_id_service_identity_kind_service_identity_value_normalizer_version",
+				Unique:  true,
+				Columns: []*schema.Column{AccountMappingsColumns[1], AccountMappingsColumns[2], AccountMappingsColumns[3], AccountMappingsColumns[4], AccountMappingsColumns[5]},
+			},
+			{
+				Name:    "accountmapping_client_id_normalized_supplier_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{AccountMappingsColumns[1], AccountMappingsColumns[2], AccountMappingsColumns[7]},
+			},
+		},
+	}
+	// AccountMappingVersionsColumns holds the columns for the "account_mapping_versions" table.
+	AccountMappingVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "mapping_id", Type: field.TypeString},
+		{Name: "version", Type: field.TypeInt},
+		{Name: "account_code", Type: field.TypeString},
+		{Name: "change_kind", Type: field.TypeEnum, Enums: []string{"CREATION", "CORRECTION", "POLICY_CHANGE"}},
+		{Name: "source_classification_id", Type: field.TypeString},
+		{Name: "source_invoice_line_id", Type: field.TypeString},
+		{Name: "raw_description_snapshot", Type: field.TypeString},
+		{Name: "actor_id", Type: field.TypeString, Nullable: true},
+		{Name: "actor_display", Type: field.TypeString},
+		{Name: "reason", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "command_key", Type: field.TypeString, Unique: true},
+	}
+	// AccountMappingVersionsTable holds the schema information for the "account_mapping_versions" table.
+	AccountMappingVersionsTable = &schema.Table{
+		Name:       "account_mapping_versions",
+		Columns:    AccountMappingVersionsColumns,
+		PrimaryKey: []*schema.Column{AccountMappingVersionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accountmappingversion_mapping_id_version",
+				Unique:  true,
+				Columns: []*schema.Column{AccountMappingVersionsColumns[1], AccountMappingVersionsColumns[2]},
+			},
+			{
+				Name:    "accountmappingversion_account_code",
+				Unique:  false,
+				Columns: []*schema.Column{AccountMappingVersionsColumns[3]},
+			},
+		},
+	}
 	// ClientsColumns holds the columns for the "clients" table.
 	ClientsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -250,11 +346,6 @@ var (
 			},
 		},
 		Indexes: []*schema.Index{
-			{
-				Name:    "contract_client_id_reference",
-				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[21], ContractsColumns[4]},
-			},
 			{
 				Name:    "contract_id_client_id",
 				Unique:  true,
@@ -504,11 +595,6 @@ var (
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "contractsourcedocument_client_id_sha256",
-				Unique:  true,
-				Columns: []*schema.Column{ContractSourceDocumentsColumns[21], ContractSourceDocumentsColumns[4]},
-			},
-			{
 				Name:    "contractsourcedocument_client_id_status",
 				Unique:  false,
 				Columns: []*schema.Column{ContractSourceDocumentsColumns[21], ContractSourceDocumentsColumns[9]},
@@ -520,7 +606,7 @@ var (
 			},
 			{
 				Name:    "contractsourcedocument_confirmed_contract_id",
-				Unique:  true,
+				Unique:  false,
 				Columns: []*schema.Column{ContractSourceDocumentsColumns[12]},
 			},
 		},
@@ -549,7 +635,7 @@ var (
 		{Name: "duplicate_amount_matches", Type: field.TypeBool, Nullable: true},
 		{Name: "duplicate_currency_matches", Type: field.TypeBool, Nullable: true},
 		{Name: "document_type", Type: field.TypeEnum, Enums: []string{"INVOICE", "CREDIT_NOTE"}, Default: "INVOICE"},
-		{Name: "pipeline_status", Type: field.TypeEnum, Enums: []string{"DOWNLOADED", "ARCHIVED", "MATCHING", "AWAITING_CONTRACT", "AWAITING_MATCH_CONFIRM", "DEDUPE_CHECKED", "HEADER_READ", "LINES_READ", "CLASSIFIED", "AWAITING_REVIEW", "READY_FOR_SAGA", "EXPORTING", "EXPORTED", "DUPLICATE"}},
+		{Name: "pipeline_status", Type: field.TypeEnum, Enums: []string{"DOWNLOADED", "ARCHIVED", "MATCHING", "AWAITING_CONTRACT", "AWAITING_MATCH_CONFIRM", "DEDUPE_CHECKED", "HEADER_READ", "LINES_READ", "COMMERCIAL_VALIDATING", "AWAITING_COMMERCIAL_REVIEW", "COMMERCIALLY_VALIDATED", "CLASSIFIED", "AWAITING_REVIEW", "READY_FOR_SAGA", "EXPORTING", "EXPORTED", "DUPLICATE"}},
 		{Name: "saga_status", Type: field.TypeEnum, Enums: []string{"NOT_READY", "READY", "EXPORTING", "EXPORTED", "FAILED"}},
 		{Name: "revision", Type: field.TypeUint64, Default: 1},
 		{Name: "created_at", Type: field.TypeTime},
@@ -735,7 +821,9 @@ var (
 		{Name: "legal_basis", Type: field.TypeString},
 		{Name: "required_review", Type: field.TypeBool},
 		{Name: "review_status", Type: field.TypeEnum, Enums: []string{"PENDING", "ACCEPTED", "CORRECTED"}},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS"}},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING"}},
+		{Name: "account_mapping_id", Type: field.TypeString, Nullable: true},
+		{Name: "account_mapping_version", Type: field.TypeInt, Nullable: true},
 		{Name: "policy_version", Type: field.TypeString},
 		{Name: "reviewed_by_id", Type: field.TypeString, Nullable: true},
 		{Name: "reviewed_by_display", Type: field.TypeString, Nullable: true},
@@ -756,25 +844,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "line_classifications_clients_line_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[23]},
+				Columns:    []*schema.Column{LineClassificationsColumns[25]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "line_classifications_invoices_line_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[24]},
+				Columns:    []*schema.Column{LineClassificationsColumns[26]},
 				RefColumns: []*schema.Column{InvoicesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "line_classifications_invoice_lines_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[25]},
+				Columns:    []*schema.Column{LineClassificationsColumns[27]},
 				RefColumns: []*schema.Column{InvoiceLinesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "line_classifications_rule_versions_line_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[26]},
+				Columns:    []*schema.Column{LineClassificationsColumns[28]},
 				RefColumns: []*schema.Column{RuleVersionsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -783,12 +871,12 @@ var (
 			{
 				Name:    "lineclassification_invoice_line_id_dimension_model_version",
 				Unique:  true,
-				Columns: []*schema.Column{LineClassificationsColumns[25], LineClassificationsColumns[7], LineClassificationsColumns[1]},
+				Columns: []*schema.Column{LineClassificationsColumns[27], LineClassificationsColumns[7], LineClassificationsColumns[1]},
 			},
 			{
 				Name:    "lineclassification_invoice_id_review_status",
 				Unique:  false,
-				Columns: []*schema.Column{LineClassificationsColumns[24], LineClassificationsColumns[14]},
+				Columns: []*schema.Column{LineClassificationsColumns[26], LineClassificationsColumns[14]},
 			},
 		},
 	}
@@ -1117,7 +1205,7 @@ var (
 	// ValidationTasksColumns holds the columns for the "validation_tasks" table.
 	ValidationTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
-		{Name: "task_type", Type: field.TypeEnum, Enums: []string{"CONTRACT_MATCH", "MISSING_CONTRACT", "CLASSIFICATION"}},
+		{Name: "task_type", Type: field.TypeEnum, Enums: []string{"CONTRACT_MATCH", "MISSING_CONTRACT", "COMMERCIAL_REVIEW", "CLASSIFICATION"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"OPEN", "WAITING", "RESOLVED"}, Default: "OPEN"},
 		{Name: "title", Type: field.TypeString},
 		{Name: "reason", Type: field.TypeString},
@@ -1197,6 +1285,9 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AccountsTable,
+		AccountMappingsTable,
+		AccountMappingVersionsTable,
 		ClientsTable,
 		AccountingRulePacksTable,
 		ActivityEventsTable,

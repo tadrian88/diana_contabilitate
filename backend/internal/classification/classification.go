@@ -36,10 +36,36 @@ const (
 type Source string
 
 const (
-	SourceRule      Source = "RULE"
-	SourceNoMatch   Source = "NO_MATCH"
-	SourceAmbiguous Source = "AMBIGUOUS"
+	SourceRule           Source = "RULE"
+	SourceNoMatch        Source = "NO_MATCH"
+	SourceAmbiguous      Source = "AMBIGUOUS"
+	SourceLearnedMapping Source = "LEARNED_MAPPING"
 )
+
+type MappingReference struct {
+	MappingID            string `json:"mappingId"`
+	Version              int    `json:"version"`
+	AccountCode          string `json:"accountCode"`
+	ServiceIdentityKind  string `json:"serviceIdentityKind"`
+	ServiceIdentityValue string `json:"serviceIdentityValue"`
+	NormalizerVersion    string `json:"normalizerVersion"`
+	Revision             uint64 `json:"revision"`
+}
+
+// MappingScopePreview is the exact scope the backend will persist when the
+// accountant explicitly chooses to reuse an ACCOUNT decision.
+type MappingScopePreview struct {
+	ClientDisplay        string `json:"clientDisplay"`
+	SupplierDisplay      string `json:"supplierDisplay"`
+	ServiceIdentityKind  string `json:"serviceIdentityKind"`
+	ServiceIdentityValue string `json:"serviceIdentityValue"`
+	NormalizerVersion    string `json:"normalizerVersion"`
+}
+
+type MappingCandidate struct {
+	MappingReference
+	Status string
+}
 
 type RuleReference struct {
 	ProductionEligible bool
@@ -76,6 +102,8 @@ type Decision struct {
 	Status             ReviewStatus
 	Source             Source
 	Rule               *RuleReference
+	Mapping            *MappingReference
+	MappingScope       *MappingScopePreview
 	PolicyVersion      string
 	Revision           uint64
 	CreatedAt          time.Time
@@ -83,19 +111,22 @@ type Decision struct {
 }
 
 type InvoiceContext struct {
-	ModelVersion   string
-	SourceFacts    *accounting.SourceFacts
-	Snapshot       *accounting.Snapshot
-	Currency       string
-	SupplierID     string
-	IssueDate      accountingdate.Date
-	DocumentType   string
-	ID             string
-	ClientID       string
-	PipelineStatus string
-	Revision       uint64
-	Lines          []LineContext
-	Rules          []RuleCandidate
+	ModelVersion         string
+	SourceFacts          *accounting.SourceFacts
+	Snapshot             *accounting.Snapshot
+	Currency             string
+	SupplierID           string
+	NormalizedSupplierID string
+	IssueDate            accountingdate.Date
+	DocumentType         string
+	ID                   string
+	ClientID             string
+	PipelineStatus       string
+	Revision             uint64
+	Lines                []LineContext
+	Rules                []RuleCandidate
+	Mappings             []MappingCandidate
+	SelectableAccounts   map[string]bool
 }
 
 type LineContext struct {
@@ -142,6 +173,7 @@ type Proposal struct {
 	RequiresReview  bool
 	Source          Source
 	Rule            *RuleReference
+	Mapping         *MappingReference
 }
 
 type Result struct {
@@ -172,6 +204,8 @@ type ReviewCommand struct {
 	ActorID                        string
 	ActorDisplay                   string
 	CorrelationID                  string
+	MappingAction                  string
+	ExpectedMappingRevision        uint64
 }
 
 var ErrStaleReview = errors.New("stale classification review")

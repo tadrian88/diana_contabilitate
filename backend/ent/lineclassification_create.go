@@ -179,6 +179,34 @@ func (_c *LineClassificationCreate) SetNillableRuleVersionID(v *string) *LineCla
 	return _c
 }
 
+// SetAccountMappingID sets the "account_mapping_id" field.
+func (_c *LineClassificationCreate) SetAccountMappingID(v string) *LineClassificationCreate {
+	_c.mutation.SetAccountMappingID(v)
+	return _c
+}
+
+// SetNillableAccountMappingID sets the "account_mapping_id" field if the given value is not nil.
+func (_c *LineClassificationCreate) SetNillableAccountMappingID(v *string) *LineClassificationCreate {
+	if v != nil {
+		_c.SetAccountMappingID(*v)
+	}
+	return _c
+}
+
+// SetAccountMappingVersion sets the "account_mapping_version" field.
+func (_c *LineClassificationCreate) SetAccountMappingVersion(v int) *LineClassificationCreate {
+	_c.mutation.SetAccountMappingVersion(v)
+	return _c
+}
+
+// SetNillableAccountMappingVersion sets the "account_mapping_version" field if the given value is not nil.
+func (_c *LineClassificationCreate) SetNillableAccountMappingVersion(v *int) *LineClassificationCreate {
+	if v != nil {
+		_c.SetAccountMappingVersion(*v)
+	}
+	return _c
+}
+
 // SetPolicyVersion sets the "policy_version" field.
 func (_c *LineClassificationCreate) SetPolicyVersion(v string) *LineClassificationCreate {
 	_c.mutation.SetPolicyVersion(v)
@@ -529,6 +557,14 @@ func (_c *LineClassificationCreate) createSpec() (*LineClassification, *sqlgraph
 	if value, ok := _c.mutation.Source(); ok {
 		_spec.SetField(lineclassification.FieldSource, field.TypeEnum, value)
 		_node.Source = value
+	}
+	if value, ok := _c.mutation.AccountMappingID(); ok {
+		_spec.SetField(lineclassification.FieldAccountMappingID, field.TypeString, value)
+		_node.AccountMappingID = &value
+	}
+	if value, ok := _c.mutation.AccountMappingVersion(); ok {
+		_spec.SetField(lineclassification.FieldAccountMappingVersion, field.TypeInt, value)
+		_node.AccountMappingVersion = &value
 	}
 	if value, ok := _c.mutation.PolicyVersion(); ok {
 		_spec.SetField(lineclassification.FieldPolicyVersion, field.TypeString, value)

@@ -8,6 +8,7 @@ import (
 
 	"diana-contabilitate/backend/ent"
 	"diana-contabilitate/backend/ent/outboxentry"
+	"diana-contabilitate/backend/internal/audit"
 	"diana-contabilitate/backend/internal/invoicing"
 )
 
@@ -17,6 +18,17 @@ import (
 type scopedPipelineStore struct {
 	*Store
 	aggregateID string
+}
+
+type conformingCommercialProcessor struct {
+	store invoicing.PipelineStore
+	clock func() time.Time
+}
+
+func (p conformingCommercialProcessor) ProcessCommercialValidation(ctx context.Context, invoiceID string, revision uint64, commandID, correlationID string) error {
+	definition, _ := invoicing.FindTransition(invoicing.StatusCommercialValidating, invoicing.StatusCommerciallyValidated)
+	_, _, err := p.store.ApplyTransition(ctx, invoicing.TransitionCommand{InvoiceID: invoiceID, From: invoicing.StatusCommercialValidating, To: invoicing.StatusCommerciallyValidated, ExpectedRevision: revision, Trigger: invoicing.TriggerCommercialValidationDecision, CommandID: commandID, Actor: audit.ActorSystem, ActorDisplay: "Test commercial conform", CorrelationID: correlationID}, definition, p.clock())
+	return err
 }
 
 func (s scopedPipelineStore) PendingOutbox(ctx context.Context, limit int, now time.Time) ([]invoicing.OutboxEntry, error) {

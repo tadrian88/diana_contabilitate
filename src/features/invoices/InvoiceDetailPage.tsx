@@ -11,6 +11,8 @@ import { ClassificationWorkspace } from './ClassificationWorkspace'
 import { AttentionBadge, PipelineBadge, SagaBadge } from './InvoiceStatusBadges'
 import { getUnresolvedIssueCount, SAGA_LABELS } from './invoice-view'
 import { SagaExportCard } from './SagaExportCard'
+import { CommercialValidationCard } from './CommercialValidationCard'
+import { AccountingAnalysisCard } from './AccountingAnalysisCard'
 
 const tabValues = ['summary', 'contract', 'lines', 'classification', 'history'] as const
 type InvoiceTab = typeof tabValues[number]
@@ -69,9 +71,9 @@ export function InvoiceDetailPage() {
         </Tabs.List>
         <div className="bg-[var(--app-background)] p-5">
           <Tabs.Content value="summary" className="outline-none"><SummaryTab invoice={invoice} /></Tabs.Content>
-          <Tabs.Content value="contract" className="outline-none"><ContractTask invoice={invoice} /></Tabs.Content>
+          <Tabs.Content value="contract" className="space-y-4 outline-none"><CommercialValidationCard invoice={invoice} /><ContractTask invoice={invoice} /></Tabs.Content>
           <Tabs.Content value="lines" className="outline-none"><LinesTab invoice={invoice} /></Tabs.Content>
-          <Tabs.Content value="classification" className="outline-none"><ClassificationWorkspace invoice={invoice} /></Tabs.Content>
+          <Tabs.Content value="classification" className="space-y-4 outline-none"><ClassificationWorkspace invoice={invoice} />{invoice.authority === 'API' && invoice.modelVersion === 'ACCOUNTING_DOMAIN_V2' && <AccountingAnalysisCard invoice={invoice} />}</Tabs.Content>
           <Tabs.Content value="history" className="outline-none"><HistoryTab invoice={invoice} /></Tabs.Content>
         </div>
       </Tabs.Root>
@@ -122,6 +124,7 @@ function nextAction(invoice: Invoice) {
   if (invoice.sagaStatus === 'FAILED') return 'Exportul SAGA simulat a eșuat. Nu există comportament de reîncercare aprobat.'
   if (invoice.pipelineStatus === 'AWAITING_CONTRACT') return 'Așteaptă furnizarea externă a contractului.'
   if (invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM') return 'Contabilul confirmă contractul recomandat sau selectează o alternativă.'
+  if (invoice.pipelineStatus === 'AWAITING_COMMERCIAL_REVIEW') return 'Contabilul verifică abaterile comerciale, completează datele lipsă sau aprobă motivat o excepție.'
   if (invoice.pipelineStatus === 'AWAITING_REVIEW') return 'Contabilul revizuiește numai clasificările incerte.'
   if (invoice.pipelineStatus === 'EXPORTING' && invoice.sagaExport?.artifactStatus === 'GENERATED') return 'Fișierul este pregătit. Importă-l în SAGA și confirmă manual importul.'
   if (invoice.pipelineStatus === 'EXPORTED' && invoice.sagaExport?.confirmationType === 'HUMAN') return 'Procesare finalizată prin confirmarea manuală a importului în SAGA.'

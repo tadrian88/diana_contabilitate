@@ -59,9 +59,52 @@ export function useInvoice(id: string) {
       const status = query.state.data?.pipelineStatus
       // ContractAvailable is asynchronous: a waiting invoice can change externally.
       if (status === 'AWAITING_CONTRACT') return 3_000
-      return status && ['DOWNLOADED', 'ARCHIVED', 'MATCHING', 'DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'CLASSIFIED', 'READY_FOR_SAGA', 'EXPORTING'].includes(status) ? 750 : false
+      return status && ['DOWNLOADED', 'ARCHIVED', 'MATCHING', 'DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'COMMERCIAL_VALIDATING', 'COMMERCIALLY_VALIDATED', 'CLASSIFIED', 'READY_FOR_SAGA', 'EXPORTING'].includes(status) ? 750 : false
     },
   })
+}
+
+export function useCommercialValidation(invoice: Invoice | undefined) {
+  const repository = useInvoiceRepository()
+  return useQuery({
+    // A 404 while COMMERCIAL_VALIDATING means "not written yet". The invoice
+    // transition must select a fresh query rather than keep that cached null.
+    queryKey: ['commercial-validation', invoice?.clientId, invoice?.id, invoice?.revision, invoice?.pipelineStatus],
+    queryFn: async () => (await repository.getCommercialValidation(invoice!.clientId, invoice!.id)) ?? null,
+    enabled: !!invoice && !['DOWNLOADED','ARCHIVED','MATCHING','AWAITING_CONTRACT','AWAITING_MATCH_CONFIRM','DEDUPE_CHECKED','HEADER_READ','LINES_READ','DUPLICATE'].includes(invoice.pipelineStatus),
+  })
+}
+
+export function useResolveCommercialValidation(invoice: Invoice) {
+  const repository = useInvoiceRepository()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {runId:string;findingId?:string;expectedInvoiceRevision:number;action:'ACCEPT_EXCEPTION'|'WAIT_FOR_CORRECTION'|'RERUN';reason?:string}) => repository.resolveCommercialValidation(invoice.clientId, invoice.id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({queryKey:['commercial-validation', invoice.clientId, invoice.id]})
+      void queryClient.invalidateQueries({queryKey:queryKeys.invoices.detail(invoice.id)})
+      void queryClient.invalidateQueries({queryKey:queryKeys.invoices.root})
+    },
+  })
+}
+
+export function usePutCommercialVariable(invoice: Invoice, dossierId: string) {
+  const repository = useInvoiceRepository()
+  return useMutation({
+    mutationFn: (input: {name:string;value:string;source:'MANUAL';sourceReference:string;periodStart?:string;periodEnd?:string}) => repository.putCommercialVariable(invoice.clientId, dossierId, input),
+  })
+}
+
+export function useConfirmCommercialServiceAlias(invoice: Invoice) {
+  const repository = useInvoiceRepository()
+  return useMutation({
+    mutationFn: (input:{serviceId:string;lineId:string;reuseForDossier:boolean}) => repository.confirmCommercialServiceAlias(invoice.clientId,{invoiceId:invoice.id,lineId:input.lineId,serviceId:input.serviceId,reuseForDossier:input.reuseForDossier}),
+  })
+}
+
+export function usePutCommercialDateFact(invoice: Invoice) {
+  const repository=useInvoiceRepository()
+  return useMutation({mutationFn:(input:{kind:'REMITTANCE'|'RECEIPT'|'ACCEPTANCE';date:string;sourceReference:string})=>repository.putCommercialDateFact(invoice.clientId,invoice.id,input)})
 }
 
 export function useStartHappyPath(invoice: Invoice | undefined) {

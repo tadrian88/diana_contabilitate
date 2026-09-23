@@ -6,6 +6,15 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// Account is the predicate function for account builders.
+type Account func(*sql.Selector)
+
+// AccountMapping is the predicate function for accountmapping builders.
+type AccountMapping func(*sql.Selector)
+
+// AccountMappingVersion is the predicate function for accountmappingversion builders.
+type AccountMappingVersion func(*sql.Selector)
+
 // AccountingClient is the predicate function for accountingclient builders.
 type AccountingClient func(*sql.Selector)
 

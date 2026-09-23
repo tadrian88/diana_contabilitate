@@ -30,6 +30,12 @@ func (s *captureStore) ListContracts(context.Context, Filter) ([]Contract, error
 	return s.contracts, nil
 }
 func (s *captureStore) GetContract(context.Context, string) (*Contract, error) { return nil, nil }
+func (s *captureStore) ArchiveContract(context.Context, string, uint64, string, string, time.Time) (bool, error) {
+	return true, nil
+}
+func (s *captureStore) DeleteMistakenContract(context.Context, string, uint64, string, string, time.Time) (bool, error) {
+	return true, nil
+}
 func (s *captureStore) ListContractInvoices(context.Context, string) ([]AssociatedInvoice, error) {
 	return nil, nil
 }

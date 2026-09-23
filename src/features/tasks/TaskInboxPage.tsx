@@ -105,6 +105,7 @@ function TaskRow({ item, returnTo, onRequested }: { item: TaskInboxItem; returnT
         {task.type === 'CONTRACT_MATCH' && recommended && <div className="mt-2 max-w-[230px]"><strong>{recommended.reference}</strong><span className="block text-[var(--text-secondary)]">Încredere: {recommended.confidence}</span><span className="mt-1 block text-[var(--text-muted)]">{recommended.reasons[0]}{(task.contractCandidates?.length ?? 0) > 1 ? ` · ${(task.contractCandidates?.length ?? 1) - 1} alternativă` : ''}</span></div>}
         {task.type === 'CLASSIFICATION' && <div className="mt-2 text-[var(--text-secondary)]"><strong className="text-[var(--text)]">{pendingItems}</strong> elemente incerte necesită revizuire.</div>}
         {task.type === 'MISSING_CONTRACT' && <div className="mt-2 text-[var(--text-secondary)]">Factura așteaptă o condiție externă.</div>}
+        {task.type === 'COMMERCIAL_REVIEW' && <div className="mt-2 text-[var(--text-secondary)]">Verifică findings, datele lipsă și excepțiile în tab-ul Contract.</div>}
       </td>
       <td className="px-4 py-4"><Badge tone={task.status === 'OPEN' ? 'warning' : task.status === 'WAITING' ? 'info' : 'success'}>{TASK_STATUS_LABELS[task.status]}</Badge></td>
       <td className="px-5 py-4 text-right">

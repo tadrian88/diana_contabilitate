@@ -8,6 +8,42 @@ import (
 	"fmt"
 )
 
+// The AccountFunc type is an adapter to allow the use of ordinary
+// function as Account mutator.
+type AccountFunc func(context.Context, *ent.AccountMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountMutation", m)
+}
+
+// The AccountMappingFunc type is an adapter to allow the use of ordinary
+// function as AccountMapping mutator.
+type AccountMappingFunc func(context.Context, *ent.AccountMappingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountMappingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountMappingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountMappingMutation", m)
+}
+
+// The AccountMappingVersionFunc type is an adapter to allow the use of ordinary
+// function as AccountMappingVersion mutator.
+type AccountMappingVersionFunc func(context.Context, *ent.AccountMappingVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountMappingVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountMappingVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountMappingVersionMutation", m)
+}
+
 // The AccountingClientFunc type is an adapter to allow the use of ordinary
 // function as AccountingClient mutator.
 type AccountingClientFunc func(context.Context, *ent.AccountingClientMutation) (ent.Value, error)

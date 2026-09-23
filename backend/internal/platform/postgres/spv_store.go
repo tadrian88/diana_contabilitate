@@ -227,6 +227,35 @@ func (s *Store) InstallSPVConnection(ctx context.Context, clientID, environment,
 	if err != nil {
 		return spv.Connection{}, err
 	}
+	existing, err := s.Client.SPVConnection.Query().Where(spvconnection.ClientIDEQ(client.ID)).Only(ctx)
+	if err == nil {
+		if string(existing.Environment) != environment {
+			return spv.Connection{}, apperrors.ErrValidation
+		}
+		update := s.Client.SPVConnection.UpdateOne(existing).
+			SetCif(client.Cui).
+			SetAccessTokenCiphertext(access).
+			SetRefreshTokenCiphertext(refresh).
+			SetAccessTokenExpiresAt(accessExpires).
+			SetStatus(spvconnection.StatusACTIVE).
+			SetConnectedAt(now).
+			SetUpdatedAt(now).
+			AddRevision(1).
+			ClearLastError()
+		if refreshExpires != nil {
+			update.SetRefreshTokenExpiresAt(*refreshExpires)
+		} else {
+			update.ClearRefreshTokenExpiresAt()
+		}
+		row, updateErr := update.Save(ctx)
+		if updateErr != nil {
+			return spv.Connection{}, updateErr
+		}
+		return spvConnectionDomain(row), nil
+	}
+	if !ent.IsNotFound(err) {
+		return spv.Connection{}, err
+	}
 	create := s.Client.SPVConnection.Create().SetID(stableID("spvconn", environment+":"+client.Cui)).SetClientID(client.ID).SetCif(client.Cui).SetEnvironment(spvconnection.Environment(environment)).SetAccessTokenCiphertext(access).SetRefreshTokenCiphertext(refresh).SetAccessTokenExpiresAt(accessExpires).SetStatus(spvconnection.StatusACTIVE).SetConnectedAt(now).SetCreatedAt(now).SetUpdatedAt(now)
 	if refreshExpires != nil {
 		create.SetRefreshTokenExpiresAt(*refreshExpires)
@@ -278,6 +307,22 @@ func (s *Store) MarkSyncFinished(ctx context.Context, id string, now time.Time, 
 func (s *Store) Discover(ctx context.Context, connection spv.Connection, message spv.Message, now time.Time) (spv.SourceDocument, bool, error) {
 	existing, err := s.Client.SPVSourceDocument.Query().Where(spvsourcedocument.ConnectionIDEQ(connection.ID), spvsourcedocument.ExternalMessageIDEQ(message.ID)).Only(ctx)
 	if err == nil {
+		// Older deliveries retained data_creare only as raw text because the
+		// client did not parse it. A later discovery may safely complete missing
+		// source metadata, but never overwrite an existing source timestamp.
+		if (existing.SourceCreatedRaw == nil && message.CreatedRaw != "") || (existing.SourceCreatedAt == nil && message.CreatedAt != nil) {
+			update := s.Client.SPVSourceDocument.UpdateOne(existing).SetUpdatedAt(now)
+			if existing.SourceCreatedRaw == nil && message.CreatedRaw != "" {
+				update.SetSourceCreatedRaw(message.CreatedRaw)
+			}
+			if existing.SourceCreatedAt == nil && message.CreatedAt != nil {
+				update.SetSourceCreatedAt(*message.CreatedAt)
+			}
+			existing, err = update.Save(ctx)
+			if err != nil {
+				return spv.SourceDocument{}, false, err
+			}
+		}
 		return spvDocumentDomain(existing), false, nil
 	}
 	if !ent.IsNotFound(err) {

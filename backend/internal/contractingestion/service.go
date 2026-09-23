@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"diana-contabilitate/backend/internal/apperrors"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/fiscalidentity"
 	"diana-contabilitate/backend/internal/money"
@@ -116,7 +118,7 @@ func (s *Service) File(ctx context.Context, clientID, id string, actor Actor) (S
 
 func (s *Service) Extract(ctx context.Context, documentID string) error {
 	if s.extractor == nil {
-		return fmt.Errorf("%w: extractor unavailable", ErrExtractionPermanent)
+		return extractionFailure(FailureExtractorConfiguration, RetryNever, ErrExtractionPermanent, 0)
 	}
 	attemptID := newID("contractextract")
 	_, run, err := s.store.BeginExtraction(ctx, documentID, attemptID, s.extractor.Provider(), s.extractor.Model(), s.clock())
@@ -127,7 +129,7 @@ func (s *Service) Extract(ctx context.Context, documentID string) error {
 	if err == nil {
 		sum := sha256.Sum256(source.Bytes)
 		if int64(len(source.Bytes)) != source.Document.SizeBytes || hex.EncodeToString(sum[:]) != source.Document.SHA256 {
-			err = ErrExtractionPermanent
+			err = extractionFailure(FailureSourceIntegrity, RetryNever, ErrExtractionPermanent, 0)
 		}
 	}
 	if err == nil {
@@ -138,107 +140,266 @@ func (s *Service) Extract(ctx context.Context, documentID string) error {
 			if err == nil {
 				return s.store.CompleteExtraction(ctx, documentID, attemptID, result, s.clock())
 			}
+			if errors.Is(err, ErrNoContractData) {
+				err = extractionFailure(FailureNoContractData, RetryNever, err, 0)
+			} else {
+				err = extractionFailure(FailureProposalValidationFailed, RetryOnce, err, 0)
+			}
 		}
 	}
-	category := "INVALID_OUTPUT"
-	if errors.Is(err, ErrExtractionTransient) {
-		category = "PROVIDER_TRANSIENT"
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		category = "TIMEOUT"
-	}
-	if errors.Is(err, context.Canceled) {
-		category = "INTERRUPTED"
-	}
+	err = normalizeExtractionFailure(err)
+	err = annotateExtractionFailure(err, s.extractor.Provider(), s.extractor.Model())
+	failure, _ := ExtractionFailureDetails(err)
 	failureContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if failErr := s.store.FailExtraction(failureContext, documentID, attemptID, category, s.clock()); failErr != nil {
-		return errors.Join(err, failErr)
+	if failErr := s.store.FailExtraction(failureContext, documentID, attemptID, failure.Category, s.clock()); failErr != nil {
+		persistenceFailure := extractionFailure(failure.Category, RetryStandard, errors.Join(err, failErr), failure.HTTPStatus)
+		persistenceFailure.Provider = failure.Provider
+		persistenceFailure.Model = failure.Model
+		return persistenceFailure
 	}
-	if errors.Is(err, ErrExtractionTransient) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	return err
+}
+
+func normalizeExtractionFailure(err error) error {
+	if _, ok := ExtractionFailureDetails(err); ok {
 		return err
 	}
-	return fmt.Errorf("%w: %s", ErrExtractionPermanent, category)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return extractionFailure(FailureTimeout, RetryStandard, context.DeadlineExceeded, 0)
+	}
+	if errors.Is(err, context.Canceled) {
+		return extractionFailure(FailureInterrupted, RetryStandard, context.Canceled, 0)
+	}
+	if errors.Is(err, ErrExtractionTransient) {
+		return extractionFailure(FailureProviderNetwork, RetryStandard, err, 0)
+	}
+	return extractionFailure(FailureProposalValidationFailed, RetryNever, err, 0)
 }
 
 func ValidateProposal(p Proposal) error {
-	hasContractData := false
-	for _, f := range []Field{p.SupplierName, p.SupplierCUI, p.Reference, p.EffectiveFrom, p.EffectiveTo, p.TotalValue, p.Currency, p.UnitType, p.PaymentTerms} {
-		if f.Status == "PRESENT" || f.Status == "AMBIGUOUS" {
-			hasContractData = true
+	type namedField struct {
+		path  string
+		field Field
+	}
+	topLevel := []namedField{
+		{"supplierName", p.SupplierName}, {"supplierCui", p.SupplierCUI}, {"reference", p.Reference},
+		{"effectiveFrom", p.EffectiveFrom}, {"effectiveTo", p.EffectiveTo}, {"totalValue", p.TotalValue},
+		{"currency", p.Currency}, {"unitType", p.UnitType}, {"paymentTerms", p.PaymentTerms},
+		{"buyerCui", p.BuyerCUI}, {"periodType", p.PeriodType},
+	}
+	allFields := append([]namedField(nil), topLevel...)
+	if p.DocumentRole.Status != "" || p.DocumentRole.Value != nil {
+		allFields = append(allFields, namedField{"documentRole", p.DocumentRole})
+	}
+	if p.RelatedReference.Status != "" || p.RelatedReference.Value != nil {
+		allFields = append(allFields, namedField{"relatedReference", p.RelatedReference})
+	}
+	for index, term := range p.ServiceTerms {
+		prefix := fmt.Sprintf("serviceTerms[%d].", index)
+		allFields = append(allFields,
+			namedField{prefix + "serviceDescription", term.ServiceDescription}, namedField{prefix + "pricingModel", term.PricingModel},
+			namedField{prefix + "unitPrice", term.UnitPrice}, namedField{prefix + "currency", term.Currency},
+			namedField{prefix + "unit", term.Unit}, namedField{prefix + "quantitySource", term.QuantitySource},
+			namedField{prefix + "quantityValue", term.QuantityValue}, namedField{prefix + "quantityDriver", term.QuantityDriver},
+			namedField{prefix + "billingFrequency", term.BillingFrequency},
+		)
+	}
+	ruleIDs := map[string]bool{}
+	for index, clause := range p.CommercialClauses {
+		prefix := fmt.Sprintf("commercialClauses[%d].", index)
+		allFields = append(allFields, namedField{prefix + "kind", clause.Kind}, namedField{prefix + "narrative", clause.Narrative})
+	}
+	hasAnySignal := len(p.ServiceTerms) > 0 || len(p.CommercialClauses) > 0
+	for _, item := range topLevel {
+		f := item.field
+		if f.Status != "" || f.Value != nil || f.Confidence != "" || f.Evidence.Page != nil || f.Evidence.Snippet != "" || len(f.Alternatives) > 0 {
+			hasAnySignal = true
+			break
 		}
 	}
-	if !hasContractData {
-		return apperrors.ErrValidation
+	if !hasAnySignal {
+		return ErrNoContractData
 	}
-	fields := []Field{p.SupplierName, p.SupplierCUI, p.Reference, p.EffectiveFrom, p.EffectiveTo, p.TotalValue, p.Currency, p.UnitType, p.PaymentTerms, p.BuyerCUI, p.PeriodType}
-	for _, term := range p.ServiceTerms {
-		fields = append(fields, term.ServiceDescription, term.PricingModel, term.UnitPrice, term.Currency, term.Unit, term.QuantitySource, term.QuantityValue, term.QuantityDriver, term.BillingFrequency)
-	}
-	for _, f := range fields {
+	for _, item := range allFields {
+		f := item.field
 		if f.Value != nil && len(*f.Value) > 4096 {
-			return apperrors.ErrValidation
+			return proposalValidationError("VALUE_TOO_LONG", item.path)
 		}
 		for _, alternative := range f.Alternatives {
 			if len(alternative) > 4096 {
-				return apperrors.ErrValidation
+				return proposalValidationError("VALUE_TOO_LONG", item.path+".alternatives")
 			}
 		}
 		if f.Status != "PRESENT" && f.Status != "MISSING" && f.Status != "AMBIGUOUS" {
-			return apperrors.ErrValidation
+			return proposalValidationError("INVALID_STATUS", item.path)
 		}
 		if f.Confidence != ConfidenceHigh && f.Confidence != ConfidenceMedium && f.Confidence != ConfidenceLow && f.Confidence != ConfidenceUnknown {
-			return apperrors.ErrValidation
+			return proposalValidationError("INVALID_CONFIDENCE", item.path)
 		}
 		if f.Evidence.Page != nil && *f.Evidence.Page < 1 {
-			return apperrors.ErrValidation
+			return proposalValidationError("INVALID_EVIDENCE_PAGE", item.path)
 		}
 		if f.Status == "MISSING" && f.Value != nil {
-			return apperrors.ErrValidation
+			return proposalValidationError("MISSING_WITH_VALUE", item.path)
 		}
-		if f.Status == "PRESENT" && (f.Value == nil || strings.TrimSpace(*f.Value) == "" || f.Evidence.Snippet == "") {
-			return apperrors.ErrValidation
+		if f.Status == "PRESENT" && (f.Value == nil || strings.TrimSpace(*f.Value) == "") {
+			return proposalValidationError("PRESENT_WITHOUT_VALUE", item.path)
+		}
+		if f.Status == "PRESENT" && strings.TrimSpace(f.Evidence.Snippet) == "" {
+			return proposalValidationError("PRESENT_WITHOUT_EVIDENCE", item.path)
 		}
 		if f.Status == "AMBIGUOUS" && len(f.Alternatives) < 2 {
-			return apperrors.ErrValidation
+			return proposalValidationError("AMBIGUOUS_WITH_TOO_FEW_ALTERNATIVES", item.path)
 		}
-		if len(f.Evidence.Snippet) > 2000 || len(f.Alternatives) > 10 {
-			return apperrors.ErrValidation
+		if len(f.Evidence.Snippet) > 2000 {
+			return proposalValidationError("EVIDENCE_TOO_LONG", item.path)
+		}
+		if len(f.Alternatives) > 10 {
+			return proposalValidationError("TOO_MANY_ALTERNATIVES", item.path)
 		}
 	}
-	for _, f := range []Field{p.EffectiveFrom, p.EffectiveTo} {
-		if f.Value != nil {
-			if _, err := time.Parse("2006-01-02", *f.Value); err != nil {
-				return apperrors.ErrValidation
+	hasContractData := false
+	for _, item := range allFields {
+		if item.field.Status == "PRESENT" || item.field.Status == "AMBIGUOUS" {
+			hasContractData = true
+			break
+		}
+	}
+	if !hasContractData {
+		return ErrNoContractData
+	}
+	for _, item := range []namedField{{"effectiveFrom", p.EffectiveFrom}, {"effectiveTo", p.EffectiveTo}} {
+		if item.field.Status == "PRESENT" && item.field.Value != nil {
+			if _, err := time.Parse("2006-01-02", *item.field.Value); err != nil {
+				return proposalValidationError("INVALID_DATE", item.path)
 			}
 		}
 	}
-	if p.SupplierCUI.Value != nil && !validCUI(*p.SupplierCUI.Value) {
-		return apperrors.ErrValidation
+	if p.SupplierCUI.Status == "PRESENT" && p.SupplierCUI.Value != nil && !validCUI(*p.SupplierCUI.Value) {
+		return proposalValidationError("INVALID_CUI", "supplierCui")
 	}
-	if p.Currency.Value != nil && !validCurrency(*p.Currency.Value) {
-		return apperrors.ErrValidation
+	if p.Currency.Status == "PRESENT" && p.Currency.Value != nil && !validCurrency(*p.Currency.Value) {
+		return proposalValidationError("INVALID_CURRENCY", "currency")
 	}
-	if p.TotalValue.Value != nil {
+	if p.TotalValue.Status == "PRESENT" && p.TotalValue.Value != nil {
 		if !validAmount(*p.TotalValue.Value) {
-			return apperrors.ErrValidation
+			return proposalValidationError("INVALID_AMOUNT", "totalValue")
 		}
 	}
-	if p.PeriodType.Value != nil && *p.PeriodType.Value != "FIXED_TERM" && *p.PeriodType.Value != "INDEFINITE_TERM" {
-		return apperrors.ErrValidation
+	if p.PeriodType.Status == "PRESENT" && p.PeriodType.Value != nil && *p.PeriodType.Value != "FIXED_TERM" && *p.PeriodType.Value != "INDEFINITE_TERM" {
+		return proposalValidationError("INVALID_CONTROLLED_VALUE", "periodType")
 	}
-	if p.PeriodType.Value != nil && *p.PeriodType.Value == "INDEFINITE_TERM" && p.EffectiveTo.Value != nil {
-		return apperrors.ErrValidation
+	if p.DocumentRole.Status == "PRESENT" && (p.DocumentRole.Value == nil || !member(*p.DocumentRole.Value, "BASE_CONTRACT", "ANNEX", "AMENDMENT", "SOW", "ORDER", "PRICE_LIST", "OTHER")) {
+		return proposalValidationError("INVALID_CONTROLLED_VALUE", "documentRole")
 	}
-	for _, term := range p.ServiceTerms {
-		if term.PricingModel.Value == nil || (*term.PricingModel.Value != "FIXED_FEE" && *term.PricingModel.Value != "UNIT_RATE" && *term.PricingModel.Value != "FIXED_TOTAL") {
-			return apperrors.ErrValidation
+	for index, term := range p.ServiceTerms {
+		prefix := fmt.Sprintf("serviceTerms[%d].", index)
+		if term.ServiceDescription.Status != "PRESENT" {
+			return proposalValidationError("SERVICE_DESCRIPTION_REQUIRED", prefix+"serviceDescription")
 		}
-		if term.UnitPrice.Value == nil || !validAmount(*term.UnitPrice.Value) || term.Currency.Value == nil || !validCurrency(*term.Currency.Value) {
-			return apperrors.ErrValidation
+		if term.PricingModel.Status == "PRESENT" && (term.PricingModel.Value == nil || (*term.PricingModel.Value != "FIXED_FEE" && *term.PricingModel.Value != "UNIT_RATE" && *term.PricingModel.Value != "FIXED_TOTAL")) {
+			return proposalValidationError("INVALID_CONTROLLED_VALUE", prefix+"pricingModel")
 		}
+		if term.UnitPrice.Status == "PRESENT" && (term.UnitPrice.Value == nil || !validAmount(*term.UnitPrice.Value)) {
+			return proposalValidationError("INVALID_AMOUNT", prefix+"unitPrice")
+		}
+		if term.Currency.Status == "PRESENT" && (term.Currency.Value == nil || !validCurrency(*term.Currency.Value)) {
+			return proposalValidationError("INVALID_CURRENCY", prefix+"currency")
+		}
+		if term.QuantityValue.Status == "PRESENT" && (term.QuantityValue.Value == nil || !validAmount(*term.QuantityValue.Value)) {
+			return proposalValidationError("INVALID_AMOUNT", prefix+"quantityValue")
+		}
+		if term.QuantitySource.Status == "PRESENT" && (term.QuantitySource.Value == nil || !member(*term.QuantitySource.Value, "CONTRACT_FIXED_QUANTITY", "INVOICE_REPORTED_QUANTITY", "USER_CONFIRMED_QUANTITY", "EXTERNAL_SOURCE_FUTURE", "UNKNOWN")) {
+			return proposalValidationError("INVALID_CONTROLLED_VALUE", prefix+"quantitySource")
+		}
+		if term.BillingFrequency.Status == "PRESENT" && (term.BillingFrequency.Value == nil || !member(*term.BillingFrequency.Value, "MONTHLY", "QUARTERLY", "ANNUAL", "PER_OCCURRENCE", "UNKNOWN")) {
+			return proposalValidationError("INVALID_CONTROLLED_VALUE", prefix+"billingFrequency")
+		}
+	}
+	for index, clause := range p.CommercialClauses {
+		prefix := fmt.Sprintf("commercialClauses[%d]", index)
+		if clause.Kind.Status != "PRESENT" || clause.Narrative.Status != "PRESENT" || len(clause.Rule) == 0 || strings.TrimSpace(clause.Evidence.Snippet) == "" {
+			return proposalValidationError("COMMERCIAL_CLAUSE_INCOMPLETE", prefix)
+		}
+		var rule commercialvalidation.Rule
+		decoder := json.NewDecoder(bytes.NewReader(clause.Rule))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&rule) != nil || decoder.Decode(new(any)) != io.EOF {
+			return proposalValidationError("COMMERCIAL_RULE_INVALID", prefix+".rule")
+		}
+		if clause.Kind.Status == "PRESENT" && clause.Kind.Value != nil && commercialvalidation.ValidRuleKind(commercialvalidation.RuleKind(*clause.Kind.Value)) && commercialvalidation.ValidRuleKind(rule.Kind) && rule.Kind != commercialvalidation.RuleKind(*clause.Kind.Value) {
+			return proposalValidationError("COMMERCIAL_RULE_KIND_CONFLICT", prefix+".rule.kind")
+		}
+		if err := commercialvalidation.ValidateRule(rule); err != nil && !(rule.Expression == nil && commercialRuleInvalidSuffix(rule) == ".expression") {
+			return proposalValidationError("COMMERCIAL_RULE_INVALID", prefix+".rule"+commercialRuleInvalidSuffix(rule))
+		}
+		if ruleIDs[rule.ID] {
+			return proposalValidationError("COMMERCIAL_RULE_DUPLICATE", prefix+".rule.id")
+		}
+		ruleIDs[rule.ID] = true
 	}
 	return nil
+}
+
+// A missing expression is reviewable evidence, never an executable rule.
+// Other invalid rule shapes are rejected by ValidateProposal.
+func PendingCommercialClauses(proposal Proposal) []ProposedCommercialClause {
+	var pending []ProposedCommercialClause
+	for _, clause := range proposal.CommercialClauses {
+		var rule commercialvalidation.Rule
+		if json.Unmarshal(clause.Rule, &rule) == nil && rule.Expression == nil && commercialvalidation.ValidateRule(rule) != nil {
+			pending = append(pending, clause)
+		}
+	}
+	return pending
+}
+
+// Only rules explicitly selected during human review become executable.
+func UnconfirmedCommercialClauses(proposal Proposal, selected []commercialvalidation.Rule) []ProposedCommercialClause {
+	confirmed := make(map[string]bool, len(selected))
+	for _, rule := range selected {
+		confirmed[rule.ID] = true
+	}
+	var pending []ProposedCommercialClause
+	for _, clause := range proposal.CommercialClauses {
+		var rule commercialvalidation.Rule
+		if json.Unmarshal(clause.Rule, &rule) != nil || !confirmed[rule.ID] {
+			pending = append(pending, clause)
+		}
+	}
+	return pending
+}
+
+// Keep diagnostics structural: neither the provider's rule values nor source
+// snippets should appear in command output or extraction failure logs.
+func commercialRuleInvalidSuffix(rule commercialvalidation.Rule) string {
+	if strings.TrimSpace(rule.ID) == "" {
+		return ".id"
+	}
+	if strings.TrimSpace(rule.Narrative) == "" {
+		return ".narrative"
+	}
+	if len(rule.Evidence) == 0 {
+		return ".evidence"
+	}
+	for _, evidence := range rule.Evidence {
+		if strings.TrimSpace(evidence.Snippet) == "" {
+			return ".evidence"
+		}
+	}
+	if !commercialvalidation.ValidRuleKind(rule.Kind) {
+		return ".kind"
+	}
+	if rule.DateBasis != "" && rule.DateBasis != commercialvalidation.DateInvoiceIssue &&
+		rule.DateBasis != commercialvalidation.DateServiceStart &&
+		rule.DateBasis != commercialvalidation.DateServiceEnd &&
+		rule.DateBasis != commercialvalidation.DateReceipt &&
+		rule.DateBasis != commercialvalidation.DateAcceptance &&
+		rule.DateBasis != commercialvalidation.DateAnniversary {
+		return ".dateBasis"
+	}
+	return ".expression"
 }
 
 func (s *Service) Retry(ctx context.Context, clientID, documentID string, revision uint64, actor Actor) error {
@@ -262,12 +423,31 @@ func (s *Service) Confirm(ctx context.Context, command ConfirmCommand) (string, 
 	// Evidence belongs to the immutable extraction proposal, never to editable
 	// browser input. User edits change values, not source provenance.
 	if doc.LatestAttempt != nil && doc.LatestAttempt.Proposal != nil {
+		command.Contract.PendingCommercialClauses = len(UnconfirmedCommercialClauses(*doc.LatestAttempt.Proposal, command.Contract.CommercialRules))
+		if command.Contract.PendingCommercialClauses > 0 {
+			command.Contract.Coverage = commercialvalidation.CoveragePartial
+		}
 		for index := range command.Contract.ServiceTerms {
 			if index < len(doc.LatestAttempt.Proposal.ServiceTerms) {
 				command.Contract.ServiceTerms[index].Evidence = doc.LatestAttempt.Proposal.ServiceTerms[index].ServiceDescription.Evidence
 			} else {
 				command.Contract.ServiceTerms[index].Evidence = Evidence{}
 			}
+		}
+		proposedRules := make(map[string]commercialvalidation.Rule, len(doc.LatestAttempt.Proposal.CommercialClauses))
+		for _, clause := range doc.LatestAttempt.Proposal.CommercialClauses {
+			var proposed commercialvalidation.Rule
+			if json.Unmarshal(clause.Rule, &proposed) == nil && proposed.ID != "" {
+				proposedRules[proposed.ID] = proposed
+			}
+		}
+		for index := range command.Contract.CommercialRules {
+			proposed, ok := proposedRules[command.Contract.CommercialRules[index].ID]
+			if !ok {
+				command.Contract.CommercialRules[index].Evidence = nil
+				continue
+			}
+			command.Contract.CommercialRules[index].Evidence = proposed.Evidence
 		}
 	}
 	readiness := ConfirmationReadinessFor(command.Contract, doc.ClientCUI)
@@ -286,6 +466,11 @@ func (s *Service) Confirm(ctx context.Context, command ConfirmCommand) (string, 
 	id, changed, err := s.store.ConfirmDocument(ctx, command, value, s.clock())
 	if err != nil {
 		return "", false, err
+	}
+	if activator, ok := s.store.(DossierActivator); ok {
+		if err = activator.ActivateConfirmedContract(ctx, command, id, s.clock()); err != nil {
+			return id, changed, err
+		}
 	}
 	if s.availability == nil {
 		return id, changed, fmt.Errorf("contract availability unavailable")
@@ -311,6 +496,43 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 	result := ConfirmationReadiness{Blockers: []ConfirmationBlocker{}}
 	add := func(code, message string) {
 		result.Blockers = append(result.Blockers, ConfirmationBlocker{Code: code, Message: message})
+	}
+	role := strings.TrimSpace(v.DocumentRole)
+	if role == "" {
+		role = "BASE_CONTRACT"
+	}
+	if !member(role, "BASE_CONTRACT", "ANNEX", "AMENDMENT", "SOW", "ORDER", "PRICE_LIST", "OTHER") {
+		add("DOCUMENT_ROLE_INVALID", "Rolul documentului contractual nu este valid.")
+	}
+	coverage := v.Coverage
+	if coverage == "" {
+		coverage = commercialvalidation.CoveragePartial
+	}
+	if coverage != commercialvalidation.CoverageComplete && coverage != commercialvalidation.CoveragePartial && coverage != commercialvalidation.CoverageConflicted {
+		add("COMMERCIAL_COVERAGE_INVALID", "Acoperirea comercială nu este validă.")
+	}
+	if role != "BASE_CONTRACT" {
+		if strings.TrimSpace(v.RelatedReference) == "" {
+			add("RELATED_REFERENCE_REQUIRED", "Documentul suplimentar trebuie legat explicit de contractul de bază.")
+		}
+		if clientCUI != "" && (strings.TrimSpace(v.BuyerCUI) == "" || !fiscalidentity.Same(v.BuyerCUI, clientCUI)) {
+			add("BUYER_MISMATCH", "CUI-ul cumpărătorului nu corespunde clientului selectat.")
+		}
+		if len(v.CommercialRules) == 0 && v.PendingCommercialClauses == 0 {
+			add("COMMERCIAL_RULE_REQUIRED", "Documentul suplimentar necesită cel puțin o regulă comercială identificată explicit; tarifele plate nu pot suprascrie implicit contractul de bază.")
+		}
+		ruleIDs := map[string]bool{}
+		for index, rule := range v.CommercialRules {
+			if err := commercialvalidation.ValidateRule(rule); err != nil {
+				add("COMMERCIAL_RULE_INVALID", fmt.Sprintf("Regula comercială %d nu este validă sau nu are dovadă completă.", index+1))
+			}
+			if ruleIDs[rule.ID] {
+				add("COMMERCIAL_RULE_DUPLICATE", fmt.Sprintf("Regula comercială %d repetă identitatea %s.", index+1, rule.ID))
+			}
+			ruleIDs[rule.ID] = true
+		}
+		result.CanConfirm = len(result.Blockers) == 0
+		return result
 	}
 	if strings.TrimSpace(v.SupplierName) == "" {
 		add("SUPPLIER_NAME_REQUIRED", "Denumirea furnizorului este obligatorie.")
@@ -355,6 +577,12 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 	if v.TotalValue != "" && !validAmount(v.TotalValue) {
 		add("TOTAL_VALUE_INVALID", "Valoarea contractuală totală nu este validă.")
 	}
+	if strings.TrimSpace(v.UnitType) == "" {
+		add("UNIT_TYPE_REQUIRED", "Tipul unității / baza comercială este obligatoriu.")
+	}
+	if strings.TrimSpace(v.PaymentTerms) == "" {
+		add("PAYMENT_TERMS_REQUIRED", "Termenii de plată sunt obligatorii.")
+	}
 	for index, term := range v.ServiceTerms {
 		prefix := fmt.Sprintf("Serviciul %d: ", index+1)
 		if strings.TrimSpace(term.ServiceDescription) == "" {
@@ -382,6 +610,28 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 			add("BILLING_FREQUENCY_INVALID", prefix+"periodicitatea nu este validă.")
 		}
 	}
+	if v.DocumentRole == "" {
+		v.DocumentRole = "BASE_CONTRACT"
+	}
+	if !member(v.DocumentRole, "BASE_CONTRACT", "ANNEX", "AMENDMENT", "SOW", "ORDER", "PRICE_LIST", "OTHER") {
+		add("DOCUMENT_ROLE_INVALID", "Rolul documentului contractual nu este valid.")
+	}
+	if v.Coverage == "" {
+		v.Coverage = "PARTIAL"
+	}
+	if v.Coverage != "COMPLETE" && v.Coverage != "PARTIAL" && v.Coverage != "CONFLICTED" {
+		add("COMMERCIAL_COVERAGE_INVALID", "Acoperirea comercială nu este validă.")
+	}
+	confirmedRuleIDs := map[string]bool{}
+	for index, rule := range v.CommercialRules {
+		if err := commercialvalidation.ValidateRule(rule); err != nil {
+			add("COMMERCIAL_RULE_INVALID", fmt.Sprintf("Regula comercială %d nu este validă sau nu are dovadă completă.", index+1))
+		}
+		if confirmedRuleIDs[rule.ID] {
+			add("COMMERCIAL_RULE_DUPLICATE", fmt.Sprintf("Regula comercială %d repetă identitatea %s.", index+1, rule.ID))
+		}
+		confirmedRuleIDs[rule.ID] = true
+	}
 	result.CanConfirm = len(result.Blockers) == 0
 	return result
 }
@@ -397,6 +647,12 @@ func member(value string, allowed ...string) bool {
 
 func validatedContract(c ConfirmCommand) (contracts.Contract, error) {
 	v := c.Contract
+	if v.DocumentRole != "" && v.DocumentRole != "BASE_CONTRACT" {
+		if !ConfirmationReadinessFor(v, "").CanConfirm {
+			return contracts.Contract{}, apperrors.ErrValidation
+		}
+		return contracts.Contract{ID: newID("supplemental"), ClientID: c.ClientID, Reference: strings.TrimSpace(v.RelatedReference)}, nil
+	}
 	for _, text := range []string{v.SupplierName, v.SupplierCUI, v.Reference, v.EffectiveFrom, v.EffectiveTo, v.TotalValue, v.Currency, v.UnitType, v.PaymentTerms} {
 		if len(text) > 4096 {
 			return contracts.Contract{}, apperrors.ErrValidation

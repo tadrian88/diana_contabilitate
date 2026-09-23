@@ -52,6 +52,10 @@ const (
 	FieldSource = "source"
 	// FieldRuleVersionID holds the string denoting the rule_version_id field in the database.
 	FieldRuleVersionID = "rule_version_id"
+	// FieldAccountMappingID holds the string denoting the account_mapping_id field in the database.
+	FieldAccountMappingID = "account_mapping_id"
+	// FieldAccountMappingVersion holds the string denoting the account_mapping_version field in the database.
+	FieldAccountMappingVersion = "account_mapping_version"
 	// FieldPolicyVersion holds the string denoting the policy_version field in the database.
 	FieldPolicyVersion = "policy_version"
 	// FieldReviewedByID holds the string denoting the reviewed_by_id field in the database.
@@ -128,6 +132,8 @@ var Columns = []string{
 	FieldReviewStatus,
 	FieldSource,
 	FieldRuleVersionID,
+	FieldAccountMappingID,
+	FieldAccountMappingVersion,
 	FieldPolicyVersion,
 	FieldReviewedByID,
 	FieldReviewedByDisplay,
@@ -224,9 +230,10 @@ type Source string
 
 // Source values.
 const (
-	SourceRULE      Source = "RULE"
-	SourceNO_MATCH  Source = "NO_MATCH"
-	SourceAMBIGUOUS Source = "AMBIGUOUS"
+	SourceRULE            Source = "RULE"
+	SourceNO_MATCH        Source = "NO_MATCH"
+	SourceAMBIGUOUS       Source = "AMBIGUOUS"
+	SourceLEARNED_MAPPING Source = "LEARNED_MAPPING"
 )
 
 func (s Source) String() string {
@@ -236,7 +243,7 @@ func (s Source) String() string {
 // SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
 func SourceValidator(s Source) error {
 	switch s {
-	case SourceRULE, SourceNO_MATCH, SourceAMBIGUOUS:
+	case SourceRULE, SourceNO_MATCH, SourceAMBIGUOUS, SourceLEARNED_MAPPING:
 		return nil
 	default:
 		return fmt.Errorf("lineclassification: invalid enum value for source field: %q", s)
@@ -329,6 +336,16 @@ func BySource(opts ...sql.OrderTermOption) OrderOption {
 // ByRuleVersionID orders the results by the rule_version_id field.
 func ByRuleVersionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRuleVersionID, opts...).ToFunc()
+}
+
+// ByAccountMappingID orders the results by the account_mapping_id field.
+func ByAccountMappingID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAccountMappingID, opts...).ToFunc()
+}
+
+// ByAccountMappingVersion orders the results by the account_mapping_version field.
+func ByAccountMappingVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAccountMappingVersion, opts...).ToFunc()
 }
 
 // ByPolicyVersion orders the results by the policy_version field.

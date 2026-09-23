@@ -79,6 +79,7 @@ npm run test:e2e:backend5
 npm run test:e2e:backend6
 npm run test:e2e:backend7
 npm run test:e2e:accounting-v2
+npm run test:e2e:account-learning
 npm run test:e2e:spv-connection
 npm run test:e2e:saga-export-ux
 npm run test:e2e:client-onboarding

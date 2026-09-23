@@ -126,7 +126,7 @@ func seed(ctx context.Context, store *postgres.Store) error {
 		return err
 	}
 	if err = seedClassificationFixtures(ctx, store, now); err != nil {
-		return err
+		return fmt.Errorf("seed classification fixtures: %w", err)
 	}
 	if err = seedModule6Fixtures(ctx, store, now); err != nil {
 		return err
@@ -135,7 +135,7 @@ func seed(ctx context.Context, store *postgres.Store) error {
 		return err
 	}
 	if err = seedAccountingV2Fixture(ctx, store, now); err != nil {
-		return err
+		return fmt.Errorf("seed accounting V2 fixture: %w", err)
 	}
 	if os.Getenv("SEED_CLIENT_ONBOARDING") == "true" {
 		if err = seedClientOnboarding(ctx, store, now); err != nil {
@@ -477,7 +477,7 @@ func seedClassificationFixtures(ctx context.Context, store *postgres.Store, now 
 	service := classificationdomain.NewService(store, classificationdomain.BaselinePolicy{}, func() time.Time { return now.Add(time.Hour) })
 	for invoiceIndex, fixture := range invoices {
 		issue := now.Add(time.Duration(invoiceIndex+1) * time.Hour)
-		if _, err := store.Client.Invoice.Create().SetID(fixture.id).SetClientID(fixture.clientID).SetSupplierName("Furnizor clasificare demonstrativ").SetSupplierCui("RO-CLASS-DEMO").SetNormalizedSupplierCui("RO-CLASS-DEMO").SetDocumentNumber(fmt.Sprintf("CLASS-%02d", invoiceIndex+1)).SetNormalizedDocumentNumber(fmt.Sprintf("CLASS-%02d", invoiceIndex+1)).SetIssueDate(issue).SetIssueDay(time.Date(issue.Year(), issue.Month(), issue.Day(), 0, 0, 0, 0, time.UTC)).SetTotalAmount("119.0000").SetCurrency("RON").SetSpvReference("SPV-" + fixture.id).SetIngestionSource("DEVELOPMENT_SEED").SetExternalDeliveryID("SPV-" + fixture.id).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetRevision(1).SetCreatedAt(issue).SetUpdatedAt(issue).Save(ctx); err != nil {
+		if _, err := store.Client.Invoice.Create().SetID(fixture.id).SetClientID(fixture.clientID).SetSupplierName("Furnizor clasificare demonstrativ").SetSupplierCui("RO-CLASS-DEMO").SetNormalizedSupplierCui("RO-CLASS-DEMO").SetDocumentNumber(fmt.Sprintf("CLASS-%02d", invoiceIndex+1)).SetNormalizedDocumentNumber(fmt.Sprintf("CLASS-%02d", invoiceIndex+1)).SetIssueDate(issue).SetIssueDay(time.Date(issue.Year(), issue.Month(), issue.Day(), 0, 0, 0, 0, time.UTC)).SetTotalAmount("119.0000").SetCurrency("RON").SetSpvReference("SPV-" + fixture.id).SetIngestionSource("DEVELOPMENT_SEED").SetExternalDeliveryID("SPV-" + fixture.id).SetPipelineStatus(invoice.PipelineStatusCOMMERCIALLY_VALIDATED).SetSagaStatus(invoice.SagaStatusNOT_READY).SetRevision(1).SetCreatedAt(issue).SetUpdatedAt(issue).Save(ctx); err != nil {
 			return err
 		}
 		for lineIndex, description := range fixture.descriptions {
@@ -694,13 +694,28 @@ func seedAccountingV2Fixture(ctx context.Context, store *postgres.Store, now tim
 	if _, err := store.Client.AccountingRulePack.Create().SetID(pack.ID).SetClientID(cid).SetVersion(1).SetPayload(pack).SetCreatedAt(now).Save(ctx); err != nil {
 		return err
 	}
-	if _, err := store.Client.Invoice.Create().SetID(id).SetClientID(cid).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber("TEST_ONLY-001").SetNormalizedDocumentNumber("TEST_ONLY-001").SetIssueDate(now).SetIssueDay(invoicing.InvoiceIssueDay(now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY_ACCOUNTING_V2").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+	if _, err := store.Client.Invoice.Create().SetID(id).SetClientID(cid).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber("TEST_ONLY-001").SetNormalizedDocumentNumber("TEST_ONLY-001").SetIssueDate(now).SetIssueDay(invoicing.InvoiceIssueDay(now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(id).SetIngestionSource("TEST_ONLY_ACCOUNTING_V2").SetExternalDeliveryID(id).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusCOMMERCIALLY_VALIDATED).SetSagaStatus(invoice.SagaStatusNOT_READY).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
 		return err
 	}
 	if _, err := store.Client.InvoiceLine.Create().SetID(id + "-line").SetInvoiceID(id).SetPosition(1).SetDescription("TEST_ONLY service").SetUnit("H87").SetQuantity("1").SetUnitPrice("100").SetNetValue("100").SetVatRate("21").SetVatValue("21").SetTotalValue("121").SetSourceFacts(l).Save(ctx); err != nil {
 		return err
 	}
-	_, _, err = classificationdomain.NewService(store, classificationdomain.DomainPolicy{AllowTestOnly: true}, func() time.Time { return now }).ProcessInvoice(ctx, classificationdomain.ProcessCommand{InvoiceID: id, ExpectedRevision: 1, CommandID: "TEST_ONLY:" + id})
+	learningLineFacts := *l
+	learningLineFacts.SellerItemID = "SERVICE-X"
+	for index, learningID := range []string{"inv-account-learning-i1", "inv-account-learning-i2"} {
+		issue := now.Add(time.Duration(index+1) * time.Minute)
+		if _, err := store.Client.Invoice.Create().SetID(learningID).SetClientID(cid).SetSupplierName("Supplier S").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetDocumentNumber(fmt.Sprintf("ACCOUNT-LEARNING-%d", index+1)).SetNormalizedDocumentNumber(fmt.Sprintf("ACCOUNT-LEARNING-%d", index+1)).SetIssueDate(issue).SetIssueDay(invoicing.InvoiceIssueDay(issue)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(learningID).SetIngestionSource("TEST_ONLY_ACCOUNT_LEARNING_E2E").SetExternalDeliveryID(learningID).SetModelVersion(accounting.ModelVersion).SetSourceFacts(f).SetPipelineStatus(invoice.PipelineStatusCOMMERCIALLY_VALIDATED).SetSagaStatus(invoice.SagaStatusNOT_READY).SetRevision(1).SetCreatedAt(issue).SetUpdatedAt(issue).Save(ctx); err != nil {
+			return err
+		}
+		if _, err := store.Client.InvoiceLine.Create().SetID(learningID + "-line").SetInvoiceID(learningID).SetPosition(1).SetDescription("Service X").SetUnit("H87").SetQuantity("1").SetUnitPrice("100").SetNetValue("100").SetVatRate("21").SetVatValue("21").SetTotalValue("121").SetSourceFacts(&learningLineFacts).Save(ctx); err != nil {
+			return err
+		}
+	}
+	service := classificationdomain.NewService(store, classificationdomain.DomainPolicy{AllowTestOnly: true}, func() time.Time { return now })
+	if _, _, err = service.ProcessInvoice(ctx, classificationdomain.ProcessCommand{InvoiceID: id, ExpectedRevision: 1, CommandID: "TEST_ONLY:" + id}); err != nil {
+		return err
+	}
+	_, _, err = service.ProcessInvoice(ctx, classificationdomain.ProcessCommand{InvoiceID: "inv-account-learning-i1", ExpectedRevision: 1, CommandID: "TEST_ONLY:inv-account-learning-i1"})
 	return err
 }
 

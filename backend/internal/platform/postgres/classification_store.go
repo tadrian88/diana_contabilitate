@@ -3,7 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"diana-contabilitate/backend/ent/account"
 	"diana-contabilitate/backend/ent/accountingrulepack"
+	"diana-contabilitate/backend/ent/accountmapping"
+	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountingdate"
@@ -54,6 +57,9 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 	if row.SupplierCui != nil {
 		input.SupplierID = *row.SupplierCui
 	}
+	if row.NormalizedSupplierCui != nil {
+		input.NormalizedSupplierID = *row.NormalizedSupplierCui
+	}
 	if row.ModelVersion == accounting.ModelVersion {
 		input.Snapshot = &accounting.Snapshot{}
 		profiles, err := tx.ClientAccountingProfile.Query().Where(clientaccountingprofile.ClientIDEQ(row.ClientID)).All(ctx)
@@ -94,6 +100,38 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 		} else if !ent.IsNotFound(err) {
 			return input, err
 		}
+	}
+	if input.NormalizedSupplierID != "" {
+		mappingRows, err := tx.AccountMapping.Query().Where(
+			accountmapping.ClientIDEQ(row.ClientID),
+			accountmapping.NormalizedSupplierIDEQ(input.NormalizedSupplierID),
+			accountmapping.StatusEQ(accountmapping.StatusACTIVE),
+		).All(ctx)
+		if err != nil {
+			return classificationdomain.InvoiceContext{}, err
+		}
+		for _, mappingRow := range mappingRows {
+			versionRow, err := tx.AccountMappingVersion.Query().Where(
+				accountmappingversion.MappingIDEQ(mappingRow.ID),
+				accountmappingversion.VersionEQ(mappingRow.CurrentVersion),
+			).Only(ctx)
+			if err != nil {
+				return classificationdomain.InvoiceContext{}, err
+			}
+			input.Mappings = append(input.Mappings, classificationdomain.MappingCandidate{MappingReference: classificationdomain.MappingReference{
+				MappingID: mappingRow.ID, Version: versionRow.Version, AccountCode: versionRow.AccountCode,
+				ServiceIdentityKind: string(mappingRow.ServiceIdentityKind), ServiceIdentityValue: mappingRow.ServiceIdentityValue,
+				NormalizerVersion: mappingRow.NormalizerVersion, Revision: mappingRow.Revision,
+			}, Status: string(mappingRow.Status)})
+		}
+	}
+	selectableAccountCodes, err := tx.Account.Query().Where(account.IsActiveEQ(true), account.PostableEQ(true)).Select(account.FieldCode).Strings(ctx)
+	if err != nil {
+		return classificationdomain.InvoiceContext{}, err
+	}
+	input.SelectableAccounts = make(map[string]bool, len(selectableAccountCodes))
+	for _, code := range selectableAccountCodes {
+		input.SelectableAccounts[code] = true
 	}
 	ruleRows, err := tx.ClassificationRule.Query().Where(classificationrule.Or(
 		classificationrule.ScopeEQ(classificationrule.ScopeGLOBAL),
@@ -140,7 +178,7 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 		invoiceUpdate.SetAccountingSnapshot(result.Snapshot)
 	}
 	classified, err := invoiceUpdate.
-		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusLINES_READ), invoice.RevisionEQ(command.ExpectedRevision)).
+		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), invoice.RevisionEQ(command.ExpectedRevision)).
 		SetPipelineStatus(invoice.PipelineStatusCLASSIFIED).AddRevision(1).SetUpdatedAt(now).Save(ctx)
 	if ent.IsNotFound(err) {
 		_ = tx.Rollback()
@@ -190,11 +228,25 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 		if proposal.Rule != nil {
 			create.SetRuleVersionID(proposal.Rule.RuleVersionID)
 		}
+		if proposal.Mapping != nil {
+			create.SetAccountMappingID(proposal.Mapping.MappingID).SetAccountMappingVersion(proposal.Mapping.Version)
+		}
 		if _, err = create.Save(ctx); err != nil {
 			return rollback(err)
 		}
+		if proposal.Dimension == classificationdomain.DimensionAccount && (proposal.Source == classificationdomain.SourceLearnedMapping || proposal.Source == classificationdomain.SourceAmbiguous) {
+			auditType := "ACCOUNT_MAPPING_SUGGESTION_PRODUCED"
+			detail := "An exact learned ACCOUNT mapping produced a reviewable proposal."
+			if proposal.Source == classificationdomain.SourceAmbiguous {
+				auditType = "ACCOUNT_MAPPING_CONFLICT_DETECTED"
+				detail = "Conflicting ACCOUNT evidence was detected; no account was selected automatically."
+			}
+			if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":account-mapping:" + proposal.InvoiceLineID, invoiceID: classified.ID, clientID: classified.ClientID, eventType: auditType, trigger: "CLASSIFICATION_DECISION", detail: detail, actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
+				return rollback(err)
+			}
+		}
 	}
-	if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":executed", invoiceID: classified.ID, clientID: classified.ClientID, eventType: "AUTOMATED_CLASSIFICATION_COMPLETED", from: string(invoice.PipelineStatusLINES_READ), to: string(invoice.PipelineStatusCLASSIFIED), trigger: "CLASSIFICATION_DECISION", detail: fmt.Sprintf("Classification policy %s produced %d line-dimension decisions; immutable rule-version evidence retained.", result.PolicyVersion, len(result.Proposals)), actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
+	if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":executed", invoiceID: classified.ID, clientID: classified.ClientID, eventType: "AUTOMATED_CLASSIFICATION_COMPLETED", from: string(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), to: string(invoice.PipelineStatusCLASSIFIED), trigger: "CLASSIFICATION_DECISION", detail: fmt.Sprintf("Classification policy %s produced %d line-dimension decisions; immutable rule-version evidence retained.", result.PolicyVersion, len(result.Proposals)), actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
 		return rollback(err)
 	}
 	readinessReason := ""
@@ -318,13 +370,21 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 		}
 		if command.TypedValue != nil {
 			typed = command.TypedValue
-			status = lineclassification.ReviewStatusCORRECTED
-			eventType = "CLASSIFICATION_CORRECTED"
+			if classificationRow.ProposedTypedValue != nil && command.TypedValue.Text() == classificationRow.ProposedTypedValue.Text() {
+				status = lineclassification.ReviewStatusACCEPTED
+				eventType = "CLASSIFICATION_PROPOSAL_ACCEPTED"
+			} else {
+				status = lineclassification.ReviewStatusCORRECTED
+				eventType = "CLASSIFICATION_CORRECTED"
+			}
 		}
 		if typed == nil || typed.Validate(string(classificationRow.Dimension)) != nil || strings.TrimSpace(command.Reason) == "" {
 			return rollback(apperrors.ErrValidation)
 		}
 		finalValue = typed.Text()
+	}
+	if err := applyAccountMappingAction(ctx, tx, command, invoiceRow, classificationRow, typed, now); err != nil {
+		return rollback(err)
 	}
 	classificationUpdate := tx.LineClassification.UpdateOneID(classificationRow.ID).
 		Where(lineclassification.ReviewStatusEQ(classificationRow.ReviewStatus), lineclassification.RevisionEQ(command.ExpectedClassificationRevision)).
@@ -345,14 +405,17 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 	reviewDetail := fmt.Sprintf("Human decision for line %s dimension %s; proposal policy=%s rule_version=%s.", classificationRow.InvoiceLineID, classificationRow.Dimension, classificationRow.PolicyVersion, pointerValue(classificationRow.RuleVersionID))
 	if classificationRow.ModelVersion == accounting.ModelVersion {
 		evidence, err := json.Marshal(struct {
-			Model     string               `json:"model"`
-			Dimension string               `json:"dimension"`
-			Previous  *accounting.Value    `json:"previous"`
-			Proposal  *accounting.Value    `json:"proposal"`
-			Final     *accounting.Value    `json:"final"`
-			Reason    string               `json:"reason"`
-			Evidence  *accounting.Evidence `json:"evidence"`
-		}{classificationRow.ModelVersion, string(classificationRow.Dimension), classificationRow.EffectiveTypedValue, classificationRow.ProposedTypedValue, typed, command.Reason, classificationRow.DecisionEvidence})
+			Model                 string               `json:"model"`
+			Dimension             string               `json:"dimension"`
+			Previous              *accounting.Value    `json:"previous"`
+			Proposal              *accounting.Value    `json:"proposal"`
+			Final                 *accounting.Value    `json:"final"`
+			Reason                string               `json:"reason"`
+			Evidence              *accounting.Evidence `json:"evidence"`
+			MappingAction         string               `json:"mappingAction,omitempty"`
+			AccountMappingID      *string              `json:"accountMappingId,omitempty"`
+			AccountMappingVersion *int                 `json:"accountMappingVersion,omitempty"`
+		}{classificationRow.ModelVersion, string(classificationRow.Dimension), classificationRow.EffectiveTypedValue, classificationRow.ProposedTypedValue, typed, command.Reason, classificationRow.DecisionEvidence, command.MappingAction, classificationRow.AccountMappingID, classificationRow.AccountMappingVersion})
 		if err != nil {
 			return rollback(err)
 		}
@@ -360,6 +423,11 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 	}
 	if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":decision", invoiceID: invoiceRow.ID, taskID: taskRow.ID, clientID: invoiceRow.ClientID, eventType: eventType, from: classificationRow.ProposedValue, to: finalValue, trigger: "CLASSIFICATION_REVIEW", detail: reviewDetail, actor: audit.ActorUser, actorID: command.ActorID, actorDisplay: command.ActorDisplay, correlationID: command.CorrelationID, at: now}); err != nil {
 		return rollback(err)
+	}
+	if mappingEvent := accountMappingAuditEvent(command.MappingAction); mappingEvent != "" {
+		if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":account-mapping-action", invoiceID: invoiceRow.ID, taskID: taskRow.ID, clientID: invoiceRow.ClientID, eventType: mappingEvent, from: proposedAccount(classificationRow), to: typed.Account, trigger: "CLASSIFICATION_REVIEW", detail: reviewDetail, actor: audit.ActorUser, actorID: command.ActorID, actorDisplay: command.ActorDisplay, correlationID: command.CorrelationID, at: now}); err != nil {
+			return rollback(err)
+		}
 	}
 	remaining, err := tx.LineClassification.Query().Where(lineclassification.InvoiceIDEQ(invoiceRow.ID), lineclassification.ReviewStatusEQ(lineclassification.ReviewStatusPENDING)).Count(ctx)
 	if err != nil {
@@ -420,6 +488,152 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 		return false, err
 	}
 	return true, nil
+}
+
+func accountMappingAuditEvent(action string) string {
+	switch action {
+	case "CREATE":
+		return "ACCOUNT_MAPPING_CREATED"
+	case "VALIDATE":
+		return "ACCOUNT_MAPPING_SUGGESTION_VALIDATED"
+	case "OCCURRENCE_ONLY":
+		return "ACCOUNT_MAPPING_OCCURRENCE_ONLY"
+	case "CORRECT":
+		return "ACCOUNT_MAPPING_CORRECTED"
+	case "POLICY_CHANGE":
+		return "ACCOUNT_MAPPING_POLICY_CHANGED"
+	default:
+		return ""
+	}
+}
+
+func proposedAccount(row *ent.LineClassification) string {
+	if row.ProposedTypedValue == nil {
+		return ""
+	}
+	return row.ProposedTypedValue.Account
+}
+
+func applyAccountMappingAction(ctx context.Context, tx *ent.Tx, command classificationdomain.ReviewCommand, invoiceRow *ent.Invoice, classificationRow *ent.LineClassification, typed *accounting.Value, now time.Time) error {
+	if classificationRow.Dimension != lineclassification.DimensionACCOUNT {
+		if command.MappingAction != "NONE" {
+			return apperrors.ErrValidation
+		}
+		return nil
+	}
+	if classificationRow.ModelVersion != accounting.ModelVersion {
+		return nil
+	}
+	if typed == nil || typed.Kind != "ACCOUNT" {
+		return apperrors.ErrValidation
+	}
+	if _, err := tx.Account.Query().Where(account.CodeEQ(typed.Account), account.IsActiveEQ(true), account.PostableEQ(true)).Only(ctx); ent.IsNotFound(err) {
+		return apperrors.ErrValidation
+	} else if err != nil {
+		return err
+	}
+
+	proposed := ""
+	if classificationRow.ProposedTypedValue != nil {
+		proposed = classificationRow.ProposedTypedValue.Account
+	}
+	changed := proposed != typed.Account
+	source := classificationdomain.Source(classificationRow.Source)
+	switch source {
+	case classificationdomain.SourceNoMatch:
+		if command.MappingAction != "CREATE" && command.MappingAction != "OCCURRENCE_ONLY" {
+			return apperrors.ErrValidation
+		}
+	case classificationdomain.SourceLearnedMapping:
+		if !changed && command.MappingAction != "VALIDATE" {
+			return apperrors.ErrValidation
+		}
+		if changed && command.MappingAction != "OCCURRENCE_ONLY" && command.MappingAction != "CORRECT" && command.MappingAction != "POLICY_CHANGE" {
+			return apperrors.ErrValidation
+		}
+	case classificationdomain.SourceAmbiguous:
+		if command.MappingAction != "OCCURRENCE_ONLY" && command.MappingAction != "CORRECT" && command.MappingAction != "POLICY_CHANGE" {
+			return apperrors.ErrValidation
+		}
+	default:
+		if command.MappingAction != "NONE" && command.MappingAction != "OCCURRENCE_ONLY" {
+			return apperrors.ErrValidation
+		}
+	}
+	if command.MappingAction == "NONE" || command.MappingAction == "VALIDATE" || command.MappingAction == "OCCURRENCE_ONLY" {
+		return nil
+	}
+
+	lineRow, err := tx.InvoiceLine.Query().Where(invoiceline.IDEQ(classificationRow.InvoiceLineID)).Only(ctx)
+	if err != nil {
+		return err
+	}
+	if invoiceRow.NormalizedSupplierCui == nil || strings.TrimSpace(*invoiceRow.NormalizedSupplierCui) == "" {
+		return apperrors.ErrValidation
+	}
+	if command.MappingAction == "CREATE" {
+		identity, ok := classificationdomain.PreferredServiceIdentity(classificationdomain.LineContext{SourceFacts: lineRow.SourceFacts, ID: lineRow.ID, Position: lineRow.Position, Description: lineRow.Description})
+		if !ok {
+			return apperrors.ErrValidation
+		}
+		mappingID := stableID("account-mapping", invoiceRow.ClientID+"\x00"+*invoiceRow.NormalizedSupplierCui+"\x00"+string(identity.Kind)+"\x00"+identity.Value+"\x00"+identity.NormalizerVersion)
+		_, err = tx.AccountMapping.Create().SetID(mappingID).SetClientID(invoiceRow.ClientID).SetNormalizedSupplierID(*invoiceRow.NormalizedSupplierCui).
+			SetServiceIdentityKind(accountmapping.ServiceIdentityKind(identity.Kind)).SetServiceIdentityValue(identity.Value).SetNormalizerVersion(identity.NormalizerVersion).
+			SetCurrentVersion(1).SetStatus(accountmapping.StatusACTIVE).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
+		if err != nil {
+			if ent.IsConstraintError(err) {
+				return apperrors.ErrConflict
+			}
+			return err
+		}
+		create := tx.AccountMappingVersion.Create().SetID(stableID("account-mapping-version", mappingID+":1")).SetMappingID(mappingID).SetVersion(1).
+			SetAccountCode(typed.Account).SetChangeKind(accountmappingversion.ChangeKindCREATION).SetSourceClassificationID(classificationRow.ID).
+			SetSourceInvoiceLineID(lineRow.ID).SetRawDescriptionSnapshot(lineRow.Description).SetActorDisplay(command.ActorDisplay).
+			SetReason(command.Reason).SetCreatedAt(now).SetCommandKey("account-mapping:" + command.CommandID)
+		if command.ActorID != "" {
+			create.SetActorID(command.ActorID)
+		}
+		_, err = create.Save(ctx)
+		return err
+	}
+
+	if classificationRow.AccountMappingID == nil || classificationRow.AccountMappingVersion == nil || command.ExpectedMappingRevision == 0 {
+		return apperrors.ErrValidation
+	}
+	mappingRow, err := tx.AccountMapping.Query().Where(accountmapping.IDEQ(*classificationRow.AccountMappingID), accountmapping.ClientIDEQ(invoiceRow.ClientID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return apperrors.ErrConflict
+	}
+	if err != nil {
+		return err
+	}
+	if mappingRow.Revision != command.ExpectedMappingRevision || mappingRow.CurrentVersion != *classificationRow.AccountMappingVersion {
+		return apperrors.ErrConflict
+	}
+	nextVersion := mappingRow.CurrentVersion + 1
+	updated, err := tx.AccountMapping.UpdateOneID(mappingRow.ID).Where(accountmapping.RevisionEQ(command.ExpectedMappingRevision), accountmapping.CurrentVersionEQ(mappingRow.CurrentVersion)).
+		SetCurrentVersion(nextVersion).AddRevision(1).SetUpdatedAt(now).Save(ctx)
+	if ent.IsNotFound(err) {
+		return apperrors.ErrConflict
+	}
+	if err != nil {
+		return err
+	}
+	if updated.CurrentVersion != nextVersion {
+		return apperrors.ErrConflict
+	}
+	changeKind := accountmappingversion.ChangeKindCORRECTION
+	if command.MappingAction == "POLICY_CHANGE" {
+		changeKind = accountmappingversion.ChangeKindPOLICY_CHANGE
+	}
+	create := tx.AccountMappingVersion.Create().SetID(stableID("account-mapping-version", mappingRow.ID+fmt.Sprintf(":%d", nextVersion))).SetMappingID(mappingRow.ID).SetVersion(nextVersion).
+		SetAccountCode(typed.Account).SetChangeKind(changeKind).SetSourceClassificationID(classificationRow.ID).SetSourceInvoiceLineID(lineRow.ID).
+		SetRawDescriptionSnapshot(lineRow.Description).SetActorDisplay(command.ActorDisplay).SetReason(command.Reason).SetCreatedAt(now).SetCommandKey("account-mapping:" + command.CommandID)
+	if command.ActorID != "" {
+		create.SetActorID(command.ActorID)
+	}
+	_, err = create.Save(ctx)
+	return err
 }
 
 func accountingDatePointer(value *time.Time) *accountingdate.Date {

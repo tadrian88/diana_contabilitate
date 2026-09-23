@@ -18,7 +18,7 @@ func (ValidationTask) Fields() []ent.Field {
 		field.String("client_id").Immutable(),
 		field.String("invoice_id").Immutable(),
 		field.String("contract_match_run_id").Optional().Nillable().Immutable(),
-		field.Enum("task_type").Values("CONTRACT_MATCH", "MISSING_CONTRACT", "CLASSIFICATION").Immutable(),
+		field.Enum("task_type").Values("CONTRACT_MATCH", "MISSING_CONTRACT", "COMMERCIAL_REVIEW", "CLASSIFICATION").Immutable(),
 		field.Enum("status").Values("OPEN", "WAITING", "RESOLVED").Default("OPEN"),
 		field.String("title").NotEmpty().Immutable(),
 		field.String("reason").NotEmpty().Immutable(),

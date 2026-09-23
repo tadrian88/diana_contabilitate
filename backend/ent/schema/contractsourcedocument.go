@@ -48,9 +48,9 @@ func (ContractSourceDocument) Edges() []ent.Edge {
 
 func (ContractSourceDocument) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("client_id", "sha256").Unique(),
+		// Non-discarded uniqueness is enforced by migration 000019.
 		index.Fields("client_id", "status"),
 		index.Fields("latest_extraction_id"),
-		index.Fields("confirmed_contract_id").Unique(),
+		index.Fields("confirmed_contract_id"),
 	}
 }

@@ -84,6 +84,10 @@ type ClassificationProcessor interface {
 	ProcessClassification(context.Context, string, uint64, string, string) error
 }
 
+type CommercialValidationProcessor interface {
+	ProcessCommercialValidation(context.Context, string, uint64, string, string) error
+}
+
 type Clock func() time.Time
 
 func NewPipelineService(store PipelineStore, exporter SagaExporter, clock Clock) *Service {
@@ -197,6 +201,17 @@ func (s *Service) ProcessContinuation(ctx context.Context, entry OutboxEntry) (C
 	case StatusHeaderRead:
 		command.To, command.Trigger = StatusLinesRead, TriggerLinesParsed
 	case StatusLinesRead:
+		command.To, command.Trigger = StatusCommercialValidating, TriggerCommercialValidationStarted
+	case StatusCommercialValidating:
+		if s.commercial == nil {
+			return ContinuationStale, nil
+		}
+		err = s.commercial.ProcessCommercialValidation(ctx, item.ID, item.Revision, entry.IdempotencyKey+":commercial-validation", correlationID)
+		if errors.Is(err, apperrors.ErrConflict) {
+			return ContinuationStale, nil
+		}
+		return ContinuationProcessed, err
+	case StatusCommerciallyValidated:
 		if s.classifier == nil {
 			return ContinuationStale, nil
 		}

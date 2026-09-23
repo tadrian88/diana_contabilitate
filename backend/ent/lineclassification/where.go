@@ -130,6 +130,16 @@ func RuleVersionID(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldEQ(FieldRuleVersionID, v))
 }
 
+// AccountMappingID applies equality check predicate on the "account_mapping_id" field. It's identical to AccountMappingIDEQ.
+func AccountMappingID(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldAccountMappingID, v))
+}
+
+// AccountMappingVersion applies equality check predicate on the "account_mapping_version" field. It's identical to AccountMappingVersionEQ.
+func AccountMappingVersion(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldAccountMappingVersion, v))
+}
+
 // PolicyVersion applies equality check predicate on the "policy_version" field. It's identical to PolicyVersionEQ.
 func PolicyVersion(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldEQ(FieldPolicyVersion, v))
@@ -1048,6 +1058,131 @@ func RuleVersionIDEqualFold(v string) predicate.LineClassification {
 // RuleVersionIDContainsFold applies the ContainsFold predicate on the "rule_version_id" field.
 func RuleVersionIDContainsFold(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldContainsFold(FieldRuleVersionID, v))
+}
+
+// AccountMappingIDEQ applies the EQ predicate on the "account_mapping_id" field.
+func AccountMappingIDEQ(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDNEQ applies the NEQ predicate on the "account_mapping_id" field.
+func AccountMappingIDNEQ(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNEQ(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDIn applies the In predicate on the "account_mapping_id" field.
+func AccountMappingIDIn(vs ...string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIn(FieldAccountMappingID, vs...))
+}
+
+// AccountMappingIDNotIn applies the NotIn predicate on the "account_mapping_id" field.
+func AccountMappingIDNotIn(vs ...string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotIn(FieldAccountMappingID, vs...))
+}
+
+// AccountMappingIDGT applies the GT predicate on the "account_mapping_id" field.
+func AccountMappingIDGT(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGT(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDGTE applies the GTE predicate on the "account_mapping_id" field.
+func AccountMappingIDGTE(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGTE(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDLT applies the LT predicate on the "account_mapping_id" field.
+func AccountMappingIDLT(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLT(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDLTE applies the LTE predicate on the "account_mapping_id" field.
+func AccountMappingIDLTE(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLTE(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDContains applies the Contains predicate on the "account_mapping_id" field.
+func AccountMappingIDContains(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldContains(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDHasPrefix applies the HasPrefix predicate on the "account_mapping_id" field.
+func AccountMappingIDHasPrefix(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldHasPrefix(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDHasSuffix applies the HasSuffix predicate on the "account_mapping_id" field.
+func AccountMappingIDHasSuffix(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldHasSuffix(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDIsNil applies the IsNil predicate on the "account_mapping_id" field.
+func AccountMappingIDIsNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIsNull(FieldAccountMappingID))
+}
+
+// AccountMappingIDNotNil applies the NotNil predicate on the "account_mapping_id" field.
+func AccountMappingIDNotNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotNull(FieldAccountMappingID))
+}
+
+// AccountMappingIDEqualFold applies the EqualFold predicate on the "account_mapping_id" field.
+func AccountMappingIDEqualFold(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEqualFold(FieldAccountMappingID, v))
+}
+
+// AccountMappingIDContainsFold applies the ContainsFold predicate on the "account_mapping_id" field.
+func AccountMappingIDContainsFold(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldContainsFold(FieldAccountMappingID, v))
+}
+
+// AccountMappingVersionEQ applies the EQ predicate on the "account_mapping_version" field.
+func AccountMappingVersionEQ(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldAccountMappingVersion, v))
+}
+
+// AccountMappingVersionNEQ applies the NEQ predicate on the "account_mapping_version" field.
+func AccountMappingVersionNEQ(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNEQ(FieldAccountMappingVersion, v))
+}
+
+// AccountMappingVersionIn applies the In predicate on the "account_mapping_version" field.
+func AccountMappingVersionIn(vs ...int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIn(FieldAccountMappingVersion, vs...))
+}
+
+// AccountMappingVersionNotIn applies the NotIn predicate on the "account_mapping_version" field.
+func AccountMappingVersionNotIn(vs ...int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotIn(FieldAccountMappingVersion, vs...))
+}
+
+// AccountMappingVersionGT applies the GT predicate on the "account_mapping_version" field.
+func AccountMappingVersionGT(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGT(FieldAccountMappingVersion, v))
+}
+
+// AccountMappingVersionGTE applies the GTE predicate on the "account_mapping_version" field.
+func AccountMappingVersionGTE(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGTE(FieldAccountMappingVersion, v))
+}
+
+// AccountMappingVersionLT applies the LT predicate on the "account_mapping_version" field.
+func AccountMappingVersionLT(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLT(FieldAccountMappingVersion, v))
+}
+
+// AccountMappingVersionLTE applies the LTE predicate on the "account_mapping_version" field.
+func AccountMappingVersionLTE(v int) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLTE(FieldAccountMappingVersion, v))
+}
+
+// AccountMappingVersionIsNil applies the IsNil predicate on the "account_mapping_version" field.
+func AccountMappingVersionIsNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIsNull(FieldAccountMappingVersion))
+}
+
+// AccountMappingVersionNotNil applies the NotNil predicate on the "account_mapping_version" field.
+func AccountMappingVersionNotNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotNull(FieldAccountMappingVersion))
 }
 
 // PolicyVersionEQ applies the EQ predicate on the "policy_version" field.

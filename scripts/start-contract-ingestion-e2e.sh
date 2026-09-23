@@ -26,11 +26,11 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 0' INT TERM
 
-GOCACHE=/private/tmp/diana-go-cache WORKER_HTTP_ADDRESS=127.0.0.1:8091 go run ./cmd/worker &
+GOCACHE=/private/tmp/diana-go-cache WORKER_HTTP_ADDRESS=127.0.0.1:8191 go run ./cmd/worker &
 worker_pid=$!
-until curl --fail --silent http://127.0.0.1:8091/readyz >/dev/null 2>&1; do
+until curl --fail --silent http://127.0.0.1:8191/readyz >/dev/null 2>&1; do
   kill -0 "$worker_pid" 2>/dev/null || exit 1
   sleep 1
 done
 
-GOCACHE=/private/tmp/diana-go-cache HTTP_ADDRESS=127.0.0.1:8090 PIPELINE_DISPATCH_ENABLED=true go run ./cmd/api
+GOCACHE=/private/tmp/diana-go-cache HTTP_ADDRESS=127.0.0.1:8190 PIPELINE_DISPATCH_ENABLED=true go run ./cmd/api

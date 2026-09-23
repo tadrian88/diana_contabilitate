@@ -45,7 +45,9 @@ Configuration: GEMINI_API_KEY (backend secret only), GEMINI_CONTRACT_MODEL, GEMI
 
 ## EXTRACTION SCHEMA / FIELD MATRIX
 
-Schema `CONTRACT_EXTRACTION_V1`; prompt `CONTRACT_EXTRACTION_PROMPT_V1`. Each field has nullable value, PRESENT/MISSING/AMBIGUOUS status, AI-declared HIGH/MEDIUM/LOW/UNKNOWN confidence, optional 1-based page + snippet, and alternatives. There is no invented calibrated confidence score and no persisted chain-of-thought.
+Schema `CONTRACT_EXTRACTION_V4`; prompt `CONTRACT_EXTRACTION_PROMPT_V4_2`. V4 păstrează câmpurile legacy și adaugă rol/referință părinte, clauze narative cu pagină/citat și reguli comerciale într-un AST închis. Each field has nullable value, PRESENT/MISSING/AMBIGUOUS status, AI-declared HIGH/MEDIUM/LOW/UNKNOWN confidence, optional 1-based page + snippet, and alternatives. The provider schema constrains the stable field shape, statuses and confidence; the application validator enforces controlled commercial values, AST operations and cross-property PRESENT/MISSING/AMBIGUOUS invariants. Incomplete service pricing remains reviewable and activates coverage PARTIAL. Failures persist only a safe category; provider payloads and document content are never logged. There is no invented calibrated confidence score and no persisted chain-of-thought. See `CONTRACT_COMMERCIAL_VALIDATION.md` for multi-document consolidation and invoice validation.
+
+If the first response contains otherwise valid commercial clauses without an expression, the same ingestion attempt makes one compact normalization request. It sends only the extracted clause envelopes, never the PDF, and asks for a closed expression AST or `null`. Unknown IDs, duplicate IDs, unknown properties and invalid ASTs are ignored. A provider failure degrades to narrative `PARTIAL` review instead of failing the document. Even a structurally valid AST is an AI proposal: it remains excluded from executable snapshots until the reviewer confirms that individual rule in the UI. Both calls are part of the one-time ingestion token accounting; invoice validation never invokes them again.
 
 | Field | AI extracts? | Required for Contract? | Normalization | Deterministic validation | Evidence | User edits? |
 |---|---|---|---|---|---|---|
@@ -64,14 +66,14 @@ Supplier matching continues to use the frozen `invoicing.NormalizeBusinessIdenti
 
 ## Hallucination guards / evidence
 
-Document text is untrusted data, never instructions. Prompt forbids invented parties, reference, dates, value/currency, inferred default terms, external lookup or matching. Missing fields are null; ambiguities expose alternatives. Strict JSON schema + decoder rejects unknown/malformed fields, invalid enums, contradictory MISSING/non-null values, invalid money/currency/date proposals and trailing output. PRESENT requires value + evidence snippet. Prompt injection fixture and transport tests verify the application boundary; deterministic fake tests are not proof that a live model is immune to injection. Human review remains mandatory. Provider evidence itself is not independently verified/calibrated by the application.
+Document text is untrusted data, never instructions. Prompt forbids invented parties, reference, dates, value/currency, inferred default terms, external lookup or matching. Missing fields are null; ambiguities expose alternatives. Strict JSON schema + decoder rejects unknown/malformed fields, invalid enums, contradictory MISSING/non-null values and trailing output; the service performs the single authoritative semantic validation for evidence, money, currency, CUI and dates. PRESENT requires value + evidence snippet. Prompt injection fixture and transport tests verify the application boundary; deterministic fake tests are not proof that a live model is immune to injection. Human review remains mandatory. Provider evidence itself is not independently verified/calibrated by the application.
 
 ## Lifecycle / failure model
 
 UPLOADED → EXTRACTING → READY_FOR_REVIEW or EXTRACTION_FAILED → CONFIRMED after explicit human command.
 Re-extraction from failed/ready state returns UPLOADED with incremented revision and a new event; attempts remain in history. Confirmed documents cannot be re-extracted. Extraction success/confirmed states are no-op on redelivery. Revision CAS protects extraction claims. Active lease returns retryable busy; expired STARTED attempt becomes FAILED/LEASE_EXPIRED before a replacement attempt starts.
 
-429/5xx/transport failures are retryable; timeout persistence uses a bounded cancellation-independent context. Invalid output/auth/provider rejection is permanent with generic category, never provider body in UI/logs. Asynq retries are bounded by existing runtime settings. A worker crash relies on queued redelivery/lease recovery; exhausted queue archives and operational remediation remain visible through the existing worker system. No fake progress or silent manual fallback.
+429/5xx/transport failures are retryable; timeout persistence uses a bounded cancellation-independent context. Invalid envelope/JSON/proposal output receives at most one automatic retry, whose request adds a generic strict-schema reminder without replaying the rejected output. Authentication, provider rejection and no-contract-data failures skip automatic retry. Asynq retries are bounded by existing runtime settings. A worker crash relies on queued redelivery/lease recovery; exhausted queue archives and operational remediation remain visible through the existing worker system. No fake progress or silent manual fallback.
 
 ## Review / authoritative confirmation / Contract creation
 
@@ -93,7 +95,7 @@ Additive migration `backend/migrations/000012_contract_ingestion_ai.sql`; prior 
 
 Safe business events cover upload, extraction start/success/failure, final human confirmation and frozen availability/resume. Full source and exact proposal/final values remain in authorized provenance storage, not duplicated in generic activity snapshots. Actor grant is required at domain and scoped HTTP boundaries; injected RequestActor is preserved. Existing demo AllClients fallback remains demo-only, NOT production authentication/RBAC. Private backend bytea is not a new at-rest encryption claim; production backup/encryption/access policies still apply.
 
-Counters for document uploads, extraction completion/failure/duration and confirmation, plus existing outbox statistics. Worker trace/log metadata is IDs, correlation/job/attempt/duration only. Extraction counters count worker invocations including retries/no-op deliveries, not billing-grade unique-document analytics. No PDFs, snippets, commercial snapshots or API keys in new logs.
+Counters for document uploads, extraction completion/failure/duration and confirmation, plus existing outbox statistics. Worker trace/log metadata is limited to identifiers, correlation/job/attempt/duration, safe failure category, provider/model/status and whitelisted semantic validation code/path. The code/path never contains the rejected value. Extraction counters count worker invocations including retries/no-op deliveries, not billing-grade unique-document analytics. No PDFs, snippets, commercial snapshots, raw provider diagnostics or API keys appear in new logs.
 
 ## Tests implemented / checks actually executed
 

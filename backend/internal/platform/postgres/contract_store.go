@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -49,7 +50,7 @@ func (s *Store) ListContracts(ctx context.Context, filter contracts.Filter) ([]c
 }
 
 func (s *Store) GetContract(ctx context.Context, id string) (*contracts.Contract, error) {
-	row, err := s.Client.Contract.Query().Where(contract.IDEQ(id), contract.LifecycleStateEQ(contract.LifecycleStateACTIVE)).WithServiceTerms(func(q *ent.ContractServiceTermQuery) { q.Order(ent.Asc(contractserviceterm.FieldPosition)) }).Only(ctx)
+	row, err := s.Client.Contract.Query().Where(contract.IDEQ(id)).WithServiceTerms(func(q *ent.ContractServiceTermQuery) { q.Order(ent.Asc(contractserviceterm.FieldPosition)) }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return nil, apperrors.ErrNotFound
 	}
@@ -57,6 +58,44 @@ func (s *Store) GetContract(ctx context.Context, id string) (*contracts.Contract
 		return nil, fmt.Errorf("get contract: %w", err)
 	}
 	return contractDomain(row)
+}
+
+func (s *Store) ArchiveContract(ctx context.Context, id string, revision uint64, actorID, actorDisplay string, now time.Time) (bool, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var clientID, reference, state string
+	var currentRevision uint64
+	err = tx.QueryRowContext(ctx, `SELECT client_id,reference,lifecycle_state,revision FROM contracts WHERE id=$1 FOR UPDATE`, id).Scan(&clientID, &reference, &state, &currentRevision)
+	if err == sql.ErrNoRows {
+		return false, apperrors.ErrNotFound
+	}
+	if err != nil {
+		return false, err
+	}
+	if state == "ARCHIVED" {
+		return false, nil
+	}
+	if currentRevision != revision {
+		return false, apperrors.ErrConflict
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE contracts SET lifecycle_state='ARCHIVED',revision=revision+1,updated_at=$2 WHERE id=$1`, id, now); err != nil {
+		return false, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE contract_dossiers SET status='ARCHIVED',revision=revision+1,updated_at=$2 WHERE contract_id=$1 AND status<>'ARCHIVED'`, id, now); err != nil {
+		return false, err
+	}
+	key := "contract-archived:" + id
+	if _, err = tx.ExecContext(ctx, `INSERT INTO activity_events(id,client_id,aggregate_type,aggregate_id,event_type,occurred_at,actor_kind,actor_id,actor_display,automatic,detail,before_snapshot,after_snapshot,trigger,idempotency_key)
+		VALUES($1,$2,'CONTRACT',$3,'CONTRACT_ARCHIVED',$4,'USER',$5,$6,false,$7,'{"lifecycleState":"ACTIVE"}'::jsonb,'{"lifecycleState":"ARCHIVED"}'::jsonb,'USER_ARCHIVE',$8)`, stableID("evt", key), clientID, id, now, actorID, actorDisplay, "Contractul "+reference+" a fost scos din utilizare; istoricul a fost păstrat.", key); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) ListContractInvoices(ctx context.Context, contractID string) ([]contracts.AssociatedInvoice, error) {
@@ -691,7 +730,7 @@ func contractDomain(row *ent.Contract) (*contracts.Contract, error) {
 		EffectiveFrom: row.EffectiveFrom, EffectiveTo: row.EffectiveTo, PeriodType: string(row.PeriodType),
 		Value: money.Money{Amount: value, Currency: row.Currency}, UnitType: row.UnitType, PaymentTerms: row.PaymentTerms,
 		HasLegacyTotalValue: row.HasLegacyTotalValue,
-		SourceReference:     row.SourceReference, SourceMetadata: row.SourceMetadata, Revision: row.Revision,
+		SourceReference:     row.SourceReference, SourceMetadata: row.SourceMetadata, Revision: row.Revision, LifecycleState: string(row.LifecycleState),
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 	for _, serviceRow := range row.Edges.ServiceTerms {

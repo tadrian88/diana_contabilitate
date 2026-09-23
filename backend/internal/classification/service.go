@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"diana-contabilitate/backend/internal/accounting"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/apperrors"
 )
 
@@ -15,6 +16,14 @@ type Store interface {
 	LoadClassificationInput(context.Context, string) (InvoiceContext, error)
 	ApplyClassification(context.Context, ProcessCommand, Result, time.Time) (bool, error)
 	ReviewClassification(context.Context, ReviewCommand, time.Time) (bool, error)
+}
+
+func (s *Service) SearchAccounts(ctx context.Context, query string, limit int) ([]accounts.Account, error) {
+	store, ok := s.store.(accounts.Store)
+	if !ok {
+		return nil, fmt.Errorf("account catalog unavailable")
+	}
+	return accounts.NewService(store).Search(ctx, query, limit)
 }
 
 type Clock func() time.Time
@@ -47,7 +56,7 @@ func (s *Service) ProcessInvoice(ctx context.Context, command ProcessCommand) (R
 	if err != nil {
 		return Result{}, false, err
 	}
-	if input.PipelineStatus != "LINES_READ" || input.Revision != command.ExpectedRevision {
+	if input.PipelineStatus != "COMMERCIALLY_VALIDATED" || input.Revision != command.ExpectedRevision {
 		return Result{}, false, apperrors.ErrConflict
 	}
 	policy := s.policy
@@ -64,6 +73,7 @@ func (s *Service) ProcessInvoice(ctx context.Context, command ProcessCommand) (R
 	if err != nil {
 		return Result{}, false, err
 	}
+	result = applyLearnedAccountMappings(input, result)
 	if err = validateResult(input, result, policy.Version()); err != nil {
 		return Result{}, false, err
 	}
@@ -87,7 +97,85 @@ func (s *Service) Review(ctx context.Context, command ReviewCommand) (bool, erro
 		}
 		command.CorrectedValue = &value
 	}
+	if command.MappingAction == "" {
+		command.MappingAction = "NONE"
+	}
+	switch command.MappingAction {
+	case "NONE", "CREATE", "VALIDATE", "OCCURRENCE_ONLY", "CORRECT", "POLICY_CHANGE":
+	default:
+		return false, apperrors.ErrValidation
+	}
+	if command.MappingAction == "POLICY_CHANGE" && strings.TrimSpace(command.Reason) == "" {
+		return false, apperrors.ErrValidation
+	}
 	return s.store.ReviewClassification(ctx, command, s.clock())
+}
+
+func applyLearnedAccountMappings(input InvoiceContext, result Result) Result {
+	lines := make(map[string]LineContext, len(input.Lines))
+	for _, line := range input.Lines {
+		lines[line.ID] = line
+	}
+	for i := range result.Proposals {
+		proposal := &result.Proposals[i]
+		if proposal.Dimension != DimensionAccount {
+			continue
+		}
+		line, ok := lines[proposal.InvoiceLineID]
+		if !ok {
+			continue
+		}
+		matches := make([]MappingCandidate, 0, 3)
+		accounts := map[string]bool{}
+		for _, identity := range serviceIdentities(line) {
+			for _, candidate := range input.Mappings {
+				// A mapping is historical evidence, not a permanent guarantee that its
+				// current account remains selectable. PostgreSQL supplies the active,
+				// postable catalogue in the same read snapshot used for mapping lookup.
+				if input.SelectableAccounts != nil && !input.SelectableAccounts[candidate.AccountCode] {
+					continue
+				}
+				if candidate.Status == "ACTIVE" && candidate.ServiceIdentityKind == string(identity.Kind) && candidate.ServiceIdentityValue == identity.Value && candidate.NormalizerVersion == identity.NormalizerVersion {
+					matches = append(matches, candidate)
+					accounts[candidate.AccountCode] = true
+				}
+			}
+		}
+		if len(matches) == 0 {
+			continue
+		}
+		if len(accounts) > 1 {
+			proposal.TypedValue = nil
+			proposal.ProposedValue = "Necesită decizie"
+			proposal.RequiresReview = true
+			proposal.Source = SourceAmbiguous
+			proposal.Mapping = nil
+			proposal.Confidence = "Identități exacte contradictorii"
+			proposal.Explanation = "Identitățile exacte disponibile indică mapări active către conturi diferite; Diana nu a ales arbitrar."
+			continue
+		}
+		matched := matches[0]
+		learned := accounting.Value{Kind: "ACCOUNT", Account: matched.AccountCode}
+		if proposal.Source == SourceRule && proposal.TypedValue != nil && proposal.TypedValue.Kind == "ACCOUNT" && proposal.TypedValue.Account != matched.AccountCode {
+			proposal.TypedValue = nil
+			proposal.ProposedValue = "Necesită decizie"
+			proposal.RequiresReview = true
+			proposal.Source = SourceAmbiguous
+			proposal.Mapping = &matched.MappingReference
+			proposal.Confidence = "Conflict între regulă și maparea confirmată"
+			proposal.Explanation = "Regula deterministă și maparea confirmată propun conturi diferite; este necesară decizia contabilului."
+			continue
+		}
+		proposal.TypedValue = &learned
+		proposal.ProposedValue = matched.AccountCode
+		proposal.RequiresReview = true
+		proposal.Source = SourceLearnedMapping
+		proposal.Mapping = &matched.MappingReference
+		proposal.Confidence = "Mapare contabilă confirmată anterior"
+		proposal.Explanation = fmt.Sprintf("Maparea confirmată de contabil, versiunea %d, pentru aceeași identitate exactă propune contul %s.", matched.Version, matched.AccountCode)
+		proposal.LegalBasis = "Confirmare contabilă anterioară; aplicabilitatea curentă necesită validare umană."
+	}
+	return result
 }
 
 func validateResult(input InvoiceContext, result Result, version string) error {
@@ -119,7 +207,7 @@ func validateResult(input InvoiceContext, result Result, version string) error {
 		for _, dimension := range dimensions {
 			validDimension = validDimension || proposal.Dimension == dimension
 		}
-		if !validDimension || (proposal.Source == SourceRule) != (proposal.Rule != nil) {
+		if !validDimension || (proposal.Source == SourceRule && proposal.Rule == nil) || (proposal.Source == SourceLearnedMapping && proposal.Mapping == nil) {
 			return fmt.Errorf("%w: evidence", ErrInvalidPolicyResult)
 		}
 	}

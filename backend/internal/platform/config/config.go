@@ -57,13 +57,16 @@ type Config struct {
 	ContractMaxPDFBytes       int64
 	ContractExtractionTimeout time.Duration
 	ContractExtractorMode     string
+	AccountingAnalysisEnabled bool
+	AccountingAnalysisModel   string
+	AccountingAnalysisTimeout time.Duration
 	AuthSessionTTL            time.Duration
 	AuthLoginLimit            int
 	AuthLoginWindow           time.Duration
 }
 
 func Load() (Config, error) {
-	for _, name := range []string{"PIPELINE_DISPATCH_ENABLED", "OTEL_ENABLED", "SPV_ENABLED"} {
+	for _, name := range []string{"PIPELINE_DISPATCH_ENABLED", "OTEL_ENABLED", "SPV_ENABLED", "ACCOUNTING_ANALYSIS_ENABLED"} {
 		if raw := os.Getenv(name); raw != "" {
 			if _, err := strconv.ParseBool(raw); err != nil {
 				return Config{}, fmt.Errorf("%s has invalid syntax", name)
@@ -77,7 +80,7 @@ func Load() (Config, error) {
 			}
 		}
 	}
-	for _, name := range []string{"WORKER_JOB_TIMEOUT", "OUTBOX_POLL_INTERVAL", "OUTBOX_CLAIM_TTL", "OUTBOX_RETRY_MIN", "OUTBOX_RETRY_MAX", "SHUTDOWN_TIMEOUT", "DATABASE_CONN_MAX_LIFETIME", "SPV_OAUTH_STATE_TTL", "SPV_SYNC_INTERVAL", "SPV_INITIAL_WINDOW", "SPV_OVERLAP_WINDOW", "SPV_DOCUMENT_CLAIM_TTL", "SPV_MIN_CALL_INTERVAL", "CONTRACT_EXTRACTION_TIMEOUT", "AUTH_SESSION_TTL", "AUTH_LOGIN_WINDOW"} {
+	for _, name := range []string{"WORKER_JOB_TIMEOUT", "OUTBOX_POLL_INTERVAL", "OUTBOX_CLAIM_TTL", "OUTBOX_RETRY_MIN", "OUTBOX_RETRY_MAX", "SHUTDOWN_TIMEOUT", "DATABASE_CONN_MAX_LIFETIME", "SPV_OAUTH_STATE_TTL", "SPV_SYNC_INTERVAL", "SPV_INITIAL_WINDOW", "SPV_OVERLAP_WINDOW", "SPV_DOCUMENT_CLAIM_TTL", "SPV_MIN_CALL_INTERVAL", "CONTRACT_EXTRACTION_TIMEOUT", "ACCOUNTING_ANALYSIS_TIMEOUT", "AUTH_SESSION_TTL", "AUTH_LOGIN_WINDOW"} {
 		if raw := os.Getenv(name); raw != "" {
 			if _, err := time.ParseDuration(raw); err != nil {
 				return Config{}, fmt.Errorf("%s has invalid syntax", name)
@@ -131,6 +134,9 @@ func Load() (Config, error) {
 		ContractMaxPDFBytes:       int64(envInt("CONTRACT_MAX_PDF_BYTES", 20<<20)),
 		ContractExtractionTimeout: envDuration("CONTRACT_EXTRACTION_TIMEOUT", 90*time.Second),
 		ContractExtractorMode:     envOr("CONTRACT_EXTRACTOR_MODE", "gemini"),
+		AccountingAnalysisEnabled: envBool("ACCOUNTING_ANALYSIS_ENABLED", false),
+		AccountingAnalysisModel:   envOr("GEMINI_ACCOUNTING_MODEL", envOr("GEMINI_CONTRACT_MODEL", "gemini-3.8-flash")),
+		AccountingAnalysisTimeout: envDuration("ACCOUNTING_ANALYSIS_TIMEOUT", 90*time.Second),
 		AuthSessionTTL:            envDuration("AUTH_SESSION_TTL", 12*time.Hour),
 		AuthLoginLimit:            envInt("AUTH_LOGIN_LIMIT", 5),
 		AuthLoginWindow:           envDuration("AUTH_LOGIN_WINDOW", 15*time.Minute),
@@ -203,6 +209,12 @@ func Load() (Config, error) {
 	}
 	if cfg.ContractMaxPDFBytes < 1 || cfg.ContractExtractionTimeout <= 0 || cfg.GeminiModel == "" {
 		return Config{}, fmt.Errorf("contract extraction configuration is invalid")
+	}
+	if cfg.AccountingAnalysisEnabled && (cfg.AccountingAnalysisModel == "" || cfg.AccountingAnalysisTimeout <= 0 || cfg.GeminiAPIKey == "") {
+		return Config{}, fmt.Errorf("enabled accounting analysis configuration is invalid")
+	}
+	if cfg.AccountingAnalysisEnabled && cfg.Environment != "development" && cfg.Environment != "test" && cfg.Environment != "local-real" {
+		return Config{}, fmt.Errorf("accounting analysis is local-only until legislation is verified")
 	}
 	if cfg.ContractExtractorMode != "gemini" && cfg.ContractExtractorMode != "fake-fixtures" {
 		return Config{}, fmt.Errorf("invalid contract extractor mode")

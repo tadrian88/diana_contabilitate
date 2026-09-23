@@ -28,6 +28,7 @@ type Contract struct {
 	SourceDocumentID      *string
 	ExtractionAttemptID   *string
 	Revision              uint64
+	LifecycleState        string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 	ServiceTerms          []ServiceTerm
@@ -153,5 +154,6 @@ type ResumeSummary struct {
 }
 
 var ErrExpiredContractSemantics = errors.New("expired contract semantics require a product decision")
+var ErrContractInUse = errors.New("contract has historical use")
 var ErrStaleMatchResult = errors.New("stale match result")
 var ErrInvalidMatchDecision = errors.New("invalid match decision")

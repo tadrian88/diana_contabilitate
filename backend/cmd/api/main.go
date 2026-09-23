@@ -10,9 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"diana-contabilitate/backend/internal/accountinganalysis"
 	"diana-contabilitate/backend/internal/authentication"
 	"diana-contabilitate/backend/internal/classification"
 	"diana-contabilitate/backend/internal/clients"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/invoicing"
@@ -63,6 +65,8 @@ func main() {
 	}
 	pipelineService := invoicing.NewPipelineService(store, sagaExporter, nil)
 	pipelineService.SetContractMatchingProcessor(contractService)
+	commercialService := commercialvalidation.NewService(store, nil)
+	pipelineService.SetCommercialValidationProcessor(commercialService)
 	pipelineService.SetClassificationProcessor(classificationService)
 	redisOptions, err := asynq.ParseRedisURI(cfg.RedisURL)
 	if err != nil {
@@ -91,7 +95,12 @@ func main() {
 	spvClient := spv.NewHTTPClient(nil, cfg.SPVAPIBaseURL, cfg.SPVTokenURL).WithMinimumCallInterval(cfg.SPVMinimumCallInterval)
 	spvManager := spv.NewConnectionManager(store, spvClient, tokenCipher, workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.WorkerJobTimeout), spv.ConnectionManagerConfig{Environment: cfg.SPVEnvironment, AuthorizeURL: cfg.SPVAuthorizeURL, OAuthClientID: cfg.SPVOAuthClientID, OAuthClientSecret: cfg.SPVOAuthClientSecret, RedirectURI: cfg.SPVOAuthRedirectURI, FrontendBaseURL: cfg.FrontendBaseURL, StateTTL: cfg.SPVOAuthStateTTL, Enabled: cfg.SPVEnabled})
 	sagaHandoff := saga.NewHandoffService(store, nil)
-	handler := httpserver.NewWithContractIngestion(clients.NewService(store), pipelineService, validationtasks.NewService(store, nil), contractService, classificationService, rules.NewService(store, nil), spvManager, sagaHandoff, contractIngestion, readiness, logger, metrics)
+	var analysisService *accountinganalysis.WorkflowService
+	if cfg.AccountingAnalysisEnabled {
+		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout})
+		analysisService = accountinganalysis.NewWorkflowService(store, workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.WorkerJobTimeout), analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+	}
+	handler := httpserver.NewWithAccountingAnalysis(clients.NewService(store), pipelineService, validationtasks.NewService(store, nil), contractService, classificationService, rules.NewService(store, nil), spvManager, sagaHandoff, contractIngestion, commercialService, analysisService, readiness, logger, metrics)
 	authHTTP := authentication.NewHTTP(authentication.SQLStore{DB: store.DB}, redisClient, authentication.Config{
 		SecureCookies: cfg.Environment == "cloud-test" || cfg.Environment == "production",
 		SessionTTL:    cfg.AuthSessionTTL, FrontendURL: cfg.FrontendBaseURL,

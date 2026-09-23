@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from './fixtures/authenticated'
+import { approveDemoCommercialExceptions } from './support/commercial-review'
 
 async function expectEventuallyExported(page: Page) {
   await expect(page.getByText('Exportată în SAGA', { exact: true }).first()).toBeVisible({ timeout: 15_000 })
@@ -25,6 +26,7 @@ async function acceptAllClassificationProposals(page: Page) {
 
 test('A. asynchronous worker happy path reaches EXPORTED', async ({ page }) => {
   await page.goto('/invoices/inv-module7-happy')
+  await approveDemoCommercialExceptions(page)
   await expectEventuallyExported(page)
   await page.reload()
   await expectEventuallyExported(page)
@@ -40,6 +42,7 @@ test('B. multiple contract match stops for a human decision', async ({ page }) =
 test('C. human contract confirmation commits synchronously and worker resumes', async ({ page }) => {
   await page.goto('/invoices/inv-module7-match-block?tab=contract')
   await confirmRecommendedContract(page)
+  await approveDemoCommercialExceptions(page)
   await expectEventuallyExported(page)
   await page.reload()
   await expectEventuallyExported(page)
@@ -47,6 +50,8 @@ test('C. human contract confirmation commits synchronously and worker resumes', 
 
 test('D. uncertain classification stops the worker at AWAITING_REVIEW', async ({ page }) => {
   await page.goto('/invoices/inv-module7-classification-block?tab=classification')
+  await approveDemoCommercialExceptions(page)
+  await page.getByRole('tab', { name: 'Clasificare' }).click()
   await expect(page.getByText('Așteaptă revizuirea').first()).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('button', { name: 'Acceptă propunerea' })).not.toHaveCount(0)
 })
@@ -89,6 +94,7 @@ test('I. frontend reload does not interrupt background progression', async ({ pa
   await page.goto('/invoices/inv-module7-reload?tab=contract')
   await expect(page.getByText('Așteaptă confirmare').first()).toBeVisible({ timeout: 15_000 })
   await confirmRecommendedContract(page)
+  await approveDemoCommercialExceptions(page)
   await page.reload()
   await expectEventuallyExported(page)
 })

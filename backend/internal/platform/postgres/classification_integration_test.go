@@ -124,7 +124,7 @@ func (tc *module5TestContext) baselineRules(t *testing.T) {
 func (tc *module5TestContext) createInvoice(t *testing.T, suffix string, descriptions ...string) string {
 	t.Helper()
 	id := fmt.Sprintf("m5-invoice-%d-%s", classificationTestSequence.Load(), suffix)
-	if _, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("Demo supplier").SetSupplierCui("RO-M5-SUPPLIER").SetNormalizedSupplierCui("RO-M5-SUPPLIER").SetDocumentNumber("INV-" + suffix).SetNormalizedDocumentNumber("INV-" + suffix).SetIssueDate(tc.now).SetIssueDay(time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)).SetTotalAmount("119.0000").SetCurrency("RON").SetSpvReference("SPV-" + id).SetIngestionSource("TEST").SetExternalDeliveryID("DELIVERY-" + id).SetPipelineStatus(invoice.PipelineStatusLINES_READ).SetSagaStatus(invoice.SagaStatusNOT_READY).SetRevision(1).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("Demo supplier").SetSupplierCui("RO-M5-SUPPLIER").SetNormalizedSupplierCui("RO-M5-SUPPLIER").SetDocumentNumber("INV-" + suffix).SetNormalizedDocumentNumber("INV-" + suffix).SetIssueDate(tc.now).SetIssueDay(time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)).SetTotalAmount("119.0000").SetCurrency("RON").SetSpvReference("SPV-" + id).SetIngestionSource("TEST").SetExternalDeliveryID("DELIVERY-" + id).SetPipelineStatus(invoice.PipelineStatusCOMMERCIALLY_VALIDATED).SetSagaStatus(invoice.SagaStatusNOT_READY).SetRevision(1).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	for index, description := range descriptions {
@@ -198,11 +198,11 @@ func TestPipelineOutboxDispatchInvokesClassificationProcessor(t *testing.T) {
 	classifier := classification.NewService(tc.classificationStore(), classification.BaselinePolicy{}, func() time.Time { return tc.now.Add(time.Minute) })
 	pipeline := invoicing.NewPipelineService(scopedPipelineStore{Store: tc.store, aggregateID: invoiceID}, invoicing.NewFakeSagaExporter(), func() time.Time { return tc.now.Add(time.Minute) })
 	pipeline.SetClassificationProcessor(classifier)
-	if count, err := pipeline.DispatchPending(tc.ctx, 1); err != nil || count != 1 {
-		t.Fatalf("lines dispatch count=%d err=%v", count, err)
-	}
-	if count, err := pipeline.DispatchPending(tc.ctx, 1); err != nil || count != 1 {
-		t.Fatalf("classification dispatch count=%d err=%v", count, err)
+	pipeline.SetCommercialValidationProcessor(conformingCommercialProcessor{store: tc.store, clock: func() time.Time { return tc.now.Add(time.Minute) }})
+	for step := 0; step < 4; step++ {
+		if count, err := pipeline.DispatchPending(tc.ctx, 1); err != nil || count != 1 {
+			t.Fatalf("dispatch step=%d count=%d err=%v", step, count, err)
+		}
 	}
 	item, _ := tc.store.GetInvoice(tc.ctx, invoiceID)
 	if item.PipelineStatus != invoicing.StatusReadyForSAGA {

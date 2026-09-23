@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"diana-contabilitate/backend/internal/accounting"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/apperrors"
 	classificationdomain "diana-contabilitate/backend/internal/classification"
 	"diana-contabilitate/backend/internal/clients"
@@ -75,6 +77,25 @@ func (s *contractStore) GetContract(_ context.Context, id string) (*contractdoma
 	}
 	return nil, apperrors.ErrNotFound
 }
+func (s *contractStore) ArchiveContract(_ context.Context, id string, revision uint64, _, _ string, _ time.Time) (bool, error) {
+	for index := range s.items {
+		if s.items[index].ID == id {
+			if s.items[index].LifecycleState == "ARCHIVED" {
+				return false, nil
+			}
+			if s.items[index].Revision != revision {
+				return false, apperrors.ErrConflict
+			}
+			s.items[index].LifecycleState = "ARCHIVED"
+			s.items[index].Revision++
+			return true, nil
+		}
+	}
+	return false, apperrors.ErrNotFound
+}
+func (s *contractStore) DeleteMistakenContract(ctx context.Context, id string, revision uint64, actorID, actorDisplay string, now time.Time) (bool, error) {
+	return s.ArchiveContract(ctx, id, revision, actorID, actorDisplay, now)
+}
 func (s *contractStore) ListContractInvoices(context.Context, string) ([]contractdomain.AssociatedInvoice, error) {
 	return s.invoices, nil
 }
@@ -125,6 +146,44 @@ func testHandlerWithContracts(invoice *invoicing.Invoice, store *contractStore) 
 		clients.NewService(clientReader{}), invoicing.NewService(invoiceReader{item: invoice}), nil,
 		contractdomain.NewService(store, nil, func() time.Time { return time.Date(2026, time.September, 15, 12, 0, 0, 0, time.UTC) }), nil, nil, readyStub{}, logger,
 	), requestactor.Actor{ID: "test-accountant", Display: "Test", Persona: "CONTABIL", AllClients: true})
+}
+
+func TestArchiveContractRequiresRevisionAndPreservesHistoricalRead(t *testing.T) {
+	store := &contractStore{items: []contractdomain.Contract{{ID: "contract-1", ClientID: "client-1", Reference: "CTR-1", Revision: 1, LifecycleState: "ACTIVE"}}}
+	handler := testHandlerWithContracts(nil, store)
+	request := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/contracts/contract-1/archive", strings.NewReader(body)))
+		return recorder
+	}
+	if response := request(`{"expectedRevision":2}`); response.Code != http.StatusConflict {
+		t.Fatalf("stale revision status=%d", response.Code)
+	}
+	if response := request(`{"expectedRevision":1}`); response.Code != http.StatusOK {
+		t.Fatalf("archive status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response := request(`{"expectedRevision":1}`); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"changed":false`) {
+		t.Fatalf("idempotent archive status=%d body=%s", response.Code, response.Body.String())
+	}
+	if store.items[0].LifecycleState != "ARCHIVED" || store.items[0].Revision != 2 {
+		t.Fatalf("contract state=%+v", store.items[0])
+	}
+}
+
+func TestDiscardMistakenContractEndpointRequiresRevision(t *testing.T) {
+	store := &contractStore{items: []contractdomain.Contract{{ID: "mistaken", ClientID: "client-1", Reference: "WRONG", Revision: 1, LifecycleState: "ACTIVE"}}}
+	handler := testHandlerWithContracts(nil, store)
+	for _, tc := range []struct {
+		body string
+		want int
+	}{{`{}`, http.StatusBadRequest}, {`{"expectedRevision":2}`, http.StatusConflict}, {`{"expectedRevision":1}`, http.StatusOK}} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/contracts/mistaken/discard", strings.NewReader(tc.body)))
+		if recorder.Code != tc.want {
+			t.Fatalf("body=%s status=%d want=%d", tc.body, recorder.Code, tc.want)
+		}
+	}
 }
 
 type validationTaskStore struct {
@@ -338,6 +397,19 @@ type module5HTTPStore struct {
 	reviewErr       error
 	reviewKeys      map[string]bool
 	reviewMutations int
+	accounts        []accounts.Account
+}
+
+func (s *module5HTTPStore) SearchAccounts(_ context.Context, query string, limit int) ([]accounts.Account, error) {
+	return s.accounts, nil
+}
+func (s *module5HTTPStore) GetSelectableAccount(_ context.Context, code string) (accounts.Account, error) {
+	for _, item := range s.accounts {
+		if item.Code == code && item.Active && item.Postable {
+			return item, nil
+		}
+	}
+	return accounts.Account{}, apperrors.ErrNotFound
 }
 
 func (s *module5HTTPStore) ListRules(context.Context, rules.Filter) ([]rules.Rule, error) {
@@ -461,6 +533,26 @@ func TestClassificationDecisionEndpointPassesAllRevisions(t *testing.T) {
 	testHandlerWithModule5(store).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || store.reviewMutations != 1 {
 		t.Fatalf("replay status=%d mutations=%d body=%s", response.Code, store.reviewMutations, response.Body.String())
+	}
+}
+
+func TestAccountSearchAndMappingDecisionDTO(t *testing.T) {
+	now := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	decision := classificationdomain.Decision{ID: "classification-1", InvoiceLineID: "line-1", LineLabel: "Linia 1", Dimension: classificationdomain.DimensionAccount, ProposedValue: "6281", ProposedTypedValue: &accounting.Value{Kind: "ACCOUNT", Account: "6281"}, Confidence: "Mapare", Explanation: "Confirmată anterior", LegalBasis: "Validare umană", Status: classificationdomain.ReviewPending, Source: classificationdomain.SourceLearnedMapping, Revision: 1, Mapping: &classificationdomain.MappingReference{MappingID: "mapping-internal", Version: 2, Revision: 4, AccountCode: "6281"}}
+	item := &invoicing.Invoice{ID: "invoice-1", ClientID: "client-alfa", SupplierName: "Generic", DocumentNumber: "INV", IssueDate: now, Total: money.Money{Amount: money.MustParse("119"), Currency: "RON"}, SPVReference: "SPV", PipelineStatus: invoicing.StatusAwaitingReview, SagaStatus: invoicing.SagaNotReady, Revision: 3, CreatedAt: now, UpdatedAt: now, Lines: []invoicing.Line{{ID: "line-1", Position: 1, Description: "Generic service", Unit: "buc", VATRate: money.MustParse("19"), VATValue: money.MustParse("19"), Quantity: money.MustParse("1"), UnitPrice: money.MustParse("100"), NetValue: money.MustParse("100"), TotalValue: money.MustParse("119"), Classifications: []classificationdomain.Decision{decision}}}, ActiveTask: &validationtasks.Task{ID: "task-1", Type: validationtasks.TypeClassification, Status: validationtasks.StatusOpen, Revision: 1, CreatedAt: now, UpdatedAt: now, ClassificationItems: []classificationdomain.Decision{decision}}}
+	store := &module5HTTPStore{invoice: item, accounts: []accounts.Account{{Code: "6281", Name: "Cheltuieli cu serviciile IT", AccountType: "expense", Postable: true, Active: true}}}
+	handler := testHandlerWithModule5(store)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/accounts?q=servicii", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"code":"6281"`) || strings.Contains(response.Body.String(), "mapping-internal") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/invoices/invoice-1/classification-decisions", strings.NewReader(`{"taskId":"task-1","classificationId":"classification-1","expectedInvoiceRevision":3,"expectedTaskRevision":1,"expectedClassificationRevision":1,"typedValue":{"kind":"ACCOUNT","account":"6262"},"reason":"Corecție explicită","mappingAction":"CORRECT","expectedMappingRevision":4}`))
+	request.Header.Set("Idempotency-Key", "mapping-correction")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || store.reviewCommand.MappingAction != "CORRECT" || store.reviewCommand.ExpectedMappingRevision != 4 || store.reviewCommand.TypedValue.Account != "6262" {
+		t.Fatalf("status=%d body=%s command=%+v", response.Code, response.Body.String(), store.reviewCommand)
 	}
 }
 

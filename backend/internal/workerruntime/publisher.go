@@ -53,6 +53,20 @@ func NewAsynqPublisher(client *asynq.Client, queue string, maxRetry int, timeout
 	return &AsynqPublisher{client: client, queue: queue, maxRetry: maxRetry, timeout: timeout}
 }
 
+func (p *AsynqPublisher) PublishAccountingAnalysis(ctx context.Context, runID string) error {
+	payload, err := json.Marshal(struct {
+		RunID string `json:"runId"`
+	}{RunID: runID})
+	if err != nil {
+		return err
+	}
+	_, err = p.client.EnqueueContext(ctx, asynq.NewTask(AccountingAnalysisTask, payload), asynq.Queue(p.queue), asynq.MaxRetry(p.maxRetry), asynq.Timeout(p.timeout), asynq.Unique(time.Minute))
+	if errors.Is(err, asynq.ErrDuplicateTask) {
+		return nil
+	}
+	return err
+}
+
 func (p *AsynqPublisher) Publish(ctx context.Context, job Job) (string, error) {
 	payload, err := json.Marshal(job)
 	if err != nil {

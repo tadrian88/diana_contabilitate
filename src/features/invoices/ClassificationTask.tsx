@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Check, Edit3, Scale, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Badge } from '../../components/ui/badge'
@@ -9,6 +9,8 @@ import { Button } from '../../components/ui/button'
 import { CLASSIFICATION_DIMENSION_LABELS } from '../../domain/invoice'
 import type { ClassificationReviewItem, Invoice } from '../../domain/invoice'
 import { DomainCorrectionDialog } from './DomainCorrectionDialog'
+import { AccountDecisionDialog } from './AccountDecisionDialog'
+import { useInvoiceRepository } from '../../app/repository-context'
 import { displayDomainValue } from './domain-decision-view'
 import { useReviewClassification } from './invoice-mutations'
 
@@ -20,6 +22,7 @@ export function ClassificationTask({ invoice }: { invoice: Invoice }) {
   const review = useReviewClassification(invoice.id)
   const [acceptanceItem, setAcceptanceItem] = useState<ClassificationReviewItem | null>(null)
   const [correctionItem, setCorrectionItem] = useState<ClassificationReviewItem | null>(null)
+	const [accountItem,setAccountItem]=useState<ClassificationReviewItem|null>(null)
   const items = task?.type === 'CLASSIFICATION' ? task.classificationItems ?? [] : []
   const domain = invoice.modelVersion === 'ACCOUNTING_DOMAIN_V2'
   const pending = items.filter((item) => item.status === 'PENDING')
@@ -42,32 +45,38 @@ export function ClassificationTask({ invoice }: { invoice: Invoice }) {
       {review.isError && <p role="alert" className="text-sm text-[var(--danger)]">La salvare a apărut o eroare. Reîncarcă factura și verifică decizia.</p>}
       {items.map((item) => (
         <article key={item.id} className="card overflow-hidden">
-          <div className="px-5 pt-3 text-xs text-[var(--text-secondary)]">TVA declarat în sursă: {invoice.lines.find((line) => line.id === item.lineId)?.vatLabel ?? "indisponibil"}{item.invoiceDateUsed && ` · Data evaluată: ${item.invoiceDateUsed}`}{item.rule && ` · ${item.rule.reference} v${item.rule.version} · ${item.rule.effectiveFrom ?? ""} — ${item.rule.effectiveTo ?? "fără dată finală"}`}</div>
+          <div className="px-5 pt-3 text-xs text-[var(--text-secondary)]">Valoare netă: {invoice.lines.find((line) => line.id === item.lineId)?.netValue.amount.toLocaleString('ro-RO') ?? "indisponibil"} {invoice.lines.find((line) => line.id === item.lineId)?.netValue.currency ?? ''} · TVA declarat în sursă: {invoice.lines.find((line) => line.id === item.lineId)?.vatLabel ?? "indisponibil"}{item.invoiceDateUsed && ` · Data evaluată: ${item.invoiceDateUsed}`}{item.rule && ` · ${item.rule.reference} v${item.rule.version} · ${item.rule.effectiveFrom ?? ""} — ${item.rule.effectiveTo ?? "fără dată finală"}`}</div>
           <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
             <div><div className="text-xs font-semibold text-[var(--text-muted)]">{item.lineLabel}</div><h4 className="mt-1 font-bold">{CLASSIFICATION_DIMENSION_LABELS[item.dimension]}</h4></div>
             <Badge tone={item.status === 'PENDING' ? 'warning' : 'success'}>{item.status === 'PENDING' ? 'De revizuit' : item.status === 'ACCEPTED' ? 'Acceptat' : 'Corectat'}</Badge>
           </div>
           <div className="grid grid-cols-[0.9fr_1.2fr_1.2fr] gap-0 divide-x divide-[var(--border)]">
-            <div className="p-5"><div className="eyebrow">Propunere</div><div className="mt-3 font-semibold">{displayDomainValue(item.typedValue ?? item.proposedTypedValue, item.resolvedValue ?? item.proposedValue)}</div><Badge tone="info" className="mt-3">Încredere: {item.confidence}</Badge></div>
+            <div className="p-5"><div className="eyebrow">Propunere</div><div className="mt-3 font-semibold">{item.dimension==='ACCOUNT'&&(item.typedValue?.account??item.proposedTypedValue?.account)?<AccountDisplay code={(item.typedValue?.account??item.proposedTypedValue?.account)!}/>:displayDomainValue(item.typedValue ?? item.proposedTypedValue, item.resolvedValue ?? item.proposedValue)}</div>{item.source==='LEARNED_MAPPING'&&<><p className="mt-2 text-xs text-[var(--text-secondary)]">Sursă: mapare confirmată anterior</p><Badge tone="warning" className="mt-2">Necesită validare</Badge></>}<Badge tone="info" className="mt-3">Încredere: {item.confidence}</Badge></div>
             <div className="p-5"><div className="eyebrow">Explicație</div><p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{item.explanation}</p></div>
             <div className="p-5"><div className="eyebrow">Bază legală</div><div className="mt-3 flex gap-2 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-soft)] p-3 text-xs leading-5 text-[var(--warning)]"><Scale className="mt-0.5 size-4 shrink-0" />{item.legalBasis}</div></div>
           </div>
           {(item.status === 'PENDING' || domain && invoice.readinessReason) && (
             <div className="flex gap-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-5 py-4">
-              <Button onClick={() => domain ? setAcceptanceItem(item) : review.mutate({ itemId: item.id })} disabled={review.isPending || domain && !item.proposedTypedValue}><Check className="size-4" />Acceptă propunerea</Button>
-              <Button variant="secondary" onClick={() => setCorrectionItem(item)}><Edit3 className="size-4" />Corectează</Button>
+              {domain&&item.dimension==='ACCOUNT' ? <>{item.source==='LEARNED_MAPPING'&&item.proposedTypedValue?<Button onClick={()=>review.mutate({itemId:item.id,typedValue:item.proposedTypedValue,reason:'Mapare verificată pentru această apariție.',mappingAction:'VALIDATE'})} disabled={review.isPending}><Check className="size-4"/>Validează</Button>:<Button onClick={()=>setAccountItem(item)}><Edit3 className="size-4"/>Selectează cont</Button>}{item.source==='LEARNED_MAPPING'&&<Button variant="secondary" onClick={()=>setAccountItem(item)}><Edit3 className="size-4"/>Schimbă</Button>}</> : <><Button onClick={() => domain ? setAcceptanceItem(item) : review.mutate({ itemId: item.id })} disabled={review.isPending || domain && !item.proposedTypedValue}><Check className="size-4" />Acceptă propunerea</Button><Button variant="secondary" onClick={() => setCorrectionItem(item)}><Edit3 className="size-4" />Corectează</Button></>}
             </div>
           )}
         </article>
       ))}
 
       {domain && acceptanceItem && <DomainConfirmationDialog item={acceptanceItem} onCancel={() => setAcceptanceItem(null)} onSubmit={(reason) => { review.mutate({ itemId: acceptanceItem.id, reason }); setAcceptanceItem(null) }} />}
+	  {accountItem&&<AccountDecisionDialog item={accountItem} onCancel={()=>setAccountItem(null)} onSubmit={(account,mappingAction,reason)=>{review.mutate({itemId:accountItem.id,typedValue:{kind:'ACCOUNT',account:account.code},reason,mappingAction,expectedMappingRevision:accountItem.mapping?.revision});setAccountItem(null)}}/>}
       {domain && correctionItem ? <DomainCorrectionDialog key={correctionItem.id} item={correctionItem} invoice={invoice} onCancel={() => setCorrectionItem(null)} onSubmit={(typedValue, reason) => { review.mutate({ itemId: correctionItem.id, typedValue, reason }); setCorrectionItem(null) }} /> : <CorrectionDialog item={correctionItem} onOpenChange={(open) => !open && setCorrectionItem(null)} onSubmit={(value) => {
         if (correctionItem) review.mutate({ itemId: correctionItem.id, value })
         setCorrectionItem(null)
       }} />}
     </div>
   )
+}
+
+function AccountDisplay({code}:{code:string}) {
+ const repository=useInvoiceRepository();const [name,setName]=useState('')
+ useEffect(()=>{let current=true;void repository.searchAccounts(code).then(items=>{if(current)setName(items.find(item=>item.code===code)?.name??'')});return()=>{current=false}},[code,repository])
+ return <>{code}{name?` — ${name}`:''}</>
 }
 
 function CorrectionDialog({ item, onOpenChange, onSubmit }: { item: ClassificationReviewItem | null; onOpenChange: (open: boolean) => void; onSubmit: (value: string) => void }) {

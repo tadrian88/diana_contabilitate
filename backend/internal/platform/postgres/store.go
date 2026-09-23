@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"diana-contabilitate/backend/ent"
+	"diana-contabilitate/backend/ent/accountmapping"
+	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/invoice"
@@ -115,6 +117,17 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 	if err != nil {
 		return nil, err
 	}
+	clientRow, err := s.Client.AccountingClient.Get(ctx, result.ClientID)
+	if err != nil {
+		return nil, fmt.Errorf("get invoice client for mapping scope: %w", err)
+	}
+	for lineIndex := range result.Lines {
+		for decisionIndex := range result.Lines[lineIndex].Classifications {
+			if err := s.hydrateMappingReference(ctx, &result.Lines[lineIndex].Classifications[decisionIndex]); err != nil {
+				return nil, err
+			}
+		}
+	}
 	for _, event := range row.Edges.ActivityEvents {
 		result.Activity = append(result.Activity, audit.Event{
 			ID: event.ID, ClientID: event.ClientID, InvoiceID: event.InvoiceID,
@@ -133,7 +146,12 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 			for _, lineRow := range row.Edges.Lines {
 				for _, classificationRow := range lineRow.Edges.Classifications {
 					if classificationRow.RequiredReview || classificationRow.ModelVersion == accounting.ModelVersion {
-						result.ActiveTask.ClassificationItems = append(result.ActiveTask.ClassificationItems, lineClassificationDomain(classificationRow, lineRow))
+						decision := lineClassificationDomain(classificationRow, lineRow)
+						if err := s.hydrateMappingReference(ctx, &decision); err != nil {
+							return nil, err
+						}
+						decision.MappingScope = accountMappingScopePreview(result, clientRow.Name, lineRow, decision.Mapping)
+						result.ActiveTask.ClassificationItems = append(result.ActiveTask.ClassificationItems, decision)
 					}
 				}
 			}
@@ -154,6 +172,54 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 		}
 	}
 	return result, nil
+}
+
+func accountMappingScopePreview(item *invoicing.Invoice, clientName string, line *ent.InvoiceLine, mapping *classificationdomain.MappingReference) *classificationdomain.MappingScopePreview {
+	identity, ok := classificationdomain.PreferredServiceIdentity(classificationdomain.LineContext{
+		SourceFacts: line.SourceFacts,
+		ID:          line.ID,
+		Position:    line.Position,
+		Description: line.Description,
+	})
+	if !ok {
+		return nil
+	}
+	if mapping != nil {
+		identity.Kind = classificationdomain.ServiceIdentityKind(mapping.ServiceIdentityKind)
+		identity.Value = mapping.ServiceIdentityValue
+		identity.NormalizerVersion = mapping.NormalizerVersion
+	}
+	supplier := item.SupplierName
+	if item.SupplierCUI != nil && *item.SupplierCUI != "" {
+		supplier = fmt.Sprintf("%s (%s)", item.SupplierName, *item.SupplierCUI)
+	}
+	return &classificationdomain.MappingScopePreview{
+		ClientDisplay:        clientName,
+		SupplierDisplay:      supplier,
+		ServiceIdentityKind:  string(identity.Kind),
+		ServiceIdentityValue: identity.Value,
+		NormalizerVersion:    identity.NormalizerVersion,
+	}
+}
+
+func (s *Store) hydrateMappingReference(ctx context.Context, decision *classificationdomain.Decision) error {
+	if decision.Mapping == nil {
+		return nil
+	}
+	mappingRow, err := s.Client.AccountMapping.Query().Where(accountmapping.IDEQ(decision.Mapping.MappingID)).Only(ctx)
+	if err != nil {
+		return err
+	}
+	versionRow, err := s.Client.AccountMappingVersion.Query().Where(accountmappingversion.MappingIDEQ(mappingRow.ID), accountmappingversion.VersionEQ(decision.Mapping.Version)).Only(ctx)
+	if err != nil {
+		return err
+	}
+	decision.Mapping.AccountCode = versionRow.AccountCode
+	decision.Mapping.ServiceIdentityKind = string(mappingRow.ServiceIdentityKind)
+	decision.Mapping.ServiceIdentityValue = mappingRow.ServiceIdentityValue
+	decision.Mapping.NormalizerVersion = mappingRow.NormalizerVersion
+	decision.Mapping.Revision = mappingRow.Revision
+	return nil
 }
 
 func (s *Store) ListInvoices(ctx context.Context, filter invoicing.Filter) ([]invoicing.Invoice, error) {
@@ -221,6 +287,9 @@ func lineClassificationDomain(row *ent.LineClassification, line *ent.InvoiceLine
 		InvoiceDateUsed: dateFromOptional(row.InvoiceDateUsed), HumanReviewed: row.ReviewedAt != nil && row.ReviewedByDisplay != nil && *row.ReviewedByDisplay != "",
 		Source: classificationdomain.Source(row.Source), PolicyVersion: row.PolicyVersion, Revision: row.Revision,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+	}
+	if row.AccountMappingID != nil && row.AccountMappingVersion != nil {
+		result.Mapping = &classificationdomain.MappingReference{MappingID: *row.AccountMappingID, Version: *row.AccountMappingVersion}
 	}
 	if version := row.Edges.RuleVersion; version != nil && version.Edges.Rule != nil {
 		rule := version.Edges.Rule

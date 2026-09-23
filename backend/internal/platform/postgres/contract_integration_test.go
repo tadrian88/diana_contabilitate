@@ -31,6 +31,7 @@ import (
 )
 
 var contractTestSequence atomic.Uint64
+var contractTestRunID = fmt.Sprintf("%x", time.Now().UnixNano())
 
 type contractTestContext struct {
 	ctx         context.Context
@@ -52,8 +53,8 @@ func newContractTestContext(t *testing.T) *contractTestContext {
 		t.Fatal(err)
 	}
 	sequence := contractTestSequence.Add(1)
-	tc := &contractTestContext{ctx: context.Background(), store: store, clientID: fmt.Sprintf("contract-client-%d", sequence), now: time.Date(2026, time.September, 15, 9, int(sequence), 0, 0, time.UTC)}
-	if _, err = store.Client.AccountingClient.Create().SetID(tc.clientID).SetName("Contract test client").SetCui(fmt.Sprintf("RO-CONTRACT-%06d", sequence)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	tc := &contractTestContext{ctx: context.Background(), store: store, clientID: fmt.Sprintf("contract-client-%s-%d", contractTestRunID, sequence), now: time.Date(2026, time.September, 15, 9, int(sequence), 0, 0, time.UTC)}
+	if _, err = store.Client.AccountingClient.Create().SetID(tc.clientID).SetName("Contract test client").SetCui(fmt.Sprintf("RO-CONTRACT-%s-%06d", contractTestRunID, sequence)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		store.Close()
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func newContractTestContext(t *testing.T) *contractTestContext {
 
 func (tc *contractTestContext) createInvoice(t *testing.T, suffix, supplierCUI, currency string) string {
 	t.Helper()
-	id := fmt.Sprintf("contract-invoice-%d-%s", contractTestSequence.Load(), suffix)
+	id := fmt.Sprintf("contract-invoice-%s-%s", tc.clientID, suffix)
 	_, err := tc.store.Client.Invoice.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("Contract supplier").SetSupplierCui(supplierCUI).
 		SetNormalizedSupplierCui(fiscalidentity.ForComparison(supplierCUI, "")).SetDocumentNumber("INV-" + suffix).SetNormalizedDocumentNumber("INV-" + suffix).
 		SetIssueDate(tc.now).SetIssueDay(time.Date(tc.now.Year(), tc.now.Month(), tc.now.Day(), 0, 0, 0, 0, time.UTC)).
@@ -99,7 +100,7 @@ func (tc *contractTestContext) createInvoice(t *testing.T, suffix, supplierCUI, 
 
 func (tc *contractTestContext) createContract(t *testing.T, suffix, supplierCUI, currency string) string {
 	t.Helper()
-	id := fmt.Sprintf("contract-%d-%s", contractTestSequence.Load(), suffix)
+	id := fmt.Sprintf("contract-%s-%s", tc.clientID, suffix)
 	_, err := tc.store.Client.Contract.Create().SetID(id).SetClientID(tc.clientID).SetSupplierName("Contract supplier").SetSupplierCui(supplierCUI).
 		SetNormalizedSupplierCui(fiscalidentity.ForComparison(supplierCUI, "")).SetReference("CTR-" + suffix).
 		SetEffectiveFrom(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)).SetEffectiveTo(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)).
@@ -110,6 +111,52 @@ func (tc *contractTestContext) createContract(t *testing.T, suffix, supplierCUI,
 	}
 	tc.contractIDs = append(tc.contractIDs, id)
 	return id
+}
+
+func TestArchiveContractRemovesOnlyFutureMatchingAndPreservesRead(t *testing.T) {
+	tc := newContractTestContext(t)
+	id := tc.createContract(t, "archive", "RO-ARCHIVE-SUPPLIER", "RON")
+	service := contracts.NewService(tc.store, nil, func() time.Time { return tc.now })
+	if _, err := service.Archive(tc.ctx, id, 2, "accountant", "Accountant"); !errors.Is(err, apperrors.ErrConflict) {
+		t.Fatalf("stale revision error=%v", err)
+	}
+	changed, err := service.Archive(tc.ctx, id, 1, "accountant", "Accountant")
+	if err != nil || !changed {
+		t.Fatalf("archive changed=%v err=%v", changed, err)
+	}
+	changed, err = service.Archive(tc.ctx, id, 1, "accountant", "Accountant")
+	if err != nil || changed {
+		t.Fatalf("idempotent archive changed=%v err=%v", changed, err)
+	}
+	items, err := service.List(tc.ctx, contracts.Filter{ClientID: tc.clientID})
+	if err != nil || len(items) != 0 {
+		t.Fatalf("active contracts=%d err=%v", len(items), err)
+	}
+	archived, err := service.Get(tc.ctx, id)
+	if err != nil || archived.LifecycleState != "ARCHIVED" || archived.Revision != 2 {
+		t.Fatalf("historical contract=%+v err=%v", archived, err)
+	}
+	invoiceID := tc.createInvoice(t, "archive", "RO-ARCHIVE-SUPPLIER", "RON")
+	_, candidates, err := tc.store.LoadMatchingInput(tc.ctx, invoiceID)
+	if err != nil || len(candidates) != 0 {
+		t.Fatalf("future match candidates=%d err=%v", len(candidates), err)
+	}
+}
+
+func TestMistakenDeleteRefusesContractWithHistoricalMatch(t *testing.T) {
+	tc := newContractTestContext(t)
+	id := tc.createContract(t, "used", "RO-USED-SUPPLIER", "RON")
+	invoiceID := tc.createInvoice(t, "used", "RO-USED-SUPPLIER", "RON")
+	service := contracts.NewService(tc.store, nil, func() time.Time { return tc.now })
+	if _, _, err := service.MatchInvoice(tc.ctx, contracts.MatchCommand{InvoiceID: invoiceID, ExpectedRevision: 1, CommandID: "used-" + invoiceID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteMistaken(tc.ctx, id, 1, "accountant", "Accountant"); !errors.Is(err, contracts.ErrContractInUse) {
+		t.Fatalf("delete used contract error=%v", err)
+	}
+	if changed, err := service.Archive(tc.ctx, id, 1, "accountant", "Accountant"); err != nil || !changed {
+		t.Fatalf("archive used changed=%t err=%v", changed, err)
+	}
 }
 
 func (tc *contractTestContext) match(t *testing.T, invoiceID, key string) (contracts.MatchDecision, bool, error) {

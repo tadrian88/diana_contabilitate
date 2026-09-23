@@ -279,6 +279,12 @@ func (_u *LineClassificationUpdate) sqlSave(ctx context.Context) (_node int, err
 	if value, ok := _u.mutation.ReviewStatus(); ok {
 		_spec.SetField(lineclassification.FieldReviewStatus, field.TypeEnum, value)
 	}
+	if _u.mutation.AccountMappingIDCleared() {
+		_spec.ClearField(lineclassification.FieldAccountMappingID, field.TypeString)
+	}
+	if _u.mutation.AccountMappingVersionCleared() {
+		_spec.ClearField(lineclassification.FieldAccountMappingVersion, field.TypeInt)
+	}
 	if value, ok := _u.mutation.ReviewedByID(); ok {
 		_spec.SetField(lineclassification.FieldReviewedByID, field.TypeString, value)
 	}
@@ -605,6 +611,12 @@ func (_u *LineClassificationUpdateOne) sqlSave(ctx context.Context) (_node *Line
 	}
 	if value, ok := _u.mutation.ReviewStatus(); ok {
 		_spec.SetField(lineclassification.FieldReviewStatus, field.TypeEnum, value)
+	}
+	if _u.mutation.AccountMappingIDCleared() {
+		_spec.ClearField(lineclassification.FieldAccountMappingID, field.TypeString)
+	}
+	if _u.mutation.AccountMappingVersionCleared() {
+		_spec.ClearField(lineclassification.FieldAccountMappingVersion, field.TypeInt)
 	}
 	if value, ok := _u.mutation.ReviewedByID(); ok {
 		_spec.SetField(lineclassification.FieldReviewedByID, field.TypeString, value)

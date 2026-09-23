@@ -6,6 +6,7 @@ func TestPipelineVocabularyMatchesApprovedFrontend(t *testing.T) {
 	expected := []PipelineStatus{
 		"DOWNLOADED", "ARCHIVED", "MATCHING", "AWAITING_CONTRACT",
 		"AWAITING_MATCH_CONFIRM", "DEDUPE_CHECKED", "HEADER_READ", "LINES_READ",
+		"COMMERCIAL_VALIDATING", "AWAITING_COMMERCIAL_REVIEW", "COMMERCIALLY_VALIDATED",
 		"CLASSIFIED", "AWAITING_REVIEW", "READY_FOR_SAGA", "EXPORTING", "EXPORTED", "DUPLICATE",
 	}
 	if len(PipelineStatuses) != len(expected) {

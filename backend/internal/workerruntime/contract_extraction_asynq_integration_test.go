@@ -22,6 +22,13 @@ type redisExtractionProcessor struct {
 	wrongID        atomic.Bool
 }
 
+type retryOnceExtractionProcessor struct{ calls atomic.Int32 }
+
+func (p *retryOnceExtractionProcessor) Extract(context.Context, string) error {
+	p.calls.Add(1)
+	return &contractingestion.ExtractionFailure{Category: contractingestion.FailureInvalidStructuredOutput, Retry: contractingestion.RetryOnce, Provider: "GEMINI", Model: "test-model"}
+}
+
 func (p *redisExtractionProcessor) Extract(_ context.Context, id string) error {
 	p.calls.Add(1)
 	if id != "document-test" {
@@ -32,6 +39,31 @@ func (p *redisExtractionProcessor) Extract(_ context.Context, id string) error {
 	}
 	p.logical.CompareAndSwap(0, 1)
 	return nil
+}
+
+func TestRealAsynqContractExtractionInvalidOutputRetriesOnlyOnce(t *testing.T) {
+	options, _ := isolatedRedis(t)
+	client := asynq.NewClient(options)
+	defer client.Close()
+	processor := &retryOnceExtractionProcessor{}
+	handler := NewContractExtractionHandler(processor, slog.New(slog.NewTextHandler(io.Discard, nil)), observability.NewMetrics())
+	server := asynq.NewServer(options, asynq.Config{Concurrency: 1, Queues: map[string]int{"workflow-test": 1}, DelayedTaskCheckInterval: 20 * time.Millisecond, RetryDelayFunc: func(int, error, *asynq.Task) time.Duration { return 10 * time.Millisecond }})
+	mux := asynq.NewServeMux()
+	mux.Handle(ContractExtractionTask, handler)
+	if err := server.Start(mux); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(server.Shutdown)
+	publisher := NewAsynqPublisher(client, "workflow-test", 8, time.Minute)
+	job := JobFromOutbox(outbox.Entry{ID: "out-invalid", EventType: outbox.EventContractExtractionRequested, AggregateID: "document-test", IdempotencyKey: "extract-invalid"})
+	if _, err := publisher.Publish(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, func() bool { return processor.calls.Load() == 2 })
+	time.Sleep(100 * time.Millisecond)
+	if processor.calls.Load() != 2 {
+		t.Fatalf("invalid output calls=%d, want exactly 2", processor.calls.Load())
+	}
 }
 func TestRealAsynqContractExtractionDuplicateAndTransientRetry(t *testing.T) {
 	options, _ := isolatedRedis(t)

@@ -1,4 +1,5 @@
 import { expect, test } from './fixtures/authenticated'
+import { approveDemoCommercialExceptions } from './support/commercial-review'
 
 function kpi(page: import('@playwright/test').Page, label: string) {
   return page.locator(`[data-kpi="${label}"]`)
@@ -187,6 +188,7 @@ test('N. Full accountant journey is backend-owned and durable', async ({ page })
   const confirmation = page.waitForResponse((item) => item.request().method() === 'POST' && item.url().includes('/contract-confirmations'))
   await page.getByRole('button', { name: 'Confirmă', exact: true }).click()
   expect((await confirmation).status()).toBe(200)
+  await approveDemoCommercialExceptions(page)
   await page.getByRole('tab', { name: 'Clasificare' }).click()
   await expect(page.getByText('Așteaptă revizuirea').first()).toBeVisible({ timeout: 15_000 })
   await acceptAllClassificationProposals(page)

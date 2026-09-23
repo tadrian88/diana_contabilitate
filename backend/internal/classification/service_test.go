@@ -30,7 +30,7 @@ func (s *captureStore) ReviewClassification(_ context.Context, command ReviewCom
 }
 
 func TestServiceOwnsClassificationPolicyBoundaryAndReplay(t *testing.T) {
-	store := &captureStore{input: InvoiceContext{ID: "invoice", PipelineStatus: "LINES_READ", Revision: 4, Lines: []LineContext{{ID: "line", Description: "Serviciu"}}, Rules: baselineRules()}}
+	store := &captureStore{input: InvoiceContext{ID: "invoice", PipelineStatus: "COMMERCIALLY_VALIDATED", Revision: 4, Lines: []LineContext{{ID: "line", Description: "Serviciu"}}, Rules: baselineRules()}}
 	service := NewService(store, BaselinePolicy{}, nil)
 	result, changed, err := service.ProcessInvoice(context.Background(), ProcessCommand{InvoiceID: "invoice", ExpectedRevision: 4, CommandID: "classify"})
 	if err != nil || !changed || len(result.Proposals) != 3 || store.result.PolicyVersion != BaselinePolicyVersion {
@@ -67,7 +67,7 @@ func (invalidPolicy) Evaluate(InvoiceContext) (Result, error) {
 }
 
 func TestMalformedPolicyOutputIsRejectedBeforePersistence(t *testing.T) {
-	store := &captureStore{input: InvoiceContext{ID: "invoice", PipelineStatus: "LINES_READ", Revision: 1, Lines: []LineContext{{ID: "line"}}}}
+	store := &captureStore{input: InvoiceContext{ID: "invoice", PipelineStatus: "COMMERCIALLY_VALIDATED", Revision: 1, Lines: []LineContext{{ID: "line"}}}}
 	_, changed, err := NewService(store, invalidPolicy{}, nil).ProcessInvoice(context.Background(), ProcessCommand{InvoiceID: "invoice", ExpectedRevision: 1, CommandID: "bad"})
 	if changed || !errors.Is(err, ErrInvalidPolicyResult) {
 		t.Fatalf("changed=%v err=%v", changed, err)

@@ -19,4 +19,4 @@ export FRONTEND_BASE_URL="${E2E_FRONTEND_BASE_URL:?E2E_FRONTEND_BASE_URL is requ
 atlas migrate apply --env local
 GOCACHE=/private/tmp/diana-go-cache go run ./cmd/devseed
 DIANA_AUTH_PASSWORD='Diana-E2E-Only-2026!' GOCACHE=/private/tmp/diana-go-cache go run ./cmd/authuser provision --email demo.fixture@accountingtechco.test --all-clients
-exec env GOCACHE=/private/tmp/diana-go-cache HTTP_ADDRESS=127.0.0.1:8080 PIPELINE_DISPATCH_ENABLED=false go run ./cmd/api
+exec env GOCACHE=/private/tmp/diana-go-cache "HTTP_ADDRESS=${E2E_BACKEND_HTTP_ADDRESS:-127.0.0.1:8080}" PIPELINE_DISPATCH_ENABLED=false go run ./cmd/api

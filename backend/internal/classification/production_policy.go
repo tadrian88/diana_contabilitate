@@ -22,7 +22,7 @@ func (policy ProductionPolicy) Evaluate(input InvoiceContext) (Result, error) {
 	result := Result{PolicyVersion: policy.Version()}
 	eligible := make([]RuleCandidate, 0, len(input.Rules))
 	for _, c := range input.Rules {
-		if productionCandidate(c) && input.IssueDate.Within(c.EffectiveFrom, c.EffectiveTo) && input.IssueDate.Within(c.Provenance.EffectiveFrom, c.Provenance.EffectiveTo) {
+		if productionCandidate(c, input.SelectableAccounts[c.Result]) && input.IssueDate.Within(c.EffectiveFrom, c.EffectiveTo) && input.IssueDate.Within(c.Provenance.EffectiveFrom, c.Provenance.EffectiveTo) {
 			eligible = append(eligible, c)
 		}
 	}
@@ -78,7 +78,7 @@ func (policy ProductionPolicy) Evaluate(input InvoiceContext) (Result, error) {
 	return result, nil
 }
 
-func productionCandidate(c RuleCandidate) bool {
+func productionCandidate(c RuleCandidate, selectableAccount bool) bool {
 	if !c.ProductionEligible || !c.Provenance.Valid() || strings.TrimSpace(c.RulePackVersion) == "" || c.RuleID == "" || c.RuleVersionID == "" || c.Version <= 0 || strings.TrimSpace(c.LegalBasis) == "" || strings.Contains(c.LegalBasis, rules.LegalBasisPlaceholder) || strings.TrimSpace(c.Explanation) == "" {
 		return false
 	}
@@ -87,7 +87,7 @@ func productionCandidate(c RuleCandidate) bool {
 	}
 	switch c.Category {
 	case rules.CategoryAccount:
-		return c.Scope == rules.ScopeClientOverride && c.Provenance.SourceType == "CLIENT_ACCOUNTING_POLICY" && c.Provenance.AccountingRegime == "OMFP_1802_2014" && strings.TrimSpace(c.Provenance.ClientPolicyReference) != "" && rules.ValidProductionAccount(c.Result) && c.MatchKind == rules.MatchDescriptionContains && c.MatchValue != nil && normalize(*c.MatchValue) != ""
+		return selectableAccount && c.Scope == rules.ScopeClientOverride && c.Provenance.SourceType == "CLIENT_ACCOUNTING_POLICY" && c.Provenance.AccountingRegime == "OMFP_1802_2014" && strings.TrimSpace(c.Provenance.ClientPolicyReference) != "" && rules.ValidProductionAccount(c.Result) && c.MatchKind == rules.MatchDescriptionContains && c.MatchValue != nil && normalize(*c.MatchValue) != ""
 	case rules.CategoryVAT:
 		rate, err := money.Parse(c.Result)
 		return err == nil && !strings.HasPrefix(rate.String(), "-") && !rate.Equal(money.MustParse("0")) && c.MatchKind == rules.MatchVATSourceRateEquals && c.MatchValue != nil && money.Amount(*c.MatchValue).Valid() && rate.Equal(money.Amount(*c.MatchValue))

@@ -136,7 +136,7 @@ func TestAnonymousSensitiveAPIsAreUnauthorizedAndCallbackIsPublic(t *testing.T) 
 	h := newTestHTTP(t, &memoryStore{})
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	handler := h.Wrap(next)
-	for _, path := range []string{"/api/v1/clients", "/api/v1/invoices", "/api/v1/contracts", "/api/v1/rules", "/api/v1/validation-tasks", "/api/v1/clients/a/spv", "/api/v1/clients/a/invoices/i/saga-export/artifact"} {
+	for _, path := range []string{"/api/v1/clients", "/api/v1/invoices", "/api/v1/accounts", "/api/v1/contracts", "/api/v1/rules", "/api/v1/validation-tasks", "/api/v1/clients/a/spv", "/api/v1/clients/a/invoices/i/saga-export/artifact"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusUnauthorized {

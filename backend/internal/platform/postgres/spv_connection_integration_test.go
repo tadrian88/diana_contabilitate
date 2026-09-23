@@ -92,3 +92,45 @@ func TestSPVOAuthStateConnectionLifecycleAndAuditAreDurable(t *testing.T) {
 		t.Fatalf("audit events=%d", count)
 	}
 }
+
+func TestInstallSPVConnectionReactivatesExistingConnection(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	store, err := Open(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	clientID := "spv-install-client-" + suffix
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	defer func() {
+		_, _ = store.Client.SPVConnection.Delete().Where(spvconnection.ClientIDEQ(clientID)).Exec(ctx)
+		_ = store.Client.AccountingClient.DeleteOneID(clientID).Exec(ctx)
+	}()
+	if _, err = store.Client.AccountingClient.Create().SetID(clientID).SetName("SPV install reconnect").SetCui(suffix[len(suffix)-10:]).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.InstallSPVConnection(ctx, clientID, "PRODUCTION", "access-1", "refresh-1", now.Add(-time.Hour), nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.MarkSyncFinished(ctx, first.ID, now.Add(time.Second), errors.Join(spv.ErrReauthenticationRequired, spv.ErrPermanent)); err != nil {
+		t.Fatal(err)
+	}
+	reconnectedAt := now.Add(2 * time.Second)
+	second, err := store.InstallSPVConnection(ctx, clientID, "PRODUCTION", "access-2", "refresh-2", now.Add(time.Hour), nil, reconnectedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID || second.Status != "ACTIVE" || second.AccessTokenCiphertext != "access-2" || second.Revision != first.Revision+1 || second.ConnectedAt == nil || !second.ConnectedAt.Equal(reconnectedAt) {
+		t.Fatalf("first=%+v second=%+v", first, second)
+	}
+	count, err := store.Client.SPVConnection.Query().Where(spvconnection.ClientIDEQ(clientID)).Count(ctx)
+	if err != nil || count != 1 {
+		t.Fatalf("connections=%d err=%v", count, err)
+	}
+}

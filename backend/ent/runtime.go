@@ -3,8 +3,11 @@
 package ent
 
 import (
+	"diana-contabilitate/backend/ent/account"
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/accountingrulepack"
+	"diana-contabilitate/backend/ent/accountmapping"
+	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
@@ -31,6 +34,94 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	accountFields := schema.Account{}.Fields()
+	_ = accountFields
+	// accountDescCode is the schema descriptor for code field.
+	accountDescCode := accountFields[1].Descriptor()
+	// account.CodeValidator is a validator for the "code" field. It is called by the builders before save.
+	account.CodeValidator = accountDescCode.Validators[0].(func(string) error)
+	// accountDescName is the schema descriptor for name field.
+	accountDescName := accountFields[2].Descriptor()
+	// account.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	account.NameValidator = accountDescName.Validators[0].(func(string) error)
+	// accountDescAccountType is the schema descriptor for account_type field.
+	accountDescAccountType := accountFields[3].Descriptor()
+	// account.AccountTypeValidator is a validator for the "account_type" field. It is called by the builders before save.
+	account.AccountTypeValidator = accountDescAccountType.Validators[0].(func(string) error)
+	// accountDescLevel is the schema descriptor for level field.
+	accountDescLevel := accountFields[5].Descriptor()
+	// account.LevelValidator is a validator for the "level" field. It is called by the builders before save.
+	account.LevelValidator = accountDescLevel.Validators[0].(func(int) error)
+	// accountDescIsSynthetic is the schema descriptor for is_synthetic field.
+	accountDescIsSynthetic := accountFields[6].Descriptor()
+	// account.DefaultIsSynthetic holds the default value on creation for the is_synthetic field.
+	account.DefaultIsSynthetic = accountDescIsSynthetic.Default.(bool)
+	// accountDescPostable is the schema descriptor for postable field.
+	accountDescPostable := accountFields[7].Descriptor()
+	// account.DefaultPostable holds the default value on creation for the postable field.
+	account.DefaultPostable = accountDescPostable.Default.(bool)
+	// accountDescIsActive is the schema descriptor for is_active field.
+	accountDescIsActive := accountFields[8].Descriptor()
+	// account.DefaultIsActive holds the default value on creation for the is_active field.
+	account.DefaultIsActive = accountDescIsActive.Default.(bool)
+	accountmappingFields := schema.AccountMapping{}.Fields()
+	_ = accountmappingFields
+	// accountmappingDescNormalizedSupplierID is the schema descriptor for normalized_supplier_id field.
+	accountmappingDescNormalizedSupplierID := accountmappingFields[2].Descriptor()
+	// accountmapping.NormalizedSupplierIDValidator is a validator for the "normalized_supplier_id" field. It is called by the builders before save.
+	accountmapping.NormalizedSupplierIDValidator = accountmappingDescNormalizedSupplierID.Validators[0].(func(string) error)
+	// accountmappingDescServiceIdentityValue is the schema descriptor for service_identity_value field.
+	accountmappingDescServiceIdentityValue := accountmappingFields[4].Descriptor()
+	// accountmapping.ServiceIdentityValueValidator is a validator for the "service_identity_value" field. It is called by the builders before save.
+	accountmapping.ServiceIdentityValueValidator = accountmappingDescServiceIdentityValue.Validators[0].(func(string) error)
+	// accountmappingDescNormalizerVersion is the schema descriptor for normalizer_version field.
+	accountmappingDescNormalizerVersion := accountmappingFields[5].Descriptor()
+	// accountmapping.NormalizerVersionValidator is a validator for the "normalizer_version" field. It is called by the builders before save.
+	accountmapping.NormalizerVersionValidator = accountmappingDescNormalizerVersion.Validators[0].(func(string) error)
+	// accountmappingDescCurrentVersion is the schema descriptor for current_version field.
+	accountmappingDescCurrentVersion := accountmappingFields[6].Descriptor()
+	// accountmapping.CurrentVersionValidator is a validator for the "current_version" field. It is called by the builders before save.
+	accountmapping.CurrentVersionValidator = accountmappingDescCurrentVersion.Validators[0].(func(int) error)
+	// accountmappingDescRevision is the schema descriptor for revision field.
+	accountmappingDescRevision := accountmappingFields[8].Descriptor()
+	// accountmapping.DefaultRevision holds the default value on creation for the revision field.
+	accountmapping.DefaultRevision = accountmappingDescRevision.Default.(uint64)
+	// accountmapping.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	accountmapping.RevisionValidator = accountmappingDescRevision.Validators[0].(func(uint64) error)
+	accountmappingversionFields := schema.AccountMappingVersion{}.Fields()
+	_ = accountmappingversionFields
+	// accountmappingversionDescVersion is the schema descriptor for version field.
+	accountmappingversionDescVersion := accountmappingversionFields[2].Descriptor()
+	// accountmappingversion.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	accountmappingversion.VersionValidator = accountmappingversionDescVersion.Validators[0].(func(int) error)
+	// accountmappingversionDescAccountCode is the schema descriptor for account_code field.
+	accountmappingversionDescAccountCode := accountmappingversionFields[3].Descriptor()
+	// accountmappingversion.AccountCodeValidator is a validator for the "account_code" field. It is called by the builders before save.
+	accountmappingversion.AccountCodeValidator = accountmappingversionDescAccountCode.Validators[0].(func(string) error)
+	// accountmappingversionDescSourceClassificationID is the schema descriptor for source_classification_id field.
+	accountmappingversionDescSourceClassificationID := accountmappingversionFields[5].Descriptor()
+	// accountmappingversion.SourceClassificationIDValidator is a validator for the "source_classification_id" field. It is called by the builders before save.
+	accountmappingversion.SourceClassificationIDValidator = accountmappingversionDescSourceClassificationID.Validators[0].(func(string) error)
+	// accountmappingversionDescSourceInvoiceLineID is the schema descriptor for source_invoice_line_id field.
+	accountmappingversionDescSourceInvoiceLineID := accountmappingversionFields[6].Descriptor()
+	// accountmappingversion.SourceInvoiceLineIDValidator is a validator for the "source_invoice_line_id" field. It is called by the builders before save.
+	accountmappingversion.SourceInvoiceLineIDValidator = accountmappingversionDescSourceInvoiceLineID.Validators[0].(func(string) error)
+	// accountmappingversionDescRawDescriptionSnapshot is the schema descriptor for raw_description_snapshot field.
+	accountmappingversionDescRawDescriptionSnapshot := accountmappingversionFields[7].Descriptor()
+	// accountmappingversion.RawDescriptionSnapshotValidator is a validator for the "raw_description_snapshot" field. It is called by the builders before save.
+	accountmappingversion.RawDescriptionSnapshotValidator = accountmappingversionDescRawDescriptionSnapshot.Validators[0].(func(string) error)
+	// accountmappingversionDescActorDisplay is the schema descriptor for actor_display field.
+	accountmappingversionDescActorDisplay := accountmappingversionFields[9].Descriptor()
+	// accountmappingversion.ActorDisplayValidator is a validator for the "actor_display" field. It is called by the builders before save.
+	accountmappingversion.ActorDisplayValidator = accountmappingversionDescActorDisplay.Validators[0].(func(string) error)
+	// accountmappingversionDescReason is the schema descriptor for reason field.
+	accountmappingversionDescReason := accountmappingversionFields[10].Descriptor()
+	// accountmappingversion.DefaultReason holds the default value on creation for the reason field.
+	accountmappingversion.DefaultReason = accountmappingversionDescReason.Default.(string)
+	// accountmappingversionDescCommandKey is the schema descriptor for command_key field.
+	accountmappingversionDescCommandKey := accountmappingversionFields[12].Descriptor()
+	// accountmappingversion.CommandKeyValidator is a validator for the "command_key" field. It is called by the builders before save.
+	accountmappingversion.CommandKeyValidator = accountmappingversionDescCommandKey.Validators[0].(func(string) error)
 	accountingclientFields := schema.AccountingClient{}.Fields()
 	_ = accountingclientFields
 	// accountingclientDescName is the schema descriptor for name field.
@@ -434,11 +525,11 @@ func init() {
 	// lineclassification.LegalBasisValidator is a validator for the "legal_basis" field. It is called by the builders before save.
 	lineclassification.LegalBasisValidator = lineclassificationDescLegalBasis.Validators[0].(func(string) error)
 	// lineclassificationDescPolicyVersion is the schema descriptor for policy_version field.
-	lineclassificationDescPolicyVersion := lineclassificationFields[20].Descriptor()
+	lineclassificationDescPolicyVersion := lineclassificationFields[22].Descriptor()
 	// lineclassification.PolicyVersionValidator is a validator for the "policy_version" field. It is called by the builders before save.
 	lineclassification.PolicyVersionValidator = lineclassificationDescPolicyVersion.Validators[0].(func(string) error)
 	// lineclassificationDescRevision is the schema descriptor for revision field.
-	lineclassificationDescRevision := lineclassificationFields[24].Descriptor()
+	lineclassificationDescRevision := lineclassificationFields[26].Descriptor()
 	// lineclassification.DefaultRevision holds the default value on creation for the revision field.
 	lineclassification.DefaultRevision = lineclassificationDescRevision.Default.(uint64)
 	// lineclassification.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.

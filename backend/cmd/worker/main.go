@@ -11,7 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"diana-contabilitate/backend/internal/accountinganalysis"
 	"diana-contabilitate/backend/internal/classification"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contractingestion/fixtures"
 	"diana-contabilitate/backend/internal/contracts"
@@ -79,6 +81,7 @@ func main() {
 	}
 	contractIngestion := contractingestion.NewService(store, contractExtractor, contractService, cfg.ContractMaxPDFBytes, nil)
 	pipeline.SetContractMatchingProcessor(contractService)
+	pipeline.SetCommercialValidationProcessor(commercialvalidation.NewService(store, nil))
 	pipeline.SetClassificationProcessor(classification.NewService(store, classification.ProductionPolicy{Observer: metrics}, nil))
 	publisher := workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.WorkerJobTimeout)
 	dispatcher := workerruntime.NewDispatcher(store, publisher, workerruntime.DispatcherConfig{Owner: ownerID(), BatchSize: cfg.DispatcherBatchSize, MaxAttempts: uint(cfg.DispatcherMaxAttempts), PollInterval: cfg.DispatcherPollInterval, ClaimTTL: cfg.DispatcherClaimTTL, RetryMin: cfg.DispatcherRetryMin, RetryMax: cfg.DispatcherRetryMax}, logger, metrics)
@@ -104,6 +107,11 @@ func main() {
 	mux.Handle(workerruntime.ContractAvailableTask, workerruntime.NewContractAvailableHandler(contractService, logger, metrics))
 	mux.Handle(workerruntime.ContractExtractionTask, workerruntime.NewContractExtractionHandler(contractIngestion, logger, metrics))
 	mux.Handle(workerruntime.ContractActivationTask, workerruntime.NewContractActivationHandler(contractService))
+	if cfg.AccountingAnalysisEnabled {
+		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout})
+		analysisService := accountinganalysis.NewWorkflowService(store, nil, analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+		mux.Handle(workerruntime.AccountingAnalysisTask, workerruntime.NewAccountingAnalysisHandler(analysisService))
+	}
 	var spvScheduler *workerruntime.SPVScheduler
 	if cfg.SPVEnabled {
 		cipher, cipherErr := spv.NewAESGCMCipher(cfg.SPVTokenEncryptionKey)

@@ -26,8 +26,18 @@ func TestHTTPClientListsPagesAndAcceptsStringOrNumericIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pages != 2 || len(messages) != 1 || messages[0].ID != "101" || messages[0].UploadID != "22" {
+	if pages != 2 || len(messages) != 1 || messages[0].ID != "101" || messages[0].UploadID != "22" || messages[0].CreatedAt == nil || messages[0].CreatedAt.Format("200601021504") != "202609141200" {
 		t.Fatalf("unexpected: %+v %d", messages, pages)
+	}
+}
+
+func TestParseMessageCreatedAtRejectsGuessingAndPreservesRomanianCalendarDay(t *testing.T) {
+	value, err := ParseMessageCreatedAt("202609140005")
+	if err != nil || value == nil || RomanianCalendarDay(*value).Format("2006-01-02") != "2026-09-14" {
+		t.Fatalf("parsed=%v err=%v", value, err)
+	}
+	if value, err = ParseMessageCreatedAt("not-a-date"); err == nil || value != nil {
+		t.Fatalf("invalid metadata was accepted: %v %v", value, err)
 	}
 }
 

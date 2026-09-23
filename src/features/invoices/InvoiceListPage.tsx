@@ -14,7 +14,7 @@ type SortKey = 'supplier' | 'number' | 'date' | 'value' | 'pipeline'
 type SortDirection = 'asc' | 'desc'
 type AttentionFilter = 'ALL' | 'REQUIRED' | 'CLEAR'
 
-const pipelineOptions: PipelineStatus[] = ['DOWNLOADED', 'ARCHIVED', 'MATCHING', 'AWAITING_CONTRACT', 'AWAITING_MATCH_CONFIRM', 'DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'CLASSIFIED', 'AWAITING_REVIEW', 'READY_FOR_SAGA', 'EXPORTING', 'EXPORTED', 'DUPLICATE']
+const pipelineOptions: PipelineStatus[] = ['DOWNLOADED', 'ARCHIVED', 'MATCHING', 'AWAITING_CONTRACT', 'AWAITING_MATCH_CONFIRM', 'DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'COMMERCIAL_VALIDATING', 'AWAITING_COMMERCIAL_REVIEW', 'COMMERCIALLY_VALIDATED', 'CLASSIFIED', 'AWAITING_REVIEW', 'READY_FOR_SAGA', 'EXPORTING', 'EXPORTED', 'DUPLICATE']
 const sagaOptions: SagaStatus[] = ['NOT_READY', 'READY', 'EXPORTING', 'EXPORTED', 'FAILED']
 
 export function InvoiceListPage() {

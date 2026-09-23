@@ -12,13 +12,16 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"diana-contabilitate/backend/internal/accounting"
+	"diana-contabilitate/backend/internal/accountinganalysis"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/classification"
 	"diana-contabilitate/backend/internal/clients"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 	contractdomain "diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/invoicing"
@@ -37,18 +40,20 @@ import (
 type Readiness interface{ Ping(context.Context) error }
 
 type Server struct {
-	clients           *clients.Service
-	invoices          *invoicing.Service
-	tasks             *validationtasks.Service
-	contracts         *contractdomain.Service
-	contractIngestion *contractingestion.Service
-	classifications   *classification.Service
-	rules             *rules.Service
-	spv               *spvdomain.ConnectionManager
-	sagaHandoff       *saga.HandoffService
-	ready             Readiness
-	logger            *slog.Logger
-	metrics           *observability.Metrics
+	clients              *clients.Service
+	invoices             *invoicing.Service
+	tasks                *validationtasks.Service
+	contracts            *contractdomain.Service
+	contractIngestion    *contractingestion.Service
+	commercialValidation *commercialvalidation.Service
+	accountingAnalysis   *accountinganalysis.WorkflowService
+	classifications      *classification.Service
+	rules                *rules.Service
+	spv                  *spvdomain.ConnectionManager
+	sagaHandoff          *saga.HandoffService
+	ready                Readiness
+	logger               *slog.Logger
+	metrics              *observability.Metrics
 }
 
 func New(clientService *clients.Service, invoiceService *invoicing.Service, taskService *validationtasks.Service, contractService *contractdomain.Service, classificationService *classification.Service, ruleService *rules.Service, ready Readiness, logger *slog.Logger) http.Handler {
@@ -68,7 +73,15 @@ func NewWithIntegrations(clientService *clients.Service, invoiceService *invoici
 }
 
 func NewWithContractIngestion(clientService *clients.Service, invoiceService *invoicing.Service, taskService *validationtasks.Service, contractService *contractdomain.Service, classificationService *classification.Service, ruleService *rules.Service, spvService *spvdomain.ConnectionManager, sagaHandoff *saga.HandoffService, ingestion *contractingestion.Service, ready Readiness, logger *slog.Logger, metrics *observability.Metrics) http.Handler {
-	s := &Server{clients: clientService, invoices: invoiceService, tasks: taskService, contracts: contractService, contractIngestion: ingestion, classifications: classificationService, rules: ruleService, spv: spvService, sagaHandoff: sagaHandoff, ready: ready, logger: logger, metrics: metrics}
+	return NewWithCommercialValidation(clientService, invoiceService, taskService, contractService, classificationService, ruleService, spvService, sagaHandoff, ingestion, nil, ready, logger, metrics)
+}
+
+func NewWithCommercialValidation(clientService *clients.Service, invoiceService *invoicing.Service, taskService *validationtasks.Service, contractService *contractdomain.Service, classificationService *classification.Service, ruleService *rules.Service, spvService *spvdomain.ConnectionManager, sagaHandoff *saga.HandoffService, ingestion *contractingestion.Service, commercial *commercialvalidation.Service, ready Readiness, logger *slog.Logger, metrics *observability.Metrics) http.Handler {
+	return NewWithAccountingAnalysis(clientService, invoiceService, taskService, contractService, classificationService, ruleService, spvService, sagaHandoff, ingestion, commercial, nil, ready, logger, metrics)
+}
+
+func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *invoicing.Service, taskService *validationtasks.Service, contractService *contractdomain.Service, classificationService *classification.Service, ruleService *rules.Service, spvService *spvdomain.ConnectionManager, sagaHandoff *saga.HandoffService, ingestion *contractingestion.Service, commercial *commercialvalidation.Service, analysis *accountinganalysis.WorkflowService, ready Readiness, logger *slog.Logger, metrics *observability.Metrics) http.Handler {
+	s := &Server{clients: clientService, invoices: invoiceService, tasks: taskService, contracts: contractService, contractIngestion: ingestion, commercialValidation: commercial, accountingAnalysis: analysis, classifications: classificationService, rules: ruleService, spv: spvService, sagaHandoff: sagaHandoff, ready: ready, logger: logger, metrics: metrics}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.readiness)
@@ -89,11 +102,14 @@ func NewWithContractIngestion(clientService *clients.Service, invoiceService *in
 	mux.HandleFunc("POST /api/v1/clients/{id}/accounting-profiles", s.createClientProfile)
 	mux.HandleFunc("POST /api/v1/clients/{id}/saga-configuration", s.configureClientSaga)
 	mux.HandleFunc("GET /api/v1/invoices", s.listInvoices)
+	mux.HandleFunc("GET /api/v1/accounts", s.searchAccounts)
 	mux.HandleFunc("GET /api/v1/invoices/{id}", s.getInvoice)
 	mux.HandleFunc("GET /api/v1/validation-tasks", s.listValidationTasks)
 	mux.HandleFunc("POST /api/v1/invoices/{id}/contract-requests", s.requestMissingContract)
 	mux.HandleFunc("GET /api/v1/contracts", s.listContracts)
 	mux.HandleFunc("GET /api/v1/contracts/{id}", s.getContract)
+	mux.HandleFunc("POST /api/v1/contracts/{id}/archive", s.archiveContract)
+	mux.HandleFunc("POST /api/v1/contracts/{id}/discard", s.discardContract)
 	mux.HandleFunc("GET /api/v1/contracts/{id}/invoices", s.listContractInvoices)
 	mux.HandleFunc("POST /api/v1/invoices/{id}/contract-confirmations", s.confirmContractMatch)
 	mux.HandleFunc("POST /api/v1/invoices/{id}/classification-decisions", s.reviewClassification)
@@ -115,9 +131,41 @@ func NewWithContractIngestion(clientService *clients.Service, invoiceService *in
 	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-documents/{documentId}/extraction", s.getContractDocument)
 	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-documents/{documentId}/file", s.downloadContractDocument)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/confirm", s.confirmContractDocument)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/commercial-rules/{ruleId}/confirm", s.confirmProposedCommercialRule)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/reviewed-service-prices/activate", s.activateReviewedServicePrices)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/commercial-date-facts", s.putCommercialDateFact)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/reextract", s.retryContractDocument)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/discard", s.discardContractDocument)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/invoices/{invoiceId}/commercial-validation", s.getCommercialValidation)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/invoices/{invoiceId}/accounting-analysis", s.getAccountingAnalysis)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/accounting-analysis", s.requestAccountingAnalysis)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/accounting-analysis/review", s.reviewAccountingAnalysis)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-dossiers", s.createContractDossier)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-dossiers", s.listContractDossiers)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-dossiers/{dossierId}", s.getContractDossier)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/commercial-validation/resolve", s.resolveCommercialValidation)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-dossiers/{dossierId}/variables", s.putCommercialVariable)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/commercial-service-aliases", s.confirmCommercialAlias)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/commercial-snapshots/{snapshotId}/revalidation-preview", s.previewCommercialRevalidation)
 	return s.middleware(mux)
+}
+
+func (s *Server) searchAccounts(w http.ResponseWriter, r *http.Request) {
+	limit := 25
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > 100 {
+			writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid account search limit.")
+			return
+		}
+		limit = parsed
+	}
+	items, err := s.classifications.SearchAccounts(r.Context(), r.URL.Query().Get("q"), limit)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func ingestionActor(actor requestactor.Actor, r *http.Request) contractingestion.Actor {
@@ -727,6 +775,8 @@ type classificationDecisionDTO struct {
 	TypedValue                     *accounting.Value `json:"typedValue"`
 	Reason                         string            `json:"reason"`
 	CorrectedValue                 *string           `json:"correctedValue"`
+	MappingAction                  string            `json:"mappingAction"`
+	ExpectedMappingRevision        uint64            `json:"expectedMappingRevision"`
 }
 
 func (s *Server) reviewClassification(w http.ResponseWriter, r *http.Request) {
@@ -745,7 +795,7 @@ func (s *Server) reviewClassification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor, _ := requestactor.FromContext(r.Context())
-	_, err := s.classifications.Review(r.Context(), classification.ReviewCommand{InvoiceID: invoiceID, TaskID: request.TaskID, ClassificationID: request.ClassificationID, ExpectedInvoiceRevision: request.ExpectedInvoiceRevision, ExpectedTaskRevision: request.ExpectedTaskRevision, ExpectedClassificationRevision: request.ExpectedClassificationRevision, TypedValue: request.TypedValue, Reason: request.Reason, CorrectedValue: request.CorrectedValue, CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context())})
+	_, err := s.classifications.Review(r.Context(), classification.ReviewCommand{InvoiceID: invoiceID, TaskID: request.TaskID, ClassificationID: request.ClassificationID, ExpectedInvoiceRevision: request.ExpectedInvoiceRevision, ExpectedTaskRevision: request.ExpectedTaskRevision, ExpectedClassificationRevision: request.ExpectedClassificationRevision, TypedValue: request.TypedValue, Reason: request.Reason, CorrectedValue: request.CorrectedValue, CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context()), MappingAction: request.MappingAction, ExpectedMappingRevision: request.ExpectedMappingRevision})
 	if errors.Is(err, apperrors.ErrNotFound) {
 		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Classification review context was not found.")
 		return
@@ -808,6 +858,55 @@ func (s *Server) getContract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, contractResponse(item))
+}
+
+func (s *Server) archiveContract(w http.ResponseWriter, r *http.Request) {
+	s.changeContractLifecycle(w, r, false)
+}
+
+func (s *Server) discardContract(w http.ResponseWriter, r *http.Request) {
+	s.changeContractLifecycle(w, r, true)
+}
+
+func (s *Server) changeContractLifecycle(w http.ResponseWriter, r *http.Request, mistaken bool) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if !s.allowContract(w, r, id) {
+		return
+	}
+	var request struct {
+		ExpectedRevision uint64 `json:"expectedRevision"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.ExpectedRevision == 0 {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Revizia contractului este obligatorie.")
+		return
+	}
+	actor, ok := requestactor.FromContext(r.Context())
+	if !ok || actor.ID == "" || actor.Display == "" {
+		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Identitatea utilizatorului este obligatorie.")
+		return
+	}
+	var changed bool
+	var err error
+	if mistaken {
+		changed, err = s.contracts.DeleteMistaken(r.Context(), id, request.ExpectedRevision, actor.ID, actor.Display)
+	} else {
+		changed, err = s.contracts.Archive(r.Context(), id, request.ExpectedRevision, actor.ID, actor.Display)
+	}
+	if errors.Is(err, contractdomain.ErrContractInUse) {
+		writeError(w, r, http.StatusConflict, "CONTRACT_IN_USE", "Contractul are facturi sau validări istorice. Scoate-l din utilizare în loc să ștergi încărcarea.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "CONFLICT", "Contractul s-a modificat. Reîncarcă pagina și încearcă din nou.")
+		return
+	}
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"changed": changed})
 }
 
 func (s *Server) listContractInvoices(w http.ResponseWriter, r *http.Request) {

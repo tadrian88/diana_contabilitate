@@ -14,25 +14,29 @@ import (
 type PipelineStatus string
 
 const (
-	StatusDownloaded           PipelineStatus = "DOWNLOADED"
-	StatusArchived             PipelineStatus = "ARCHIVED"
-	StatusMatching             PipelineStatus = "MATCHING"
-	StatusAwaitingContract     PipelineStatus = "AWAITING_CONTRACT"
-	StatusAwaitingMatchConfirm PipelineStatus = "AWAITING_MATCH_CONFIRM"
-	StatusDedupeChecked        PipelineStatus = "DEDUPE_CHECKED"
-	StatusHeaderRead           PipelineStatus = "HEADER_READ"
-	StatusLinesRead            PipelineStatus = "LINES_READ"
-	StatusClassified           PipelineStatus = "CLASSIFIED"
-	StatusAwaitingReview       PipelineStatus = "AWAITING_REVIEW"
-	StatusReadyForSAGA         PipelineStatus = "READY_FOR_SAGA"
-	StatusExporting            PipelineStatus = "EXPORTING"
-	StatusExported             PipelineStatus = "EXPORTED"
-	StatusDuplicate            PipelineStatus = "DUPLICATE"
+	StatusDownloaded               PipelineStatus = "DOWNLOADED"
+	StatusArchived                 PipelineStatus = "ARCHIVED"
+	StatusMatching                 PipelineStatus = "MATCHING"
+	StatusAwaitingContract         PipelineStatus = "AWAITING_CONTRACT"
+	StatusAwaitingMatchConfirm     PipelineStatus = "AWAITING_MATCH_CONFIRM"
+	StatusDedupeChecked            PipelineStatus = "DEDUPE_CHECKED"
+	StatusHeaderRead               PipelineStatus = "HEADER_READ"
+	StatusLinesRead                PipelineStatus = "LINES_READ"
+	StatusCommercialValidating     PipelineStatus = "COMMERCIAL_VALIDATING"
+	StatusAwaitingCommercialReview PipelineStatus = "AWAITING_COMMERCIAL_REVIEW"
+	StatusCommerciallyValidated    PipelineStatus = "COMMERCIALLY_VALIDATED"
+	StatusClassified               PipelineStatus = "CLASSIFIED"
+	StatusAwaitingReview           PipelineStatus = "AWAITING_REVIEW"
+	StatusReadyForSAGA             PipelineStatus = "READY_FOR_SAGA"
+	StatusExporting                PipelineStatus = "EXPORTING"
+	StatusExported                 PipelineStatus = "EXPORTED"
+	StatusDuplicate                PipelineStatus = "DUPLICATE"
 )
 
 var PipelineStatuses = []PipelineStatus{
 	StatusDownloaded, StatusArchived, StatusMatching, StatusAwaitingContract,
 	StatusAwaitingMatchConfirm, StatusDedupeChecked, StatusHeaderRead, StatusLinesRead,
+	StatusCommercialValidating, StatusAwaitingCommercialReview, StatusCommerciallyValidated,
 	StatusClassified, StatusAwaitingReview, StatusReadyForSAGA, StatusExporting,
 	StatusExported, StatusDuplicate,
 }

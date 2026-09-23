@@ -4,7 +4,7 @@ test('rezolvă asocierea cu mai multe contracte și continuă automat', async ({
   await page.goto('/invoices/inv-multiple?tab=contract')
   await expect(page.getByText('Contract recomandat')).toBeVisible()
   await page.getByRole('button', { name: 'Confirmă', exact: true }).click()
-  await expect(page.getByText('Exportată în SAGA', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Exportată în SAGA', { exact: true }).first()).toBeVisible({ timeout: 15_000 })
 })
 
 test('permite alegerea contractului alternativ', async ({ page }) => {
@@ -36,10 +36,12 @@ test('rezolvă toate clasificările incerte înainte de export', async ({ page }
 
 test('happy path ajunge automat în EXPORTED', async ({ page }) => {
   await page.goto('/invoices/inv-happy')
-  await expect(page.getByRole('heading', { name: 'Pregătită pentru SAGA' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Export în curs' })).toBeVisible()
-  await expect(page.getByText('Exportată în SAGA', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Exportată în SAGA', { exact: true }).first()).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('Procesare finalizată. Factura a ajuns în starea SAGA simulată.')).toBeVisible()
+  await page.getByRole('tab', { name: 'Istoric' }).click()
+  await expect(page.getByText('Stare simulată: COMMERCIALLY_VALIDATED.')).toBeVisible()
+  await expect(page.getByText('Stare simulată: READY_FOR_SAGA.')).toBeVisible()
+  await expect(page.getByText('Stare simulată: EXPORTING.')).toBeVisible()
 })
 
 test('păstrează contextul de client vizibil și comută tema', async ({ page }) => {

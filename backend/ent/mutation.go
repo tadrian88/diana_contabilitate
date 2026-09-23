@@ -4,8 +4,11 @@ package ent
 
 import (
 	"context"
+	"diana-contabilitate/backend/ent/account"
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/accountingrulepack"
+	"diana-contabilitate/backend/ent/accountmapping"
+	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
@@ -48,6 +51,9 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeAccount                    = "Account"
+	TypeAccountMapping             = "AccountMapping"
+	TypeAccountMappingVersion      = "AccountMappingVersion"
 	TypeAccountingClient           = "AccountingClient"
 	TypeAccountingRulePack         = "AccountingRulePack"
 	TypeActivityEvent              = "ActivityEvent"
@@ -71,6 +77,2645 @@ const (
 	TypeSagaExportAttempt          = "SagaExportAttempt"
 	TypeValidationTask             = "ValidationTask"
 )
+
+// AccountMutation represents an operation that mutates the Account nodes in the graph.
+type AccountMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *string
+	code          *string
+	name          *string
+	account_type  *string
+	parent_code   *string
+	level         *int
+	addlevel      *int
+	is_synthetic  *bool
+	postable      *bool
+	is_active     *bool
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*Account, error)
+	predicates    []predicate.Account
+}
+
+var _ ent.Mutation = (*AccountMutation)(nil)
+
+// accountOption allows management of the mutation configuration using functional options.
+type accountOption func(*AccountMutation)
+
+// newAccountMutation creates new mutation for the Account entity.
+func newAccountMutation(c config, op Op, opts ...accountOption) *AccountMutation {
+	m := &AccountMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAccount,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAccountID sets the ID field of the mutation.
+func withAccountID(id string) accountOption {
+	return func(m *AccountMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Account
+		)
+		m.oldValue = func(ctx context.Context) (*Account, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Account.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAccount sets the old Account of the mutation.
+func withAccount(node *Account) accountOption {
+	return func(m *AccountMutation) {
+		m.oldValue = func(context.Context) (*Account, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AccountMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AccountMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Account entities.
+func (m *AccountMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AccountMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AccountMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Account.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCode sets the "code" field.
+func (m *AccountMutation) SetCode(s string) {
+	m.code = &s
+}
+
+// Code returns the value of the "code" field in the mutation.
+func (m *AccountMutation) Code() (r string, exists bool) {
+	v := m.code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCode returns the old "code" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCode: %w", err)
+	}
+	return oldValue.Code, nil
+}
+
+// ResetCode resets all changes to the "code" field.
+func (m *AccountMutation) ResetCode() {
+	m.code = nil
+}
+
+// SetName sets the "name" field.
+func (m *AccountMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *AccountMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *AccountMutation) ResetName() {
+	m.name = nil
+}
+
+// SetAccountType sets the "account_type" field.
+func (m *AccountMutation) SetAccountType(s string) {
+	m.account_type = &s
+}
+
+// AccountType returns the value of the "account_type" field in the mutation.
+func (m *AccountMutation) AccountType() (r string, exists bool) {
+	v := m.account_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountType returns the old "account_type" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldAccountType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountType: %w", err)
+	}
+	return oldValue.AccountType, nil
+}
+
+// ResetAccountType resets all changes to the "account_type" field.
+func (m *AccountMutation) ResetAccountType() {
+	m.account_type = nil
+}
+
+// SetParentCode sets the "parent_code" field.
+func (m *AccountMutation) SetParentCode(s string) {
+	m.parent_code = &s
+}
+
+// ParentCode returns the value of the "parent_code" field in the mutation.
+func (m *AccountMutation) ParentCode() (r string, exists bool) {
+	v := m.parent_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParentCode returns the old "parent_code" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldParentCode(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParentCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParentCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParentCode: %w", err)
+	}
+	return oldValue.ParentCode, nil
+}
+
+// ClearParentCode clears the value of the "parent_code" field.
+func (m *AccountMutation) ClearParentCode() {
+	m.parent_code = nil
+	m.clearedFields[account.FieldParentCode] = struct{}{}
+}
+
+// ParentCodeCleared returns if the "parent_code" field was cleared in this mutation.
+func (m *AccountMutation) ParentCodeCleared() bool {
+	_, ok := m.clearedFields[account.FieldParentCode]
+	return ok
+}
+
+// ResetParentCode resets all changes to the "parent_code" field.
+func (m *AccountMutation) ResetParentCode() {
+	m.parent_code = nil
+	delete(m.clearedFields, account.FieldParentCode)
+}
+
+// SetLevel sets the "level" field.
+func (m *AccountMutation) SetLevel(i int) {
+	m.level = &i
+	m.addlevel = nil
+}
+
+// Level returns the value of the "level" field in the mutation.
+func (m *AccountMutation) Level() (r int, exists bool) {
+	v := m.level
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLevel returns the old "level" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldLevel(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLevel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLevel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLevel: %w", err)
+	}
+	return oldValue.Level, nil
+}
+
+// AddLevel adds i to the "level" field.
+func (m *AccountMutation) AddLevel(i int) {
+	if m.addlevel != nil {
+		*m.addlevel += i
+	} else {
+		m.addlevel = &i
+	}
+}
+
+// AddedLevel returns the value that was added to the "level" field in this mutation.
+func (m *AccountMutation) AddedLevel() (r int, exists bool) {
+	v := m.addlevel
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLevel resets all changes to the "level" field.
+func (m *AccountMutation) ResetLevel() {
+	m.level = nil
+	m.addlevel = nil
+}
+
+// SetIsSynthetic sets the "is_synthetic" field.
+func (m *AccountMutation) SetIsSynthetic(b bool) {
+	m.is_synthetic = &b
+}
+
+// IsSynthetic returns the value of the "is_synthetic" field in the mutation.
+func (m *AccountMutation) IsSynthetic() (r bool, exists bool) {
+	v := m.is_synthetic
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsSynthetic returns the old "is_synthetic" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldIsSynthetic(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsSynthetic is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsSynthetic requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsSynthetic: %w", err)
+	}
+	return oldValue.IsSynthetic, nil
+}
+
+// ResetIsSynthetic resets all changes to the "is_synthetic" field.
+func (m *AccountMutation) ResetIsSynthetic() {
+	m.is_synthetic = nil
+}
+
+// SetPostable sets the "postable" field.
+func (m *AccountMutation) SetPostable(b bool) {
+	m.postable = &b
+}
+
+// Postable returns the value of the "postable" field in the mutation.
+func (m *AccountMutation) Postable() (r bool, exists bool) {
+	v := m.postable
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPostable returns the old "postable" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldPostable(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPostable is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPostable requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPostable: %w", err)
+	}
+	return oldValue.Postable, nil
+}
+
+// ResetPostable resets all changes to the "postable" field.
+func (m *AccountMutation) ResetPostable() {
+	m.postable = nil
+}
+
+// SetIsActive sets the "is_active" field.
+func (m *AccountMutation) SetIsActive(b bool) {
+	m.is_active = &b
+}
+
+// IsActive returns the value of the "is_active" field in the mutation.
+func (m *AccountMutation) IsActive() (r bool, exists bool) {
+	v := m.is_active
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsActive returns the old "is_active" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldIsActive(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsActive is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsActive requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsActive: %w", err)
+	}
+	return oldValue.IsActive, nil
+}
+
+// ResetIsActive resets all changes to the "is_active" field.
+func (m *AccountMutation) ResetIsActive() {
+	m.is_active = nil
+}
+
+// Where appends a list predicates to the AccountMutation builder.
+func (m *AccountMutation) Where(ps ...predicate.Account) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AccountMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AccountMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Account, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AccountMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AccountMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Account).
+func (m *AccountMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AccountMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.code != nil {
+		fields = append(fields, account.FieldCode)
+	}
+	if m.name != nil {
+		fields = append(fields, account.FieldName)
+	}
+	if m.account_type != nil {
+		fields = append(fields, account.FieldAccountType)
+	}
+	if m.parent_code != nil {
+		fields = append(fields, account.FieldParentCode)
+	}
+	if m.level != nil {
+		fields = append(fields, account.FieldLevel)
+	}
+	if m.is_synthetic != nil {
+		fields = append(fields, account.FieldIsSynthetic)
+	}
+	if m.postable != nil {
+		fields = append(fields, account.FieldPostable)
+	}
+	if m.is_active != nil {
+		fields = append(fields, account.FieldIsActive)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AccountMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case account.FieldCode:
+		return m.Code()
+	case account.FieldName:
+		return m.Name()
+	case account.FieldAccountType:
+		return m.AccountType()
+	case account.FieldParentCode:
+		return m.ParentCode()
+	case account.FieldLevel:
+		return m.Level()
+	case account.FieldIsSynthetic:
+		return m.IsSynthetic()
+	case account.FieldPostable:
+		return m.Postable()
+	case account.FieldIsActive:
+		return m.IsActive()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case account.FieldCode:
+		return m.OldCode(ctx)
+	case account.FieldName:
+		return m.OldName(ctx)
+	case account.FieldAccountType:
+		return m.OldAccountType(ctx)
+	case account.FieldParentCode:
+		return m.OldParentCode(ctx)
+	case account.FieldLevel:
+		return m.OldLevel(ctx)
+	case account.FieldIsSynthetic:
+		return m.OldIsSynthetic(ctx)
+	case account.FieldPostable:
+		return m.OldPostable(ctx)
+	case account.FieldIsActive:
+		return m.OldIsActive(ctx)
+	}
+	return nil, fmt.Errorf("unknown Account field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case account.FieldCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCode(v)
+		return nil
+	case account.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case account.FieldAccountType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountType(v)
+		return nil
+	case account.FieldParentCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParentCode(v)
+		return nil
+	case account.FieldLevel:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLevel(v)
+		return nil
+	case account.FieldIsSynthetic:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsSynthetic(v)
+		return nil
+	case account.FieldPostable:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPostable(v)
+		return nil
+	case account.FieldIsActive:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsActive(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Account field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AccountMutation) AddedFields() []string {
+	var fields []string
+	if m.addlevel != nil {
+		fields = append(fields, account.FieldLevel)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AccountMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case account.FieldLevel:
+		return m.AddedLevel()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case account.FieldLevel:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLevel(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Account numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AccountMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(account.FieldParentCode) {
+		fields = append(fields, account.FieldParentCode)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AccountMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AccountMutation) ClearField(name string) error {
+	switch name {
+	case account.FieldParentCode:
+		m.ClearParentCode()
+		return nil
+	}
+	return fmt.Errorf("unknown Account nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AccountMutation) ResetField(name string) error {
+	switch name {
+	case account.FieldCode:
+		m.ResetCode()
+		return nil
+	case account.FieldName:
+		m.ResetName()
+		return nil
+	case account.FieldAccountType:
+		m.ResetAccountType()
+		return nil
+	case account.FieldParentCode:
+		m.ResetParentCode()
+		return nil
+	case account.FieldLevel:
+		m.ResetLevel()
+		return nil
+	case account.FieldIsSynthetic:
+		m.ResetIsSynthetic()
+		return nil
+	case account.FieldPostable:
+		m.ResetPostable()
+		return nil
+	case account.FieldIsActive:
+		m.ResetIsActive()
+		return nil
+	}
+	return fmt.Errorf("unknown Account field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AccountMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AccountMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AccountMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AccountMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AccountMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AccountMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AccountMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Account unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AccountMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Account edge %s", name)
+}
+
+// AccountMappingMutation represents an operation that mutates the AccountMapping nodes in the graph.
+type AccountMappingMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *string
+	client_id              *string
+	normalized_supplier_id *string
+	service_identity_kind  *accountmapping.ServiceIdentityKind
+	service_identity_value *string
+	normalizer_version     *string
+	current_version        *int
+	addcurrent_version     *int
+	status                 *accountmapping.Status
+	revision               *uint64
+	addrevision            *int64
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*AccountMapping, error)
+	predicates             []predicate.AccountMapping
+}
+
+var _ ent.Mutation = (*AccountMappingMutation)(nil)
+
+// accountmappingOption allows management of the mutation configuration using functional options.
+type accountmappingOption func(*AccountMappingMutation)
+
+// newAccountMappingMutation creates new mutation for the AccountMapping entity.
+func newAccountMappingMutation(c config, op Op, opts ...accountmappingOption) *AccountMappingMutation {
+	m := &AccountMappingMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAccountMapping,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAccountMappingID sets the ID field of the mutation.
+func withAccountMappingID(id string) accountmappingOption {
+	return func(m *AccountMappingMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AccountMapping
+		)
+		m.oldValue = func(ctx context.Context) (*AccountMapping, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AccountMapping.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAccountMapping sets the old AccountMapping of the mutation.
+func withAccountMapping(node *AccountMapping) accountmappingOption {
+	return func(m *AccountMappingMutation) {
+		m.oldValue = func(context.Context) (*AccountMapping, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AccountMappingMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AccountMappingMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of AccountMapping entities.
+func (m *AccountMappingMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AccountMappingMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AccountMappingMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().AccountMapping.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetClientID sets the "client_id" field.
+func (m *AccountMappingMutation) SetClientID(s string) {
+	m.client_id = &s
+}
+
+// ClientID returns the value of the "client_id" field in the mutation.
+func (m *AccountMappingMutation) ClientID() (r string, exists bool) {
+	v := m.client_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientID returns the old "client_id" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldClientID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientID: %w", err)
+	}
+	return oldValue.ClientID, nil
+}
+
+// ResetClientID resets all changes to the "client_id" field.
+func (m *AccountMappingMutation) ResetClientID() {
+	m.client_id = nil
+}
+
+// SetNormalizedSupplierID sets the "normalized_supplier_id" field.
+func (m *AccountMappingMutation) SetNormalizedSupplierID(s string) {
+	m.normalized_supplier_id = &s
+}
+
+// NormalizedSupplierID returns the value of the "normalized_supplier_id" field in the mutation.
+func (m *AccountMappingMutation) NormalizedSupplierID() (r string, exists bool) {
+	v := m.normalized_supplier_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNormalizedSupplierID returns the old "normalized_supplier_id" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldNormalizedSupplierID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNormalizedSupplierID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNormalizedSupplierID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNormalizedSupplierID: %w", err)
+	}
+	return oldValue.NormalizedSupplierID, nil
+}
+
+// ResetNormalizedSupplierID resets all changes to the "normalized_supplier_id" field.
+func (m *AccountMappingMutation) ResetNormalizedSupplierID() {
+	m.normalized_supplier_id = nil
+}
+
+// SetServiceIdentityKind sets the "service_identity_kind" field.
+func (m *AccountMappingMutation) SetServiceIdentityKind(aik accountmapping.ServiceIdentityKind) {
+	m.service_identity_kind = &aik
+}
+
+// ServiceIdentityKind returns the value of the "service_identity_kind" field in the mutation.
+func (m *AccountMappingMutation) ServiceIdentityKind() (r accountmapping.ServiceIdentityKind, exists bool) {
+	v := m.service_identity_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldServiceIdentityKind returns the old "service_identity_kind" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldServiceIdentityKind(ctx context.Context) (v accountmapping.ServiceIdentityKind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldServiceIdentityKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldServiceIdentityKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldServiceIdentityKind: %w", err)
+	}
+	return oldValue.ServiceIdentityKind, nil
+}
+
+// ResetServiceIdentityKind resets all changes to the "service_identity_kind" field.
+func (m *AccountMappingMutation) ResetServiceIdentityKind() {
+	m.service_identity_kind = nil
+}
+
+// SetServiceIdentityValue sets the "service_identity_value" field.
+func (m *AccountMappingMutation) SetServiceIdentityValue(s string) {
+	m.service_identity_value = &s
+}
+
+// ServiceIdentityValue returns the value of the "service_identity_value" field in the mutation.
+func (m *AccountMappingMutation) ServiceIdentityValue() (r string, exists bool) {
+	v := m.service_identity_value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldServiceIdentityValue returns the old "service_identity_value" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldServiceIdentityValue(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldServiceIdentityValue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldServiceIdentityValue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldServiceIdentityValue: %w", err)
+	}
+	return oldValue.ServiceIdentityValue, nil
+}
+
+// ResetServiceIdentityValue resets all changes to the "service_identity_value" field.
+func (m *AccountMappingMutation) ResetServiceIdentityValue() {
+	m.service_identity_value = nil
+}
+
+// SetNormalizerVersion sets the "normalizer_version" field.
+func (m *AccountMappingMutation) SetNormalizerVersion(s string) {
+	m.normalizer_version = &s
+}
+
+// NormalizerVersion returns the value of the "normalizer_version" field in the mutation.
+func (m *AccountMappingMutation) NormalizerVersion() (r string, exists bool) {
+	v := m.normalizer_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNormalizerVersion returns the old "normalizer_version" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldNormalizerVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNormalizerVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNormalizerVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNormalizerVersion: %w", err)
+	}
+	return oldValue.NormalizerVersion, nil
+}
+
+// ResetNormalizerVersion resets all changes to the "normalizer_version" field.
+func (m *AccountMappingMutation) ResetNormalizerVersion() {
+	m.normalizer_version = nil
+}
+
+// SetCurrentVersion sets the "current_version" field.
+func (m *AccountMappingMutation) SetCurrentVersion(i int) {
+	m.current_version = &i
+	m.addcurrent_version = nil
+}
+
+// CurrentVersion returns the value of the "current_version" field in the mutation.
+func (m *AccountMappingMutation) CurrentVersion() (r int, exists bool) {
+	v := m.current_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrentVersion returns the old "current_version" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldCurrentVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrentVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrentVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrentVersion: %w", err)
+	}
+	return oldValue.CurrentVersion, nil
+}
+
+// AddCurrentVersion adds i to the "current_version" field.
+func (m *AccountMappingMutation) AddCurrentVersion(i int) {
+	if m.addcurrent_version != nil {
+		*m.addcurrent_version += i
+	} else {
+		m.addcurrent_version = &i
+	}
+}
+
+// AddedCurrentVersion returns the value that was added to the "current_version" field in this mutation.
+func (m *AccountMappingMutation) AddedCurrentVersion() (r int, exists bool) {
+	v := m.addcurrent_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCurrentVersion resets all changes to the "current_version" field.
+func (m *AccountMappingMutation) ResetCurrentVersion() {
+	m.current_version = nil
+	m.addcurrent_version = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *AccountMappingMutation) SetStatus(a accountmapping.Status) {
+	m.status = &a
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *AccountMappingMutation) Status() (r accountmapping.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldStatus(ctx context.Context) (v accountmapping.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *AccountMappingMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetRevision sets the "revision" field.
+func (m *AccountMappingMutation) SetRevision(u uint64) {
+	m.revision = &u
+	m.addrevision = nil
+}
+
+// Revision returns the value of the "revision" field in the mutation.
+func (m *AccountMappingMutation) Revision() (r uint64, exists bool) {
+	v := m.revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevision returns the old "revision" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldRevision(ctx context.Context) (v uint64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevision: %w", err)
+	}
+	return oldValue.Revision, nil
+}
+
+// AddRevision adds u to the "revision" field.
+func (m *AccountMappingMutation) AddRevision(u int64) {
+	if m.addrevision != nil {
+		*m.addrevision += u
+	} else {
+		m.addrevision = &u
+	}
+}
+
+// AddedRevision returns the value that was added to the "revision" field in this mutation.
+func (m *AccountMappingMutation) AddedRevision() (r int64, exists bool) {
+	v := m.addrevision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRevision resets all changes to the "revision" field.
+func (m *AccountMappingMutation) ResetRevision() {
+	m.revision = nil
+	m.addrevision = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *AccountMappingMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *AccountMappingMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *AccountMappingMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *AccountMappingMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *AccountMappingMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *AccountMappingMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the AccountMappingMutation builder.
+func (m *AccountMappingMutation) Where(ps ...predicate.AccountMapping) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AccountMappingMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AccountMappingMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.AccountMapping, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AccountMappingMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AccountMappingMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (AccountMapping).
+func (m *AccountMappingMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AccountMappingMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.client_id != nil {
+		fields = append(fields, accountmapping.FieldClientID)
+	}
+	if m.normalized_supplier_id != nil {
+		fields = append(fields, accountmapping.FieldNormalizedSupplierID)
+	}
+	if m.service_identity_kind != nil {
+		fields = append(fields, accountmapping.FieldServiceIdentityKind)
+	}
+	if m.service_identity_value != nil {
+		fields = append(fields, accountmapping.FieldServiceIdentityValue)
+	}
+	if m.normalizer_version != nil {
+		fields = append(fields, accountmapping.FieldNormalizerVersion)
+	}
+	if m.current_version != nil {
+		fields = append(fields, accountmapping.FieldCurrentVersion)
+	}
+	if m.status != nil {
+		fields = append(fields, accountmapping.FieldStatus)
+	}
+	if m.revision != nil {
+		fields = append(fields, accountmapping.FieldRevision)
+	}
+	if m.created_at != nil {
+		fields = append(fields, accountmapping.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, accountmapping.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AccountMappingMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case accountmapping.FieldClientID:
+		return m.ClientID()
+	case accountmapping.FieldNormalizedSupplierID:
+		return m.NormalizedSupplierID()
+	case accountmapping.FieldServiceIdentityKind:
+		return m.ServiceIdentityKind()
+	case accountmapping.FieldServiceIdentityValue:
+		return m.ServiceIdentityValue()
+	case accountmapping.FieldNormalizerVersion:
+		return m.NormalizerVersion()
+	case accountmapping.FieldCurrentVersion:
+		return m.CurrentVersion()
+	case accountmapping.FieldStatus:
+		return m.Status()
+	case accountmapping.FieldRevision:
+		return m.Revision()
+	case accountmapping.FieldCreatedAt:
+		return m.CreatedAt()
+	case accountmapping.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AccountMappingMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case accountmapping.FieldClientID:
+		return m.OldClientID(ctx)
+	case accountmapping.FieldNormalizedSupplierID:
+		return m.OldNormalizedSupplierID(ctx)
+	case accountmapping.FieldServiceIdentityKind:
+		return m.OldServiceIdentityKind(ctx)
+	case accountmapping.FieldServiceIdentityValue:
+		return m.OldServiceIdentityValue(ctx)
+	case accountmapping.FieldNormalizerVersion:
+		return m.OldNormalizerVersion(ctx)
+	case accountmapping.FieldCurrentVersion:
+		return m.OldCurrentVersion(ctx)
+	case accountmapping.FieldStatus:
+		return m.OldStatus(ctx)
+	case accountmapping.FieldRevision:
+		return m.OldRevision(ctx)
+	case accountmapping.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case accountmapping.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown AccountMapping field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountMappingMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case accountmapping.FieldClientID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientID(v)
+		return nil
+	case accountmapping.FieldNormalizedSupplierID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNormalizedSupplierID(v)
+		return nil
+	case accountmapping.FieldServiceIdentityKind:
+		v, ok := value.(accountmapping.ServiceIdentityKind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetServiceIdentityKind(v)
+		return nil
+	case accountmapping.FieldServiceIdentityValue:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetServiceIdentityValue(v)
+		return nil
+	case accountmapping.FieldNormalizerVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNormalizerVersion(v)
+		return nil
+	case accountmapping.FieldCurrentVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrentVersion(v)
+		return nil
+	case accountmapping.FieldStatus:
+		v, ok := value.(accountmapping.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case accountmapping.FieldRevision:
+		v, ok := value.(uint64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevision(v)
+		return nil
+	case accountmapping.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case accountmapping.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMapping field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AccountMappingMutation) AddedFields() []string {
+	var fields []string
+	if m.addcurrent_version != nil {
+		fields = append(fields, accountmapping.FieldCurrentVersion)
+	}
+	if m.addrevision != nil {
+		fields = append(fields, accountmapping.FieldRevision)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AccountMappingMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case accountmapping.FieldCurrentVersion:
+		return m.AddedCurrentVersion()
+	case accountmapping.FieldRevision:
+		return m.AddedRevision()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountMappingMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case accountmapping.FieldCurrentVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCurrentVersion(v)
+		return nil
+	case accountmapping.FieldRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRevision(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMapping numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AccountMappingMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AccountMappingMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AccountMappingMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown AccountMapping nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AccountMappingMutation) ResetField(name string) error {
+	switch name {
+	case accountmapping.FieldClientID:
+		m.ResetClientID()
+		return nil
+	case accountmapping.FieldNormalizedSupplierID:
+		m.ResetNormalizedSupplierID()
+		return nil
+	case accountmapping.FieldServiceIdentityKind:
+		m.ResetServiceIdentityKind()
+		return nil
+	case accountmapping.FieldServiceIdentityValue:
+		m.ResetServiceIdentityValue()
+		return nil
+	case accountmapping.FieldNormalizerVersion:
+		m.ResetNormalizerVersion()
+		return nil
+	case accountmapping.FieldCurrentVersion:
+		m.ResetCurrentVersion()
+		return nil
+	case accountmapping.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case accountmapping.FieldRevision:
+		m.ResetRevision()
+		return nil
+	case accountmapping.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case accountmapping.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMapping field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AccountMappingMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AccountMappingMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AccountMappingMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AccountMappingMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AccountMappingMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AccountMappingMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AccountMappingMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown AccountMapping unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AccountMappingMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown AccountMapping edge %s", name)
+}
+
+// AccountMappingVersionMutation represents an operation that mutates the AccountMappingVersion nodes in the graph.
+type AccountMappingVersionMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *string
+	mapping_id               *string
+	version                  *int
+	addversion               *int
+	account_code             *string
+	change_kind              *accountmappingversion.ChangeKind
+	source_classification_id *string
+	source_invoice_line_id   *string
+	raw_description_snapshot *string
+	actor_id                 *string
+	actor_display            *string
+	reason                   *string
+	created_at               *time.Time
+	command_key              *string
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*AccountMappingVersion, error)
+	predicates               []predicate.AccountMappingVersion
+}
+
+var _ ent.Mutation = (*AccountMappingVersionMutation)(nil)
+
+// accountmappingversionOption allows management of the mutation configuration using functional options.
+type accountmappingversionOption func(*AccountMappingVersionMutation)
+
+// newAccountMappingVersionMutation creates new mutation for the AccountMappingVersion entity.
+func newAccountMappingVersionMutation(c config, op Op, opts ...accountmappingversionOption) *AccountMappingVersionMutation {
+	m := &AccountMappingVersionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAccountMappingVersion,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAccountMappingVersionID sets the ID field of the mutation.
+func withAccountMappingVersionID(id string) accountmappingversionOption {
+	return func(m *AccountMappingVersionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AccountMappingVersion
+		)
+		m.oldValue = func(ctx context.Context) (*AccountMappingVersion, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AccountMappingVersion.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAccountMappingVersion sets the old AccountMappingVersion of the mutation.
+func withAccountMappingVersion(node *AccountMappingVersion) accountmappingversionOption {
+	return func(m *AccountMappingVersionMutation) {
+		m.oldValue = func(context.Context) (*AccountMappingVersion, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AccountMappingVersionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AccountMappingVersionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of AccountMappingVersion entities.
+func (m *AccountMappingVersionMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AccountMappingVersionMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AccountMappingVersionMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().AccountMappingVersion.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetMappingID sets the "mapping_id" field.
+func (m *AccountMappingVersionMutation) SetMappingID(s string) {
+	m.mapping_id = &s
+}
+
+// MappingID returns the value of the "mapping_id" field in the mutation.
+func (m *AccountMappingVersionMutation) MappingID() (r string, exists bool) {
+	v := m.mapping_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMappingID returns the old "mapping_id" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldMappingID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMappingID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMappingID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMappingID: %w", err)
+	}
+	return oldValue.MappingID, nil
+}
+
+// ResetMappingID resets all changes to the "mapping_id" field.
+func (m *AccountMappingVersionMutation) ResetMappingID() {
+	m.mapping_id = nil
+}
+
+// SetVersion sets the "version" field.
+func (m *AccountMappingVersionMutation) SetVersion(i int) {
+	m.version = &i
+	m.addversion = nil
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *AccountMappingVersionMutation) Version() (r int, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// AddVersion adds i to the "version" field.
+func (m *AccountMappingVersionMutation) AddVersion(i int) {
+	if m.addversion != nil {
+		*m.addversion += i
+	} else {
+		m.addversion = &i
+	}
+}
+
+// AddedVersion returns the value that was added to the "version" field in this mutation.
+func (m *AccountMappingVersionMutation) AddedVersion() (r int, exists bool) {
+	v := m.addversion
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *AccountMappingVersionMutation) ResetVersion() {
+	m.version = nil
+	m.addversion = nil
+}
+
+// SetAccountCode sets the "account_code" field.
+func (m *AccountMappingVersionMutation) SetAccountCode(s string) {
+	m.account_code = &s
+}
+
+// AccountCode returns the value of the "account_code" field in the mutation.
+func (m *AccountMappingVersionMutation) AccountCode() (r string, exists bool) {
+	v := m.account_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountCode returns the old "account_code" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldAccountCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountCode: %w", err)
+	}
+	return oldValue.AccountCode, nil
+}
+
+// ResetAccountCode resets all changes to the "account_code" field.
+func (m *AccountMappingVersionMutation) ResetAccountCode() {
+	m.account_code = nil
+}
+
+// SetChangeKind sets the "change_kind" field.
+func (m *AccountMappingVersionMutation) SetChangeKind(ak accountmappingversion.ChangeKind) {
+	m.change_kind = &ak
+}
+
+// ChangeKind returns the value of the "change_kind" field in the mutation.
+func (m *AccountMappingVersionMutation) ChangeKind() (r accountmappingversion.ChangeKind, exists bool) {
+	v := m.change_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChangeKind returns the old "change_kind" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldChangeKind(ctx context.Context) (v accountmappingversion.ChangeKind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChangeKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChangeKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChangeKind: %w", err)
+	}
+	return oldValue.ChangeKind, nil
+}
+
+// ResetChangeKind resets all changes to the "change_kind" field.
+func (m *AccountMappingVersionMutation) ResetChangeKind() {
+	m.change_kind = nil
+}
+
+// SetSourceClassificationID sets the "source_classification_id" field.
+func (m *AccountMappingVersionMutation) SetSourceClassificationID(s string) {
+	m.source_classification_id = &s
+}
+
+// SourceClassificationID returns the value of the "source_classification_id" field in the mutation.
+func (m *AccountMappingVersionMutation) SourceClassificationID() (r string, exists bool) {
+	v := m.source_classification_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceClassificationID returns the old "source_classification_id" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldSourceClassificationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceClassificationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceClassificationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceClassificationID: %w", err)
+	}
+	return oldValue.SourceClassificationID, nil
+}
+
+// ResetSourceClassificationID resets all changes to the "source_classification_id" field.
+func (m *AccountMappingVersionMutation) ResetSourceClassificationID() {
+	m.source_classification_id = nil
+}
+
+// SetSourceInvoiceLineID sets the "source_invoice_line_id" field.
+func (m *AccountMappingVersionMutation) SetSourceInvoiceLineID(s string) {
+	m.source_invoice_line_id = &s
+}
+
+// SourceInvoiceLineID returns the value of the "source_invoice_line_id" field in the mutation.
+func (m *AccountMappingVersionMutation) SourceInvoiceLineID() (r string, exists bool) {
+	v := m.source_invoice_line_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceInvoiceLineID returns the old "source_invoice_line_id" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldSourceInvoiceLineID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceInvoiceLineID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceInvoiceLineID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceInvoiceLineID: %w", err)
+	}
+	return oldValue.SourceInvoiceLineID, nil
+}
+
+// ResetSourceInvoiceLineID resets all changes to the "source_invoice_line_id" field.
+func (m *AccountMappingVersionMutation) ResetSourceInvoiceLineID() {
+	m.source_invoice_line_id = nil
+}
+
+// SetRawDescriptionSnapshot sets the "raw_description_snapshot" field.
+func (m *AccountMappingVersionMutation) SetRawDescriptionSnapshot(s string) {
+	m.raw_description_snapshot = &s
+}
+
+// RawDescriptionSnapshot returns the value of the "raw_description_snapshot" field in the mutation.
+func (m *AccountMappingVersionMutation) RawDescriptionSnapshot() (r string, exists bool) {
+	v := m.raw_description_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRawDescriptionSnapshot returns the old "raw_description_snapshot" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldRawDescriptionSnapshot(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRawDescriptionSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRawDescriptionSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRawDescriptionSnapshot: %w", err)
+	}
+	return oldValue.RawDescriptionSnapshot, nil
+}
+
+// ResetRawDescriptionSnapshot resets all changes to the "raw_description_snapshot" field.
+func (m *AccountMappingVersionMutation) ResetRawDescriptionSnapshot() {
+	m.raw_description_snapshot = nil
+}
+
+// SetActorID sets the "actor_id" field.
+func (m *AccountMappingVersionMutation) SetActorID(s string) {
+	m.actor_id = &s
+}
+
+// ActorID returns the value of the "actor_id" field in the mutation.
+func (m *AccountMappingVersionMutation) ActorID() (r string, exists bool) {
+	v := m.actor_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActorID returns the old "actor_id" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldActorID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActorID: %w", err)
+	}
+	return oldValue.ActorID, nil
+}
+
+// ClearActorID clears the value of the "actor_id" field.
+func (m *AccountMappingVersionMutation) ClearActorID() {
+	m.actor_id = nil
+	m.clearedFields[accountmappingversion.FieldActorID] = struct{}{}
+}
+
+// ActorIDCleared returns if the "actor_id" field was cleared in this mutation.
+func (m *AccountMappingVersionMutation) ActorIDCleared() bool {
+	_, ok := m.clearedFields[accountmappingversion.FieldActorID]
+	return ok
+}
+
+// ResetActorID resets all changes to the "actor_id" field.
+func (m *AccountMappingVersionMutation) ResetActorID() {
+	m.actor_id = nil
+	delete(m.clearedFields, accountmappingversion.FieldActorID)
+}
+
+// SetActorDisplay sets the "actor_display" field.
+func (m *AccountMappingVersionMutation) SetActorDisplay(s string) {
+	m.actor_display = &s
+}
+
+// ActorDisplay returns the value of the "actor_display" field in the mutation.
+func (m *AccountMappingVersionMutation) ActorDisplay() (r string, exists bool) {
+	v := m.actor_display
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActorDisplay returns the old "actor_display" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldActorDisplay(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActorDisplay is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActorDisplay requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActorDisplay: %w", err)
+	}
+	return oldValue.ActorDisplay, nil
+}
+
+// ResetActorDisplay resets all changes to the "actor_display" field.
+func (m *AccountMappingVersionMutation) ResetActorDisplay() {
+	m.actor_display = nil
+}
+
+// SetReason sets the "reason" field.
+func (m *AccountMappingVersionMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *AccountMappingVersionMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *AccountMappingVersionMutation) ResetReason() {
+	m.reason = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *AccountMappingVersionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *AccountMappingVersionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *AccountMappingVersionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetCommandKey sets the "command_key" field.
+func (m *AccountMappingVersionMutation) SetCommandKey(s string) {
+	m.command_key = &s
+}
+
+// CommandKey returns the value of the "command_key" field in the mutation.
+func (m *AccountMappingVersionMutation) CommandKey() (r string, exists bool) {
+	v := m.command_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCommandKey returns the old "command_key" field's value of the AccountMappingVersion entity.
+// If the AccountMappingVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingVersionMutation) OldCommandKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCommandKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCommandKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCommandKey: %w", err)
+	}
+	return oldValue.CommandKey, nil
+}
+
+// ResetCommandKey resets all changes to the "command_key" field.
+func (m *AccountMappingVersionMutation) ResetCommandKey() {
+	m.command_key = nil
+}
+
+// Where appends a list predicates to the AccountMappingVersionMutation builder.
+func (m *AccountMappingVersionMutation) Where(ps ...predicate.AccountMappingVersion) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AccountMappingVersionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AccountMappingVersionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.AccountMappingVersion, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AccountMappingVersionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AccountMappingVersionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (AccountMappingVersion).
+func (m *AccountMappingVersionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AccountMappingVersionMutation) Fields() []string {
+	fields := make([]string, 0, 12)
+	if m.mapping_id != nil {
+		fields = append(fields, accountmappingversion.FieldMappingID)
+	}
+	if m.version != nil {
+		fields = append(fields, accountmappingversion.FieldVersion)
+	}
+	if m.account_code != nil {
+		fields = append(fields, accountmappingversion.FieldAccountCode)
+	}
+	if m.change_kind != nil {
+		fields = append(fields, accountmappingversion.FieldChangeKind)
+	}
+	if m.source_classification_id != nil {
+		fields = append(fields, accountmappingversion.FieldSourceClassificationID)
+	}
+	if m.source_invoice_line_id != nil {
+		fields = append(fields, accountmappingversion.FieldSourceInvoiceLineID)
+	}
+	if m.raw_description_snapshot != nil {
+		fields = append(fields, accountmappingversion.FieldRawDescriptionSnapshot)
+	}
+	if m.actor_id != nil {
+		fields = append(fields, accountmappingversion.FieldActorID)
+	}
+	if m.actor_display != nil {
+		fields = append(fields, accountmappingversion.FieldActorDisplay)
+	}
+	if m.reason != nil {
+		fields = append(fields, accountmappingversion.FieldReason)
+	}
+	if m.created_at != nil {
+		fields = append(fields, accountmappingversion.FieldCreatedAt)
+	}
+	if m.command_key != nil {
+		fields = append(fields, accountmappingversion.FieldCommandKey)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AccountMappingVersionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case accountmappingversion.FieldMappingID:
+		return m.MappingID()
+	case accountmappingversion.FieldVersion:
+		return m.Version()
+	case accountmappingversion.FieldAccountCode:
+		return m.AccountCode()
+	case accountmappingversion.FieldChangeKind:
+		return m.ChangeKind()
+	case accountmappingversion.FieldSourceClassificationID:
+		return m.SourceClassificationID()
+	case accountmappingversion.FieldSourceInvoiceLineID:
+		return m.SourceInvoiceLineID()
+	case accountmappingversion.FieldRawDescriptionSnapshot:
+		return m.RawDescriptionSnapshot()
+	case accountmappingversion.FieldActorID:
+		return m.ActorID()
+	case accountmappingversion.FieldActorDisplay:
+		return m.ActorDisplay()
+	case accountmappingversion.FieldReason:
+		return m.Reason()
+	case accountmappingversion.FieldCreatedAt:
+		return m.CreatedAt()
+	case accountmappingversion.FieldCommandKey:
+		return m.CommandKey()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AccountMappingVersionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case accountmappingversion.FieldMappingID:
+		return m.OldMappingID(ctx)
+	case accountmappingversion.FieldVersion:
+		return m.OldVersion(ctx)
+	case accountmappingversion.FieldAccountCode:
+		return m.OldAccountCode(ctx)
+	case accountmappingversion.FieldChangeKind:
+		return m.OldChangeKind(ctx)
+	case accountmappingversion.FieldSourceClassificationID:
+		return m.OldSourceClassificationID(ctx)
+	case accountmappingversion.FieldSourceInvoiceLineID:
+		return m.OldSourceInvoiceLineID(ctx)
+	case accountmappingversion.FieldRawDescriptionSnapshot:
+		return m.OldRawDescriptionSnapshot(ctx)
+	case accountmappingversion.FieldActorID:
+		return m.OldActorID(ctx)
+	case accountmappingversion.FieldActorDisplay:
+		return m.OldActorDisplay(ctx)
+	case accountmappingversion.FieldReason:
+		return m.OldReason(ctx)
+	case accountmappingversion.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case accountmappingversion.FieldCommandKey:
+		return m.OldCommandKey(ctx)
+	}
+	return nil, fmt.Errorf("unknown AccountMappingVersion field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountMappingVersionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case accountmappingversion.FieldMappingID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMappingID(v)
+		return nil
+	case accountmappingversion.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	case accountmappingversion.FieldAccountCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountCode(v)
+		return nil
+	case accountmappingversion.FieldChangeKind:
+		v, ok := value.(accountmappingversion.ChangeKind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChangeKind(v)
+		return nil
+	case accountmappingversion.FieldSourceClassificationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceClassificationID(v)
+		return nil
+	case accountmappingversion.FieldSourceInvoiceLineID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceInvoiceLineID(v)
+		return nil
+	case accountmappingversion.FieldRawDescriptionSnapshot:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRawDescriptionSnapshot(v)
+		return nil
+	case accountmappingversion.FieldActorID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActorID(v)
+		return nil
+	case accountmappingversion.FieldActorDisplay:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActorDisplay(v)
+		return nil
+	case accountmappingversion.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case accountmappingversion.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case accountmappingversion.FieldCommandKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCommandKey(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMappingVersion field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AccountMappingVersionMutation) AddedFields() []string {
+	var fields []string
+	if m.addversion != nil {
+		fields = append(fields, accountmappingversion.FieldVersion)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AccountMappingVersionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case accountmappingversion.FieldVersion:
+		return m.AddedVersion()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountMappingVersionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case accountmappingversion.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVersion(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMappingVersion numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AccountMappingVersionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(accountmappingversion.FieldActorID) {
+		fields = append(fields, accountmappingversion.FieldActorID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AccountMappingVersionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AccountMappingVersionMutation) ClearField(name string) error {
+	switch name {
+	case accountmappingversion.FieldActorID:
+		m.ClearActorID()
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMappingVersion nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AccountMappingVersionMutation) ResetField(name string) error {
+	switch name {
+	case accountmappingversion.FieldMappingID:
+		m.ResetMappingID()
+		return nil
+	case accountmappingversion.FieldVersion:
+		m.ResetVersion()
+		return nil
+	case accountmappingversion.FieldAccountCode:
+		m.ResetAccountCode()
+		return nil
+	case accountmappingversion.FieldChangeKind:
+		m.ResetChangeKind()
+		return nil
+	case accountmappingversion.FieldSourceClassificationID:
+		m.ResetSourceClassificationID()
+		return nil
+	case accountmappingversion.FieldSourceInvoiceLineID:
+		m.ResetSourceInvoiceLineID()
+		return nil
+	case accountmappingversion.FieldRawDescriptionSnapshot:
+		m.ResetRawDescriptionSnapshot()
+		return nil
+	case accountmappingversion.FieldActorID:
+		m.ResetActorID()
+		return nil
+	case accountmappingversion.FieldActorDisplay:
+		m.ResetActorDisplay()
+		return nil
+	case accountmappingversion.FieldReason:
+		m.ResetReason()
+		return nil
+	case accountmappingversion.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case accountmappingversion.FieldCommandKey:
+		m.ResetCommandKey()
+		return nil
+	}
+	return fmt.Errorf("unknown AccountMappingVersion field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AccountMappingVersionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AccountMappingVersionMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AccountMappingVersionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AccountMappingVersionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AccountMappingVersionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AccountMappingVersionMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AccountMappingVersionMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown AccountMappingVersion unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AccountMappingVersionMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown AccountMappingVersion edge %s", name)
+}
 
 // AccountingClientMutation represents an operation that mutates the AccountingClient nodes in the graph.
 type AccountingClientMutation struct {
@@ -19816,44 +22461,47 @@ func (m *InvoiceLineMutation) ResetEdge(name string) error {
 // LineClassificationMutation represents an operation that mutates the LineClassification nodes in the graph.
 type LineClassificationMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *string
-	model_version         *string
-	proposed_typed_value  **accounting.Value
-	effective_typed_value **accounting.Value
-	decision_evidence     **accounting.Evidence
-	review_reason         *string
-	invoice_date_used     *time.Time
-	dimension             *lineclassification.Dimension
-	proposed_value        *string
-	effective_value       *string
-	confidence_display    *string
-	explanation           *string
-	legal_basis           *string
-	required_review       *bool
-	review_status         *lineclassification.ReviewStatus
-	source                *lineclassification.Source
-	policy_version        *string
-	reviewed_by_id        *string
-	reviewed_by_display   *string
-	reviewed_at           *time.Time
-	revision              *uint64
-	addrevision           *int64
-	created_at            *time.Time
-	updated_at            *time.Time
-	clearedFields         map[string]struct{}
-	client                *string
-	clearedclient         bool
-	invoice               *string
-	clearedinvoice        bool
-	invoice_line          *string
-	clearedinvoice_line   bool
-	rule_version          *string
-	clearedrule_version   bool
-	done                  bool
-	oldValue              func(context.Context) (*LineClassification, error)
-	predicates            []predicate.LineClassification
+	op                         Op
+	typ                        string
+	id                         *string
+	model_version              *string
+	proposed_typed_value       **accounting.Value
+	effective_typed_value      **accounting.Value
+	decision_evidence          **accounting.Evidence
+	review_reason              *string
+	invoice_date_used          *time.Time
+	dimension                  *lineclassification.Dimension
+	proposed_value             *string
+	effective_value            *string
+	confidence_display         *string
+	explanation                *string
+	legal_basis                *string
+	required_review            *bool
+	review_status              *lineclassification.ReviewStatus
+	source                     *lineclassification.Source
+	account_mapping_id         *string
+	account_mapping_version    *int
+	addaccount_mapping_version *int
+	policy_version             *string
+	reviewed_by_id             *string
+	reviewed_by_display        *string
+	reviewed_at                *time.Time
+	revision                   *uint64
+	addrevision                *int64
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	clearedFields              map[string]struct{}
+	client                     *string
+	clearedclient              bool
+	invoice                    *string
+	clearedinvoice             bool
+	invoice_line               *string
+	clearedinvoice_line        bool
+	rule_version               *string
+	clearedrule_version        bool
+	done                       bool
+	oldValue                   func(context.Context) (*LineClassification, error)
+	predicates                 []predicate.LineClassification
 }
 
 var _ ent.Mutation = (*LineClassificationMutation)(nil)
@@ -20722,6 +23370,125 @@ func (m *LineClassificationMutation) ResetRuleVersionID() {
 	delete(m.clearedFields, lineclassification.FieldRuleVersionID)
 }
 
+// SetAccountMappingID sets the "account_mapping_id" field.
+func (m *LineClassificationMutation) SetAccountMappingID(s string) {
+	m.account_mapping_id = &s
+}
+
+// AccountMappingID returns the value of the "account_mapping_id" field in the mutation.
+func (m *LineClassificationMutation) AccountMappingID() (r string, exists bool) {
+	v := m.account_mapping_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountMappingID returns the old "account_mapping_id" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldAccountMappingID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountMappingID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountMappingID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountMappingID: %w", err)
+	}
+	return oldValue.AccountMappingID, nil
+}
+
+// ClearAccountMappingID clears the value of the "account_mapping_id" field.
+func (m *LineClassificationMutation) ClearAccountMappingID() {
+	m.account_mapping_id = nil
+	m.clearedFields[lineclassification.FieldAccountMappingID] = struct{}{}
+}
+
+// AccountMappingIDCleared returns if the "account_mapping_id" field was cleared in this mutation.
+func (m *LineClassificationMutation) AccountMappingIDCleared() bool {
+	_, ok := m.clearedFields[lineclassification.FieldAccountMappingID]
+	return ok
+}
+
+// ResetAccountMappingID resets all changes to the "account_mapping_id" field.
+func (m *LineClassificationMutation) ResetAccountMappingID() {
+	m.account_mapping_id = nil
+	delete(m.clearedFields, lineclassification.FieldAccountMappingID)
+}
+
+// SetAccountMappingVersion sets the "account_mapping_version" field.
+func (m *LineClassificationMutation) SetAccountMappingVersion(i int) {
+	m.account_mapping_version = &i
+	m.addaccount_mapping_version = nil
+}
+
+// AccountMappingVersion returns the value of the "account_mapping_version" field in the mutation.
+func (m *LineClassificationMutation) AccountMappingVersion() (r int, exists bool) {
+	v := m.account_mapping_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountMappingVersion returns the old "account_mapping_version" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldAccountMappingVersion(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountMappingVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountMappingVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountMappingVersion: %w", err)
+	}
+	return oldValue.AccountMappingVersion, nil
+}
+
+// AddAccountMappingVersion adds i to the "account_mapping_version" field.
+func (m *LineClassificationMutation) AddAccountMappingVersion(i int) {
+	if m.addaccount_mapping_version != nil {
+		*m.addaccount_mapping_version += i
+	} else {
+		m.addaccount_mapping_version = &i
+	}
+}
+
+// AddedAccountMappingVersion returns the value that was added to the "account_mapping_version" field in this mutation.
+func (m *LineClassificationMutation) AddedAccountMappingVersion() (r int, exists bool) {
+	v := m.addaccount_mapping_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountMappingVersion clears the value of the "account_mapping_version" field.
+func (m *LineClassificationMutation) ClearAccountMappingVersion() {
+	m.account_mapping_version = nil
+	m.addaccount_mapping_version = nil
+	m.clearedFields[lineclassification.FieldAccountMappingVersion] = struct{}{}
+}
+
+// AccountMappingVersionCleared returns if the "account_mapping_version" field was cleared in this mutation.
+func (m *LineClassificationMutation) AccountMappingVersionCleared() bool {
+	_, ok := m.clearedFields[lineclassification.FieldAccountMappingVersion]
+	return ok
+}
+
+// ResetAccountMappingVersion resets all changes to the "account_mapping_version" field.
+func (m *LineClassificationMutation) ResetAccountMappingVersion() {
+	m.account_mapping_version = nil
+	m.addaccount_mapping_version = nil
+	delete(m.clearedFields, lineclassification.FieldAccountMappingVersion)
+}
+
 // SetPolicyVersion sets the "policy_version" field.
 func (m *LineClassificationMutation) SetPolicyVersion(s string) {
 	m.policy_version = &s
@@ -21175,7 +23942,7 @@ func (m *LineClassificationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LineClassificationMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 28)
 	if m.model_version != nil {
 		fields = append(fields, lineclassification.FieldModelVersion)
 	}
@@ -21232,6 +23999,12 @@ func (m *LineClassificationMutation) Fields() []string {
 	}
 	if m.rule_version != nil {
 		fields = append(fields, lineclassification.FieldRuleVersionID)
+	}
+	if m.account_mapping_id != nil {
+		fields = append(fields, lineclassification.FieldAccountMappingID)
+	}
+	if m.account_mapping_version != nil {
+		fields = append(fields, lineclassification.FieldAccountMappingVersion)
 	}
 	if m.policy_version != nil {
 		fields = append(fields, lineclassification.FieldPolicyVersion)
@@ -21300,6 +24073,10 @@ func (m *LineClassificationMutation) Field(name string) (ent.Value, bool) {
 		return m.Source()
 	case lineclassification.FieldRuleVersionID:
 		return m.RuleVersionID()
+	case lineclassification.FieldAccountMappingID:
+		return m.AccountMappingID()
+	case lineclassification.FieldAccountMappingVersion:
+		return m.AccountMappingVersion()
 	case lineclassification.FieldPolicyVersion:
 		return m.PolicyVersion()
 	case lineclassification.FieldReviewedByID:
@@ -21361,6 +24138,10 @@ func (m *LineClassificationMutation) OldField(ctx context.Context, name string) 
 		return m.OldSource(ctx)
 	case lineclassification.FieldRuleVersionID:
 		return m.OldRuleVersionID(ctx)
+	case lineclassification.FieldAccountMappingID:
+		return m.OldAccountMappingID(ctx)
+	case lineclassification.FieldAccountMappingVersion:
+		return m.OldAccountMappingVersion(ctx)
 	case lineclassification.FieldPolicyVersion:
 		return m.OldPolicyVersion(ctx)
 	case lineclassification.FieldReviewedByID:
@@ -21517,6 +24298,20 @@ func (m *LineClassificationMutation) SetField(name string, value ent.Value) erro
 		}
 		m.SetRuleVersionID(v)
 		return nil
+	case lineclassification.FieldAccountMappingID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountMappingID(v)
+		return nil
+	case lineclassification.FieldAccountMappingVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountMappingVersion(v)
+		return nil
 	case lineclassification.FieldPolicyVersion:
 		v, ok := value.(string)
 		if !ok {
@@ -21574,6 +24369,9 @@ func (m *LineClassificationMutation) SetField(name string, value ent.Value) erro
 // this mutation.
 func (m *LineClassificationMutation) AddedFields() []string {
 	var fields []string
+	if m.addaccount_mapping_version != nil {
+		fields = append(fields, lineclassification.FieldAccountMappingVersion)
+	}
 	if m.addrevision != nil {
 		fields = append(fields, lineclassification.FieldRevision)
 	}
@@ -21585,6 +24383,8 @@ func (m *LineClassificationMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *LineClassificationMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case lineclassification.FieldAccountMappingVersion:
+		return m.AddedAccountMappingVersion()
 	case lineclassification.FieldRevision:
 		return m.AddedRevision()
 	}
@@ -21596,6 +24396,13 @@ func (m *LineClassificationMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *LineClassificationMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case lineclassification.FieldAccountMappingVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountMappingVersion(v)
+		return nil
 	case lineclassification.FieldRevision:
 		v, ok := value.(int64)
 		if !ok {
@@ -21628,6 +24435,12 @@ func (m *LineClassificationMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(lineclassification.FieldRuleVersionID) {
 		fields = append(fields, lineclassification.FieldRuleVersionID)
+	}
+	if m.FieldCleared(lineclassification.FieldAccountMappingID) {
+		fields = append(fields, lineclassification.FieldAccountMappingID)
+	}
+	if m.FieldCleared(lineclassification.FieldAccountMappingVersion) {
+		fields = append(fields, lineclassification.FieldAccountMappingVersion)
 	}
 	if m.FieldCleared(lineclassification.FieldReviewedByID) {
 		fields = append(fields, lineclassification.FieldReviewedByID)
@@ -21669,6 +24482,12 @@ func (m *LineClassificationMutation) ClearField(name string) error {
 		return nil
 	case lineclassification.FieldRuleVersionID:
 		m.ClearRuleVersionID()
+		return nil
+	case lineclassification.FieldAccountMappingID:
+		m.ClearAccountMappingID()
+		return nil
+	case lineclassification.FieldAccountMappingVersion:
+		m.ClearAccountMappingVersion()
 		return nil
 	case lineclassification.FieldReviewedByID:
 		m.ClearReviewedByID()
@@ -21743,6 +24562,12 @@ func (m *LineClassificationMutation) ResetField(name string) error {
 		return nil
 	case lineclassification.FieldRuleVersionID:
 		m.ResetRuleVersionID()
+		return nil
+	case lineclassification.FieldAccountMappingID:
+		m.ResetAccountMappingID()
+		return nil
+	case lineclassification.FieldAccountMappingVersion:
+		m.ResetAccountMappingVersion()
 		return nil
 	case lineclassification.FieldPolicyVersion:
 		m.ResetPolicyVersion()

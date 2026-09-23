@@ -219,6 +219,7 @@ func TestOutboxAsynqWorkerCompletesFullAutomaticPipeline(t *testing.T) {
 	pipeline := invoicing.NewPipelineService(classificationStore, invoicing.NewFakeSagaExporter(), func() time.Time { return runtimeNow })
 	pipeline.SetContractMatchingProcessor(contracts.NewService(tc.store, contracts.BaselinePolicy{}, func() time.Time { return runtimeNow }))
 	pipeline.SetClassificationProcessor(classification.NewService(classificationStore, classification.BaselinePolicy{}, func() time.Time { return runtimeNow }))
+	pipeline.SetCommercialValidationProcessor(conformingCommercialProcessor{store: classificationStore, clock: func() time.Time { return runtimeNow }})
 	if _, created, ingestErr := pipeline.Ingest(tc.ctx, ingestionFixture(invoiceID, tc.clientID, tc.now)); ingestErr != nil || !created {
 		t.Fatalf("created=%v err=%v", created, ingestErr)
 	}
@@ -238,13 +239,21 @@ func TestOutboxAsynqWorkerCompletesFullAutomaticPipeline(t *testing.T) {
 	publisher := workerruntime.NewAsynqPublisher(client, "workflow-full", 3, time.Minute)
 	dispatcher := workerruntime.NewDispatcher(scopedRuntimeOutbox{Store: tc.store, aggregateID: invoiceID}, publisher, workerruntime.DispatcherConfig{Owner: "integration-full-worker", BatchSize: 10, MaxAttempts: 3, PollInterval: 10 * time.Millisecond, ClaimTTL: time.Second, RetryMin: 10 * time.Millisecond, RetryMax: time.Second}, logger, metrics)
 
-	eventuallyPostgres(t, func() bool {
+	if !eventuallyPostgresWithin(25*time.Second, func() bool {
 		if _, dispatchErr := dispatcher.DispatchBatch(tc.ctx); dispatchErr != nil {
 			t.Fatalf("dispatch: %v", dispatchErr)
 		}
 		item, getErr := tc.store.GetInvoice(tc.ctx, invoiceID)
 		return getErr == nil && item.PipelineStatus == invoicing.StatusExported
-	})
+	}) {
+		item, getErr := tc.store.GetInvoice(tc.ctx, invoiceID)
+		rows, outboxErr := tc.store.Client.OutboxEntry.Query().Where(outboxentry.AggregateIDEQ(invoiceID)).All(tc.ctx)
+		outboxStates := make([]string, 0, len(rows))
+		for _, row := range rows {
+			outboxStates = append(outboxStates, fmt.Sprintf("%s:%s:%v", row.ID, row.Status, row.LastError))
+		}
+		t.Fatalf("full pipeline did not export within 25s: invoice=%+v invoice_err=%v outbox=%v outbox_err=%v", item, getErr, outboxStates, outboxErr)
+	}
 	item, err := tc.store.GetInvoice(tc.ctx, invoiceID)
 	if err != nil {
 		t.Fatal(err)
@@ -318,17 +327,23 @@ func TestContractAvailableOutboxAsynqAutomaticallyResumesMissingInvoice(t *testi
 
 func eventuallyPostgres(t *testing.T, condition func() bool) {
 	t.Helper()
-	deadline := time.NewTimer(10 * time.Second)
+	if !eventuallyPostgresWithin(10*time.Second, condition) {
+		t.Fatal("eventual worker condition was not met")
+	}
+}
+
+func eventuallyPostgresWithin(timeout time.Duration, condition func() bool) bool {
+	deadline := time.NewTimer(timeout)
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer deadline.Stop()
 	defer ticker.Stop()
 	for {
 		select {
 		case <-deadline.C:
-			t.Fatal("eventual worker condition was not met")
+			return false
 		case <-ticker.C:
 			if condition() {
-				return
+				return true
 			}
 		}
 	}

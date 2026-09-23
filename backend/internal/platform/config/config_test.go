@@ -62,6 +62,7 @@ func TestSPVOAuthUXSecurityDefaultsAreBounded(t *testing.T) {
 
 func TestProductionCannotSilentlyUseFakeSAGA(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://example.invalid/diana")
+	t.Setenv("SPV_ENABLED", "false")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("SAGA_MODE", "fake")
 	if _, err := Load(); err == nil {
@@ -93,6 +94,9 @@ func TestCloudTestUsesProductionAdapterBoundaries(t *testing.T) {
 
 func TestLocalRealFailsClosed(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://example.invalid/diana")
+	t.Setenv("SPV_API_BASE_URL", "https://api.anaf.ro/prod/FCTEL/rest")
+	t.Setenv("SPV_TOKEN_URL", "https://logincert.anaf.ro/anaf-oauth2/v1/token")
+	t.Setenv("SPV_AUTHORIZE_URL", "https://logincert.anaf.ro/anaf-oauth2/v1/authorize")
 	t.Setenv("APP_ENV", "local-real")
 	t.Setenv("SAGA_MODE", "file")
 	t.Setenv("SPV_ENABLED", "true")

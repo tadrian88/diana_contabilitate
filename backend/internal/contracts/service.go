@@ -45,6 +45,8 @@ type ResumeCommand struct {
 type Store interface {
 	ListContracts(context.Context, Filter) ([]Contract, error)
 	GetContract(context.Context, string) (*Contract, error)
+	ArchiveContract(context.Context, string, uint64, string, string, time.Time) (bool, error)
+	DeleteMistakenContract(context.Context, string, uint64, string, string, time.Time) (bool, error)
 	ListContractInvoices(context.Context, string) ([]AssociatedInvoice, error)
 	MatchCommandCommitted(context.Context, string) (bool, error)
 	LoadMatchingInput(context.Context, string) (InvoiceContext, []Contract, error)
@@ -54,6 +56,20 @@ type Store interface {
 	ListBlockedInvoicesForContract(context.Context, string, string, int) ([]BlockedInvoice, error)
 	ResumeCommandCommitted(context.Context, string) (bool, error)
 	ApplyResumeDecision(context.Context, ResumeCommand, MatchDecision, time.Time) (bool, error)
+}
+
+func (s *Service) Archive(ctx context.Context, id string, revision uint64, actorID, actorDisplay string) (bool, error) {
+	if id == "" || revision == 0 || actorID == "" || actorDisplay == "" {
+		return false, apperrors.ErrValidation
+	}
+	return s.store.ArchiveContract(ctx, id, revision, actorID, actorDisplay, s.clock())
+}
+
+func (s *Service) DeleteMistaken(ctx context.Context, id string, revision uint64, actorID, actorDisplay string) (bool, error) {
+	if id == "" || revision == 0 || actorID == "" || actorDisplay == "" {
+		return false, apperrors.ErrValidation
+	}
+	return s.store.DeleteMistakenContract(ctx, id, revision, actorID, actorDisplay, s.clock())
 }
 
 type Clock func() time.Time

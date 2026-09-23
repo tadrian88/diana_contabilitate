@@ -4,8 +4,8 @@ export const DEMO_CLOCK = '2026-09-09T15:00:00.000Z'
 
 export const pipelineGroups: { label: string; states: PipelineStatus[] }[] = [
   { label: 'Intrare și asociere', states: ['DOWNLOADED', 'ARCHIVED', 'MATCHING'] },
-  { label: 'Excepții', states: ['AWAITING_CONTRACT', 'AWAITING_MATCH_CONFIRM', 'AWAITING_REVIEW'] },
-  { label: 'Procesare', states: ['DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'CLASSIFIED'] },
+  { label: 'Excepții', states: ['AWAITING_CONTRACT', 'AWAITING_MATCH_CONFIRM', 'AWAITING_COMMERCIAL_REVIEW', 'AWAITING_REVIEW'] },
+  { label: 'Procesare', states: ['DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'COMMERCIAL_VALIDATING', 'COMMERCIALLY_VALIDATED', 'CLASSIFIED'] },
   { label: 'SAGA', states: ['READY_FOR_SAGA', 'EXPORTING', 'EXPORTED'] },
   { label: 'Terminal', states: ['DUPLICATE'] },
 ]

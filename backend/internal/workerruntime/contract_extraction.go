@@ -55,6 +55,9 @@ func (h *ContractExtractionHandler) ProcessTask(ctx context.Context, task *asynq
 	}
 	jobID, _ := asynq.GetTaskID(ctx)
 	attempt, _ := asynq.GetRetryCount(ctx)
+	if attempt > 0 {
+		ctx = contractingestion.WithExtractionRetry(ctx)
+	}
 	ctx, span := otel.Tracer("diana/worker").Start(ctx, "workflow.contract_extraction")
 	span.SetAttributes(attribute.String("job.id", jobID), attribute.String("outbox.id", job.OutboxID), attribute.String("contract_document.id", job.DocumentID), attribute.String("correlation.id", job.CorrelationID), attribute.Int("job.attempt", attempt+1))
 	defer span.End()
@@ -66,6 +69,14 @@ func (h *ContractExtractionHandler) ProcessTask(ctx context.Context, task *asynq
 	}
 	span.RecordError(err)
 	h.metrics.ContractExtractionFailed()
+	if failure, ok := contractingestion.ExtractionFailureDetails(err); ok {
+		span.SetAttributes(attribute.String("extraction.failure_category", failure.Category), attribute.String("extraction.provider", failure.Provider), attribute.String("extraction.model", failure.Model), attribute.Int("http.status_code", failure.HTTPStatus), attribute.String("extraction.validation_code", failure.ValidationCode), attribute.String("extraction.validation_path", failure.ValidationPath))
+		h.logger.Warn("contract extraction failed", "job_id", jobID, "document_id", job.DocumentID, "safe_error_category", failure.Category, "provider", failure.Provider, "model", failure.Model, "http_status", failure.HTTPStatus, "validation_code", failure.ValidationCode, "validation_path", failure.ValidationPath, "duration_ms", time.Since(started).Milliseconds())
+		if failure.Retry == contractingestion.RetryNever || (failure.Retry == contractingestion.RetryOnce && attempt >= 1) {
+			return fmt.Errorf("%w: %v", asynq.SkipRetry, err)
+		}
+		return err
+	}
 	if errors.Is(err, contractingestion.ErrExtractionPermanent) {
 		return fmt.Errorf("%w: %v", asynq.SkipRetry, err)
 	}

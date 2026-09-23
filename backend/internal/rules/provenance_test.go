@@ -8,12 +8,12 @@ func TestProductionPackExplicitlyReviewOnly(t *testing.T) {
 	}
 }
 func TestProductionAccountVocabularyAndSubaccounts(t *testing.T) {
-	for _, code := range []string{"628", "628.01", "628.01.ABC"} {
+	for _, code := range []string{"628", "6581", "6812", "6865", "628.01", "628.01.ABC"} {
 		if !ValidProductionAccount(code) {
 			t.Fatal(code)
 		}
 	}
-	for _, code := range []string{"999", "628.", "628..01", "6280", "628.01-2", "628.demo_value"} {
+	for _, code := range []string{"99", "12345", " 628", "628.", "628..01", "628.01-2", "628.demo_value"} {
 		if ValidProductionAccount(code) {
 			t.Fatal(code)
 		}

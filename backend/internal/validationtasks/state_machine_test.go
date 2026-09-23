@@ -71,8 +71,8 @@ func TestResolvedHasNoOutgoingTransitionAndWaitingOnlyResolvesOnAvailability(t *
 	}
 }
 
-func TestValidationTaskVocabularyRemainsExactlyFrozen(t *testing.T) {
-	wantTypes := []Type{"CONTRACT_MATCH", "MISSING_CONTRACT", "CLASSIFICATION"}
+func TestValidationTaskVocabularyIncludesCommercialReview(t *testing.T) {
+	wantTypes := []Type{"CONTRACT_MATCH", "MISSING_CONTRACT", "COMMERCIAL_REVIEW", "CLASSIFICATION"}
 	wantStatuses := []Status{"OPEN", "WAITING", "RESOLVED"}
 	if len(Types) != len(wantTypes) || len(Statuses) != len(wantStatuses) {
 		t.Fatalf("types=%v statuses=%v", Types, Statuses)
@@ -85,6 +85,15 @@ func TestValidationTaskVocabularyRemainsExactlyFrozen(t *testing.T) {
 	for index := range wantStatuses {
 		if Statuses[index] != wantStatuses[index] {
 			t.Fatalf("status %d=%s want=%s", index, Statuses[index], wantStatuses[index])
+		}
+	}
+}
+
+func TestCommercialReviewCanWaitOrResolveButNeverUseModule3Command(t *testing.T) {
+	for _, edge := range [][2]Status{{StatusOpen, StatusWaiting}, {StatusOpen, StatusResolved}, {StatusWaiting, StatusResolved}} {
+		transition, found := FindTransition(TypeCommercialReview, edge[0], edge[1])
+		if !found || transition.Module3Executable {
+			t.Fatalf("commercial transition %s -> %s: %+v, found=%v", edge[0], edge[1], transition, found)
 		}
 	}
 }

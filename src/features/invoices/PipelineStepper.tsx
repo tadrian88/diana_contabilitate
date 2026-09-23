@@ -27,7 +27,7 @@ export function PipelineStepper({ invoice }: PipelineStepperProps) {
         {invoice.pipelinePath.map((status, index) => {
           const completed = index < currentIndex || (index === currentIndex && TERMINAL_STATES.includes(status))
           const current = index === currentIndex && !completed
-          const waiting = current && (status === 'AWAITING_CONTRACT' || status === 'AWAITING_MATCH_CONFIRM' || status === 'AWAITING_REVIEW')
+          const waiting = current && (status === 'AWAITING_CONTRACT' || status === 'AWAITING_MATCH_CONFIRM' || status === 'AWAITING_COMMERCIAL_REVIEW' || status === 'AWAITING_REVIEW')
           const duplicate = status === 'DUPLICATE'
           const exporting = current && status === 'EXPORTING'
           const state = completed ? 'completed' : waiting ? 'blocked' : current ? 'current' : 'pending'
@@ -53,10 +53,10 @@ export function PipelineStepper({ invoice }: PipelineStepperProps) {
         })}
       </ol>
 
-      {(invoice.pipelineStatus === 'AWAITING_CONTRACT' || invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM' || invoice.pipelineStatus === 'AWAITING_REVIEW') && (
+      {(invoice.pipelineStatus === 'AWAITING_CONTRACT' || invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM' || invoice.pipelineStatus === 'AWAITING_COMMERCIAL_REVIEW' || invoice.pipelineStatus === 'AWAITING_REVIEW') && (
         <div className="mt-5 flex items-start gap-3 rounded-xl border border-[var(--warning-border)] bg-[var(--warning-soft)] p-3 text-sm text-[var(--warning)]" role="status">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <div><strong>Procesare oprită.</strong> {invoice.pipelineStatus === 'AWAITING_CONTRACT' ? 'Este necesar un contract extern.' : invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM' ? 'Contabilul trebuie să confirme contractul.' : 'Clasificările incerte trebuie revizuite.'}</div>
+          <div><strong>Procesare oprită.</strong> {invoice.pipelineStatus === 'AWAITING_CONTRACT' ? 'Este necesar un contract extern.' : invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM' ? 'Contabilul trebuie să confirme contractul.' : invoice.pipelineStatus === 'AWAITING_COMMERCIAL_REVIEW' ? 'Abaterile comerciale sau datele lipsă trebuie revizuite.' : 'Clasificările incerte trebuie revizuite.'}</div>
         </div>
       )}
       {invoice.pipelineStatus === 'DUPLICATE' && (

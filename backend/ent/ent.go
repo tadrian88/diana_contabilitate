@@ -4,8 +4,11 @@ package ent
 
 import (
 	"context"
+	"diana-contabilitate/backend/ent/account"
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/accountingrulepack"
+	"diana-contabilitate/backend/ent/accountmapping"
+	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
@@ -94,6 +97,9 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			account.Table:                    account.ValidColumn,
+			accountmapping.Table:             accountmapping.ValidColumn,
+			accountmappingversion.Table:      accountmappingversion.ValidColumn,
 			accountingclient.Table:           accountingclient.ValidColumn,
 			accountingrulepack.Table:         accountingrulepack.ValidColumn,
 			activityevent.Table:              activityevent.ValidColumn,

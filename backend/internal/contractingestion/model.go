@@ -2,15 +2,17 @@ package contractingestion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contracts"
 )
 
 const (
-	ExtractionSchemaVersion = "CONTRACT_EXTRACTION_V2"
-	ExtractionPromptVersion = "CONTRACT_EXTRACTION_PROMPT_V2"
+	ExtractionSchemaVersion = "CONTRACT_EXTRACTION_V4"
+	ExtractionPromptVersion = "CONTRACT_EXTRACTION_PROMPT_V4_2"
 	ProviderGemini          = "GEMINI"
 )
 
@@ -46,21 +48,32 @@ type Field struct {
 	Alternatives []string   `json:"alternatives"`
 }
 
-// Proposal mirrors only the existing authoritative Contract model plus buyer
-// identity for deterministic tenant-consistency validation.
+// Proposal carries legacy matching fields and V4 commercial clauses. Provider
+// output remains a proposal until a human activates an immutable snapshot.
 type Proposal struct {
-	SupplierName  Field                 `json:"supplierName"`
-	SupplierCUI   Field                 `json:"supplierCui"`
-	Reference     Field                 `json:"reference"`
-	EffectiveFrom Field                 `json:"effectiveFrom"`
-	EffectiveTo   Field                 `json:"effectiveTo"`
-	TotalValue    Field                 `json:"totalValue"`
-	Currency      Field                 `json:"currency"`
-	UnitType      Field                 `json:"unitType"`
-	PaymentTerms  Field                 `json:"paymentTerms"`
-	BuyerCUI      Field                 `json:"buyerCui"`
-	PeriodType    Field                 `json:"periodType"`
-	ServiceTerms  []ProposedServiceTerm `json:"serviceTerms"`
+	SupplierName      Field                      `json:"supplierName"`
+	SupplierCUI       Field                      `json:"supplierCui"`
+	Reference         Field                      `json:"reference"`
+	EffectiveFrom     Field                      `json:"effectiveFrom"`
+	EffectiveTo       Field                      `json:"effectiveTo"`
+	TotalValue        Field                      `json:"totalValue"`
+	Currency          Field                      `json:"currency"`
+	UnitType          Field                      `json:"unitType"`
+	PaymentTerms      Field                      `json:"paymentTerms"`
+	BuyerCUI          Field                      `json:"buyerCui"`
+	PeriodType        Field                      `json:"periodType"`
+	ServiceTerms      []ProposedServiceTerm      `json:"serviceTerms"`
+	DocumentRole      Field                      `json:"documentRole"`
+	RelatedReference  Field                      `json:"relatedReference"`
+	CommercialClauses []ProposedCommercialClause `json:"commercialClauses"`
+}
+
+type ProposedCommercialClause struct {
+	Kind       Field           `json:"kind"`
+	Narrative  Field           `json:"narrative"`
+	Rule       json.RawMessage `json:"rule"`
+	Evidence   Evidence        `json:"evidence"`
+	Confidence Confidence      `json:"confidence"`
 }
 
 type ProposedServiceTerm struct {
@@ -122,18 +135,23 @@ type ExtractionResult struct {
 }
 
 type ReviewedContract struct {
-	SupplierName  string                `json:"supplierName"`
-	SupplierCUI   string                `json:"supplierCui"`
-	Reference     string                `json:"reference"`
-	EffectiveFrom string                `json:"effectiveFrom"`
-	EffectiveTo   string                `json:"effectiveTo"`
-	TotalValue    string                `json:"totalValue"`
-	Currency      string                `json:"currency"`
-	UnitType      string                `json:"unitType"`
-	PaymentTerms  string                `json:"paymentTerms"`
-	BuyerCUI      string                `json:"buyerCui"`
-	PeriodType    string                `json:"periodType"`
-	ServiceTerms  []ReviewedServiceTerm `json:"serviceTerms"`
+	SupplierName             string                        `json:"supplierName"`
+	SupplierCUI              string                        `json:"supplierCui"`
+	Reference                string                        `json:"reference"`
+	EffectiveFrom            string                        `json:"effectiveFrom"`
+	EffectiveTo              string                        `json:"effectiveTo"`
+	TotalValue               string                        `json:"totalValue"`
+	Currency                 string                        `json:"currency"`
+	UnitType                 string                        `json:"unitType"`
+	PaymentTerms             string                        `json:"paymentTerms"`
+	BuyerCUI                 string                        `json:"buyerCui"`
+	PeriodType               string                        `json:"periodType"`
+	ServiceTerms             []ReviewedServiceTerm         `json:"serviceTerms"`
+	DocumentRole             string                        `json:"documentRole"`
+	RelatedReference         string                        `json:"relatedReference"`
+	Coverage                 commercialvalidation.Coverage `json:"coverage"`
+	CommercialRules          []commercialvalidation.Rule   `json:"commercialRules"`
+	PendingCommercialClauses int                           `json:"-"`
 }
 
 type ReviewedServiceTerm struct {
@@ -172,6 +190,19 @@ type ContractExtractor interface {
 	Extract(context.Context, []byte, string) (ExtractionResult, error)
 }
 
+type extractionRetryContextKey struct{}
+
+// WithExtractionRetry marks a worker retry without exposing a provider
+// response or validation value to the next extraction attempt.
+func WithExtractionRetry(ctx context.Context) context.Context {
+	return context.WithValue(ctx, extractionRetryContextKey{}, true)
+}
+
+func isExtractionRetry(ctx context.Context) bool {
+	retry, _ := ctx.Value(extractionRetryContextKey{}).(bool)
+	return retry
+}
+
 type DocumentStore interface {
 	CreateDocument(context.Context, Upload, string, string, time.Time) (Document, bool, error)
 	GetSource(context.Context, string) (Source, error)
@@ -188,6 +219,10 @@ type Store interface {
 	ConfirmDocument(context.Context, ConfirmCommand, contracts.Contract, time.Time) (string, bool, error)
 }
 
+type DossierActivator interface {
+	ActivateConfirmedContract(context.Context, ConfirmCommand, string, time.Time) error
+}
+
 type ContractAvailability interface {
 	ContractAvailable(context.Context, contracts.AvailableCommand) (bool, error)
 }
@@ -197,6 +232,7 @@ var (
 	ErrDocumentTooLarge    = errors.New("contract document too large")
 	ErrExtractionPermanent = errors.New("permanent extraction failure")
 	ErrExtractionTransient = errors.New("transient extraction failure")
+	ErrNoContractData      = errors.New("no contract data")
 	ErrBuyerMismatch       = errors.New("buyer identity does not match client")
 	ErrExtractionBusy      = errors.New("extraction already in progress")
 )

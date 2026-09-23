@@ -3,10 +3,12 @@ package validationtasks
 type Trigger string
 
 const (
-	TriggerContractRequested       Trigger = "CONTRACT_REQUESTED"
-	TriggerContractConfirmed       Trigger = "CONTRACT_CONFIRMED"
-	TriggerContractBecameAvailable Trigger = "CONTRACT_BECAME_AVAILABLE"
-	TriggerClassificationResolved  Trigger = "CLASSIFICATION_RESOLVED"
+	TriggerContractRequested           Trigger = "CONTRACT_REQUESTED"
+	TriggerContractConfirmed           Trigger = "CONTRACT_CONFIRMED"
+	TriggerContractBecameAvailable     Trigger = "CONTRACT_BECAME_AVAILABLE"
+	TriggerCommercialCorrectionAwaited Trigger = "COMMERCIAL_CORRECTION_AWAITED"
+	TriggerCommercialReviewResolved    Trigger = "COMMERCIAL_REVIEW_RESOLVED"
+	TriggerClassificationResolved      Trigger = "CLASSIFICATION_RESOLVED"
 )
 
 type Transition struct {
@@ -22,6 +24,9 @@ var transitions = []Transition{
 	{TypeMissingContract, StatusOpen, StatusResolved, TriggerContractBecameAvailable, false},
 	{TypeMissingContract, StatusWaiting, StatusResolved, TriggerContractBecameAvailable, false},
 	{TypeContractMatch, StatusOpen, StatusResolved, TriggerContractConfirmed, false},
+	{TypeCommercialReview, StatusOpen, StatusWaiting, TriggerCommercialCorrectionAwaited, false},
+	{TypeCommercialReview, StatusOpen, StatusResolved, TriggerCommercialReviewResolved, false},
+	{TypeCommercialReview, StatusWaiting, StatusResolved, TriggerCommercialReviewResolved, false},
 	{TypeClassification, StatusOpen, StatusResolved, TriggerClassificationResolved, false},
 }
 

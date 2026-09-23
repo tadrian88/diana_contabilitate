@@ -6,13 +6,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 )
 
-var Names = []string{"romanian", "english", "scanned", "missing", "ambiguous", "injection", "service-indefinite"}
+var Names = []string{"romanian", "english", "scanned", "missing", "ambiguous", "injection", "service-indefinite", "service-incomplete"}
 
 func PDF(name string) []byte {
 	text := "CONTRACT CTR-2026-01 | Furnizor extras SRL CUI RO12345678 | Buyer RO10000000 | 2026-01-01 to 2027-12-31 | 125000.00 RON | servicii | 30 zile"
@@ -30,6 +32,9 @@ func PDF(name string) []byte {
 	}
 	if name == "service-indefinite" {
 		text = "CONTRACT SERV-2026 | Furnizor Servicii SRL CUI RO12345678 | Buyer 10000000 | from 2026-01-01 for an indefinite term | accounting 500 RON | payroll 50 RON per employee | monthly"
+	}
+	if name == "service-incomplete" {
+		text = "CONTRACT SERV-2026 | Furnizor Servicii SRL CUI RO12345678 | Buyer 10000000 | from 2026-01-01 | servicii de contabilitate | tariful se stabilește ulterior"
 	}
 	objects := []string{"<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1200 400] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"}
 	stream := "BT /F1 10 Tf 15 370 Td (" + strings.ReplaceAll(text, "(", "\\(") + ") Tj ET"
@@ -62,7 +67,10 @@ func Proposal(name string) contractingestion.Proposal {
 		page := 1
 		return contractingestion.Field{Value: &value, Status: "PRESENT", Confidence: contractingestion.ConfidenceHigh, Evidence: contractingestion.Evidence{Page: &page, Snippet: value}, Alternatives: []string{}}
 	}
-	p := contractingestion.Proposal{SupplierName: field("Furnizor extras SRL"), SupplierCUI: field("RO12345678"), Reference: field("CTR-2026-01"), EffectiveFrom: field("2026-01-01"), EffectiveTo: field("2027-12-31"), TotalValue: field("125000.00"), Currency: field("RON"), UnitType: field("servicii"), PaymentTerms: field("30 zile"), BuyerCUI: field("RO10000000"), PeriodType: field("FIXED_TERM"), ServiceTerms: []contractingestion.ProposedServiceTerm{serviceTerm(field, "Servicii", "FIXED_TOTAL", "125000.00", "RON", "", "UNKNOWN", "", "", "UNKNOWN")}}
+	page := 1
+	rule := commercialvalidation.Rule{ID: "fixture-fixed", Kind: commercialvalidation.RuleFixedPrice, Narrative: "Servicii 125000.00 RON", Applicability: commercialvalidation.Applicability{ServiceID: "fixture-service", Aliases: []string{"Servicii"}}, DateBasis: commercialvalidation.DateInvoiceIssue, Currency: "RON", Expression: &commercialvalidation.Expression{Op: "literal", Value: "125000.00", Scale: 4}, Evidence: []commercialvalidation.Evidence{{DocumentID: "fixture", Page: &page, Snippet: "125000.00 RON"}}, Blocking: true}
+	ruleJSON, _ := json.Marshal(rule)
+	p := contractingestion.Proposal{SupplierName: field("Furnizor extras SRL"), SupplierCUI: field("RO12345678"), Reference: field("CTR-2026-01"), EffectiveFrom: field("2026-01-01"), EffectiveTo: field("2027-12-31"), TotalValue: field("125000.00"), Currency: field("RON"), UnitType: field("servicii"), PaymentTerms: field("30 zile"), BuyerCUI: field("RO10000000"), PeriodType: field("FIXED_TERM"), DocumentRole: field("BASE_CONTRACT"), RelatedReference: contractingestion.Field{Status: "MISSING", Confidence: contractingestion.ConfidenceUnknown, Alternatives: []string{}}, ServiceTerms: []contractingestion.ProposedServiceTerm{serviceTerm(field, "Servicii", "FIXED_TOTAL", "125000.00", "RON", "", "UNKNOWN", "", "", "UNKNOWN")}, CommercialClauses: []contractingestion.ProposedCommercialClause{{Kind: field("FIXED_PRICE"), Narrative: field("Servicii 125000.00 RON"), Rule: ruleJSON, Evidence: contractingestion.Evidence{Page: &page, Snippet: "125000.00 RON"}, Confidence: contractingestion.ConfidenceHigh}}}
 	if name == "english" {
 		p.UnitType = field("services")
 		p.PaymentTerms = field("30 days")
@@ -86,6 +94,15 @@ func Proposal(name string) contractingestion.Proposal {
 			serviceTerm(field, "Servicii de contabilitate", "FIXED_FEE", "500", "RON", "", "UNKNOWN", "", "", "MONTHLY"),
 			serviceTerm(field, "Salarizare și resurse umane", "UNIT_RATE", "50", "RON", "SALARIAT", "UNKNOWN", "", "numărul efectiv de salariați", "MONTHLY"),
 		}
+	}
+	if name == "service-incomplete" {
+		missing := contractingestion.Field{Status: "MISSING", Confidence: contractingestion.ConfidenceUnknown, Alternatives: []string{}}
+		p.TotalValue = missing
+		p.Currency = missing
+		p.ServiceTerms = []contractingestion.ProposedServiceTerm{{
+			ServiceDescription: field("Servicii de contabilitate"), PricingModel: missing, UnitPrice: missing, Currency: missing,
+			Unit: missing, QuantitySource: missing, QuantityValue: missing, QuantityDriver: missing, BillingFrequency: missing,
+		}}
 	}
 	return p
 }

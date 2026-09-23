@@ -141,9 +141,10 @@ type TaskType string
 
 // TaskType values.
 const (
-	TaskTypeCONTRACT_MATCH   TaskType = "CONTRACT_MATCH"
-	TaskTypeMISSING_CONTRACT TaskType = "MISSING_CONTRACT"
-	TaskTypeCLASSIFICATION   TaskType = "CLASSIFICATION"
+	TaskTypeCONTRACT_MATCH    TaskType = "CONTRACT_MATCH"
+	TaskTypeMISSING_CONTRACT  TaskType = "MISSING_CONTRACT"
+	TaskTypeCOMMERCIAL_REVIEW TaskType = "COMMERCIAL_REVIEW"
+	TaskTypeCLASSIFICATION    TaskType = "CLASSIFICATION"
 )
 
 func (tt TaskType) String() string {
@@ -153,7 +154,7 @@ func (tt TaskType) String() string {
 // TaskTypeValidator is a validator for the "task_type" field enum values. It is called by the builders before save.
 func TaskTypeValidator(tt TaskType) error {
 	switch tt {
-	case TaskTypeCONTRACT_MATCH, TaskTypeMISSING_CONTRACT, TaskTypeCLASSIFICATION:
+	case TaskTypeCONTRACT_MATCH, TaskTypeMISSING_CONTRACT, TaskTypeCOMMERCIAL_REVIEW, TaskTypeCLASSIFICATION:
 		return nil
 	default:
 		return fmt.Errorf("validationtask: invalid enum value for task_type field: %q", tt)

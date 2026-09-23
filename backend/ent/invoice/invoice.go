@@ -251,20 +251,23 @@ type PipelineStatus string
 
 // PipelineStatus values.
 const (
-	PipelineStatusDOWNLOADED             PipelineStatus = "DOWNLOADED"
-	PipelineStatusARCHIVED               PipelineStatus = "ARCHIVED"
-	PipelineStatusMATCHING               PipelineStatus = "MATCHING"
-	PipelineStatusAWAITING_CONTRACT      PipelineStatus = "AWAITING_CONTRACT"
-	PipelineStatusAWAITING_MATCH_CONFIRM PipelineStatus = "AWAITING_MATCH_CONFIRM"
-	PipelineStatusDEDUPE_CHECKED         PipelineStatus = "DEDUPE_CHECKED"
-	PipelineStatusHEADER_READ            PipelineStatus = "HEADER_READ"
-	PipelineStatusLINES_READ             PipelineStatus = "LINES_READ"
-	PipelineStatusCLASSIFIED             PipelineStatus = "CLASSIFIED"
-	PipelineStatusAWAITING_REVIEW        PipelineStatus = "AWAITING_REVIEW"
-	PipelineStatusREADY_FOR_SAGA         PipelineStatus = "READY_FOR_SAGA"
-	PipelineStatusEXPORTING              PipelineStatus = "EXPORTING"
-	PipelineStatusEXPORTED               PipelineStatus = "EXPORTED"
-	PipelineStatusDUPLICATE              PipelineStatus = "DUPLICATE"
+	PipelineStatusDOWNLOADED                 PipelineStatus = "DOWNLOADED"
+	PipelineStatusARCHIVED                   PipelineStatus = "ARCHIVED"
+	PipelineStatusMATCHING                   PipelineStatus = "MATCHING"
+	PipelineStatusAWAITING_CONTRACT          PipelineStatus = "AWAITING_CONTRACT"
+	PipelineStatusAWAITING_MATCH_CONFIRM     PipelineStatus = "AWAITING_MATCH_CONFIRM"
+	PipelineStatusDEDUPE_CHECKED             PipelineStatus = "DEDUPE_CHECKED"
+	PipelineStatusHEADER_READ                PipelineStatus = "HEADER_READ"
+	PipelineStatusLINES_READ                 PipelineStatus = "LINES_READ"
+	PipelineStatusCOMMERCIAL_VALIDATING      PipelineStatus = "COMMERCIAL_VALIDATING"
+	PipelineStatusAWAITING_COMMERCIAL_REVIEW PipelineStatus = "AWAITING_COMMERCIAL_REVIEW"
+	PipelineStatusCOMMERCIALLY_VALIDATED     PipelineStatus = "COMMERCIALLY_VALIDATED"
+	PipelineStatusCLASSIFIED                 PipelineStatus = "CLASSIFIED"
+	PipelineStatusAWAITING_REVIEW            PipelineStatus = "AWAITING_REVIEW"
+	PipelineStatusREADY_FOR_SAGA             PipelineStatus = "READY_FOR_SAGA"
+	PipelineStatusEXPORTING                  PipelineStatus = "EXPORTING"
+	PipelineStatusEXPORTED                   PipelineStatus = "EXPORTED"
+	PipelineStatusDUPLICATE                  PipelineStatus = "DUPLICATE"
 )
 
 func (ps PipelineStatus) String() string {
@@ -274,7 +277,7 @@ func (ps PipelineStatus) String() string {
 // PipelineStatusValidator is a validator for the "pipeline_status" field enum values. It is called by the builders before save.
 func PipelineStatusValidator(ps PipelineStatus) error {
 	switch ps {
-	case PipelineStatusDOWNLOADED, PipelineStatusARCHIVED, PipelineStatusMATCHING, PipelineStatusAWAITING_CONTRACT, PipelineStatusAWAITING_MATCH_CONFIRM, PipelineStatusDEDUPE_CHECKED, PipelineStatusHEADER_READ, PipelineStatusLINES_READ, PipelineStatusCLASSIFIED, PipelineStatusAWAITING_REVIEW, PipelineStatusREADY_FOR_SAGA, PipelineStatusEXPORTING, PipelineStatusEXPORTED, PipelineStatusDUPLICATE:
+	case PipelineStatusDOWNLOADED, PipelineStatusARCHIVED, PipelineStatusMATCHING, PipelineStatusAWAITING_CONTRACT, PipelineStatusAWAITING_MATCH_CONFIRM, PipelineStatusDEDUPE_CHECKED, PipelineStatusHEADER_READ, PipelineStatusLINES_READ, PipelineStatusCOMMERCIAL_VALIDATING, PipelineStatusAWAITING_COMMERCIAL_REVIEW, PipelineStatusCOMMERCIALLY_VALIDATED, PipelineStatusCLASSIFIED, PipelineStatusAWAITING_REVIEW, PipelineStatusREADY_FOR_SAGA, PipelineStatusEXPORTING, PipelineStatusEXPORTED, PipelineStatusDUPLICATE:
 		return nil
 	default:
 		return fmt.Errorf("invoice: invalid enum value for pipeline_status field: %q", ps)

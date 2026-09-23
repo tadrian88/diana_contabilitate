@@ -68,44 +68,50 @@ type ruleReferenceDTO struct {
 }
 
 type lineClassificationDTO struct {
-	ModelVersion       string               `json:"modelVersion,omitempty"`
-	TypedValue         *accounting.Value    `json:"typedValue,omitempty"`
-	ProposedTypedValue *accounting.Value    `json:"proposedTypedValue,omitempty"`
-	Evidence           *accounting.Evidence `json:"evidence,omitempty"`
-	ReviewReason       string               `json:"reviewReason,omitempty"`
-	InvoiceDateUsed    accountingdate.Date  `json:"invoiceDateUsed,omitempty"`
-	HumanReviewed      bool                 `json:"humanReviewed"`
-	ID                 string               `json:"id"`
-	Dimension          string               `json:"dimension"`
-	Value              string               `json:"value"`
-	Confidence         string               `json:"confidence"`
-	Explanation        string               `json:"explanation"`
-	LegalBasis         string               `json:"legalBasis"`
-	Status             string               `json:"status"`
-	Revision           uint64               `json:"revision"`
-	Rule               *ruleReferenceDTO    `json:"rule,omitempty"`
+	ModelVersion       string                              `json:"modelVersion,omitempty"`
+	TypedValue         *accounting.Value                   `json:"typedValue,omitempty"`
+	ProposedTypedValue *accounting.Value                   `json:"proposedTypedValue,omitempty"`
+	Evidence           *accounting.Evidence                `json:"evidence,omitempty"`
+	ReviewReason       string                              `json:"reviewReason,omitempty"`
+	InvoiceDateUsed    accountingdate.Date                 `json:"invoiceDateUsed,omitempty"`
+	HumanReviewed      bool                                `json:"humanReviewed"`
+	ID                 string                              `json:"id"`
+	Dimension          string                              `json:"dimension"`
+	Value              string                              `json:"value"`
+	Confidence         string                              `json:"confidence"`
+	Explanation        string                              `json:"explanation"`
+	LegalBasis         string                              `json:"legalBasis"`
+	Status             string                              `json:"status"`
+	Revision           uint64                              `json:"revision"`
+	Rule               *ruleReferenceDTO                   `json:"rule,omitempty"`
+	Source             string                              `json:"source"`
+	Mapping            *classification.MappingReference    `json:"mapping,omitempty"`
+	MappingScope       *classification.MappingScopePreview `json:"mappingScope,omitempty"`
 }
 
 type classificationReviewItemDTO struct {
-	ModelVersion       string               `json:"modelVersion,omitempty"`
-	TypedValue         *accounting.Value    `json:"typedValue,omitempty"`
-	ProposedTypedValue *accounting.Value    `json:"proposedTypedValue,omitempty"`
-	Evidence           *accounting.Evidence `json:"evidence,omitempty"`
-	ReviewReason       string               `json:"reviewReason,omitempty"`
-	InvoiceDateUsed    accountingdate.Date  `json:"invoiceDateUsed,omitempty"`
-	HumanReviewed      bool                 `json:"humanReviewed"`
-	ID                 string               `json:"id"`
-	LineID             string               `json:"lineId"`
-	LineLabel          string               `json:"lineLabel"`
-	Dimension          string               `json:"dimension"`
-	ProposedValue      string               `json:"proposedValue"`
-	Confidence         string               `json:"confidence"`
-	Explanation        string               `json:"explanation"`
-	LegalBasis         string               `json:"legalBasis"`
-	Status             string               `json:"status"`
-	ResolvedValue      *string              `json:"resolvedValue,omitempty"`
-	Revision           uint64               `json:"revision"`
-	Rule               *ruleReferenceDTO    `json:"rule,omitempty"`
+	ModelVersion       string                              `json:"modelVersion,omitempty"`
+	TypedValue         *accounting.Value                   `json:"typedValue,omitempty"`
+	ProposedTypedValue *accounting.Value                   `json:"proposedTypedValue,omitempty"`
+	Evidence           *accounting.Evidence                `json:"evidence,omitempty"`
+	ReviewReason       string                              `json:"reviewReason,omitempty"`
+	InvoiceDateUsed    accountingdate.Date                 `json:"invoiceDateUsed,omitempty"`
+	HumanReviewed      bool                                `json:"humanReviewed"`
+	ID                 string                              `json:"id"`
+	LineID             string                              `json:"lineId"`
+	LineLabel          string                              `json:"lineLabel"`
+	Dimension          string                              `json:"dimension"`
+	ProposedValue      string                              `json:"proposedValue"`
+	Confidence         string                              `json:"confidence"`
+	Explanation        string                              `json:"explanation"`
+	LegalBasis         string                              `json:"legalBasis"`
+	Status             string                              `json:"status"`
+	ResolvedValue      *string                             `json:"resolvedValue,omitempty"`
+	Revision           uint64                              `json:"revision"`
+	Rule               *ruleReferenceDTO                   `json:"rule,omitempty"`
+	Source             string                              `json:"source"`
+	Mapping            *classification.MappingReference    `json:"mapping,omitempty"`
+	MappingScope       *classification.MappingScopePreview `json:"mappingScope,omitempty"`
 }
 
 type invoiceDTO struct {
@@ -219,6 +225,7 @@ type contractDTO struct {
 	SourceDocumentID    *string                  `json:"sourceDocumentId,omitempty"`
 	ExtractionAttemptID *string                  `json:"extractionAttemptId,omitempty"`
 	Revision            uint64                   `json:"revision"`
+	LifecycleState      string                   `json:"lifecycleState"`
 	PeriodType          string                   `json:"periodType"`
 	ServiceTerms        []contractServiceTermDTO `json:"serviceTerms"`
 }
@@ -414,27 +421,34 @@ func invoiceResponse(item *invoicing.Invoice) (invoiceDTO, error) {
 
 func activityLabel(eventType string) string {
 	labels := map[string]string{
-		"INVOICE_PIPELINE_TRANSITION":        "Pipeline actualizat",
-		"SAGA_EXPORT_FAILED":                 "Export SAGA eșuat",
-		"SAGA_EXPORT_ARTIFACT_GENERATED":     "Fișier SAGA generat",
-		"SAGA_EXPORT_ARTIFACT_FAILED":        "Generare fișier SAGA eșuată",
-		"SAGA_EXPORT_DOWNLOADED":             "Fișier SAGA descărcat",
-		"SAGA_IMPORT_CONFIRMED":              "Import SAGA confirmat manual",
-		"VALIDATION_TASK_CREATED":            "Revizuire solicitată",
-		"MISSING_CONTRACT_REQUESTED":         "Contract solicitat",
-		"MISSING_CONTRACT_REEVALUATED":       "Contract reevaluat automat",
-		"MISSING_CONTRACT_RESOLVED":          "Contract lipsă rezolvat",
-		"MISSING_CONTRACT_STILL_WAITING":     "Contract încă indisponibil",
-		"CONTRACT_MATCHING_EXECUTED":         "Potrivire contract evaluată",
-		"CONTRACT_AUTO_ASSOCIATED":           "Contract asociat automat",
-		"CONTRACT_MATCH_TASK_RESOLVED":       "Task de contract rezolvat",
-		"CONTRACT_CONFIRMED":                 "Contract confirmat",
-		"AUTOMATED_CLASSIFICATION_COMPLETED": "Clasificare automată finalizată",
-		"CLASSIFICATION_ROUTED":              "Clasificare evaluată",
-		"CLASSIFICATION_TASK_RESOLVED":       "Task de clasificare rezolvat",
-		"INVOICE_REVIEW_COMPLETED":           "Revizuire clasificare finalizată",
-		"RULE_VERSION_CREATED":               "Versiune de regulă creată",
-		"CLIENT_OVERRIDE_CREATED":            "Override client creat",
+		"INVOICE_PIPELINE_TRANSITION":          "Pipeline actualizat",
+		"SAGA_EXPORT_FAILED":                   "Export SAGA eșuat",
+		"SAGA_EXPORT_ARTIFACT_GENERATED":       "Fișier SAGA generat",
+		"SAGA_EXPORT_ARTIFACT_FAILED":          "Generare fișier SAGA eșuată",
+		"SAGA_EXPORT_DOWNLOADED":               "Fișier SAGA descărcat",
+		"SAGA_IMPORT_CONFIRMED":                "Import SAGA confirmat manual",
+		"VALIDATION_TASK_CREATED":              "Revizuire solicitată",
+		"MISSING_CONTRACT_REQUESTED":           "Contract solicitat",
+		"MISSING_CONTRACT_REEVALUATED":         "Contract reevaluat automat",
+		"MISSING_CONTRACT_RESOLVED":            "Contract lipsă rezolvat",
+		"MISSING_CONTRACT_STILL_WAITING":       "Contract încă indisponibil",
+		"CONTRACT_MATCHING_EXECUTED":           "Potrivire contract evaluată",
+		"CONTRACT_AUTO_ASSOCIATED":             "Contract asociat automat",
+		"CONTRACT_MATCH_TASK_RESOLVED":         "Task de contract rezolvat",
+		"CONTRACT_CONFIRMED":                   "Contract confirmat",
+		"AUTOMATED_CLASSIFICATION_COMPLETED":   "Clasificare automată finalizată",
+		"CLASSIFICATION_ROUTED":                "Clasificare evaluată",
+		"CLASSIFICATION_TASK_RESOLVED":         "Task de clasificare rezolvat",
+		"INVOICE_REVIEW_COMPLETED":             "Revizuire clasificare finalizată",
+		"RULE_VERSION_CREATED":                 "Versiune de regulă creată",
+		"CLIENT_OVERRIDE_CREATED":              "Override client creat",
+		"ACCOUNT_MAPPING_SUGGESTION_PRODUCED":  "Propunere din mapare contabilă",
+		"ACCOUNT_MAPPING_CONFLICT_DETECTED":    "Conflict de mapare contabilă",
+		"ACCOUNT_MAPPING_CREATED":              "Mapare contabilă creată",
+		"ACCOUNT_MAPPING_SUGGESTION_VALIDATED": "Propunere de cont validată",
+		"ACCOUNT_MAPPING_OCCURRENCE_ONLY":      "Excepție aplicată doar apariției",
+		"ACCOUNT_MAPPING_CORRECTED":            "Mapare contabilă corectată",
+		"ACCOUNT_MAPPING_POLICY_CHANGED":       "Politică de mapare schimbată",
 	}
 	if label, ok := labels[eventType]; ok {
 		return label
@@ -479,13 +493,13 @@ func classificationResponses(items []classification.Decision) []lineClassificati
 		if item.EffectiveValue != nil {
 			value = *item.EffectiveValue
 		}
-		result = append(result, lineClassificationDTO{ModelVersion: item.ModelVersion, TypedValue: item.TypedValue, ProposedTypedValue: item.ProposedTypedValue, Evidence: item.Evidence, ReviewReason: item.ReviewReason, InvoiceDateUsed: item.InvoiceDateUsed, HumanReviewed: item.HumanReviewed, ID: item.ID, Dimension: string(item.Dimension), Value: value, Confidence: item.Confidence, Explanation: item.Explanation, LegalBasis: item.LegalBasis, Status: string(item.Status), Revision: item.Revision, Rule: ruleReferenceResponse(item.Rule)})
+		result = append(result, lineClassificationDTO{ModelVersion: item.ModelVersion, TypedValue: item.TypedValue, ProposedTypedValue: item.ProposedTypedValue, Evidence: item.Evidence, ReviewReason: item.ReviewReason, InvoiceDateUsed: item.InvoiceDateUsed, HumanReviewed: item.HumanReviewed, ID: item.ID, Dimension: string(item.Dimension), Value: value, Confidence: item.Confidence, Explanation: item.Explanation, LegalBasis: item.LegalBasis, Status: string(item.Status), Revision: item.Revision, Rule: ruleReferenceResponse(item.Rule), Source: string(item.Source), Mapping: item.Mapping, MappingScope: item.MappingScope})
 	}
 	return result
 }
 
 func classificationReviewResponse(item classification.Decision) classificationReviewItemDTO {
-	return classificationReviewItemDTO{ModelVersion: item.ModelVersion, TypedValue: item.TypedValue, ProposedTypedValue: item.ProposedTypedValue, Evidence: item.Evidence, ReviewReason: item.ReviewReason, InvoiceDateUsed: item.InvoiceDateUsed, HumanReviewed: item.HumanReviewed, ID: item.ID, LineID: item.InvoiceLineID, LineLabel: item.LineLabel, Dimension: string(item.Dimension), ProposedValue: item.ProposedValue, Confidence: item.Confidence, Explanation: item.Explanation, LegalBasis: item.LegalBasis, Status: string(item.Status), ResolvedValue: item.EffectiveValue, Revision: item.Revision, Rule: ruleReferenceResponse(item.Rule)}
+	return classificationReviewItemDTO{ModelVersion: item.ModelVersion, TypedValue: item.TypedValue, ProposedTypedValue: item.ProposedTypedValue, Evidence: item.Evidence, ReviewReason: item.ReviewReason, InvoiceDateUsed: item.InvoiceDateUsed, HumanReviewed: item.HumanReviewed, ID: item.ID, LineID: item.InvoiceLineID, LineLabel: item.LineLabel, Dimension: string(item.Dimension), ProposedValue: item.ProposedValue, Confidence: item.Confidence, Explanation: item.Explanation, LegalBasis: item.LegalBasis, Status: string(item.Status), ResolvedValue: item.EffectiveValue, Revision: item.Revision, Rule: ruleReferenceResponse(item.Rule), Source: string(item.Source), Mapping: item.Mapping, MappingScope: item.MappingScope}
 }
 
 func ruleReferenceResponse(item *classification.RuleReference) *ruleReferenceDTO {
@@ -518,7 +532,7 @@ func contractResponse(item *contracts.Contract) contractDTO {
 		},
 		ClientID: item.ClientID, SupplierCUI: item.SupplierCUI, SourceReference: item.SourceReference,
 		SourceDocumentID: item.SourceDocumentID, ExtractionAttemptID: item.ExtractionAttemptID,
-		SourceMetadata: item.SourceMetadata, Revision: item.Revision, PeriodType: item.PeriodType, ServiceTerms: []contractServiceTermDTO{},
+		SourceMetadata: item.SourceMetadata, Revision: item.Revision, LifecycleState: item.LifecycleState, PeriodType: item.PeriodType, ServiceTerms: []contractServiceTermDTO{},
 	}
 	for _, term := range item.ServiceTerms {
 		dto := contractServiceTermDTO{ServiceDescription: term.ServiceDescription, PricingModel: term.PricingModel, Currency: term.Currency, Unit: term.Unit, QuantitySource: term.QuantitySource, QuantityDriver: term.QuantityDriver, BillingFrequency: term.BillingFrequency, Evidence: term.EvidenceJSON}

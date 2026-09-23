@@ -19,12 +19,17 @@ type Service struct {
 	pipeline   PipelineStore
 	exporter   SagaExporter
 	matcher    ContractMatchingProcessor
+	commercial CommercialValidationProcessor
 	classifier ClassificationProcessor
 	clock      Clock
 }
 
 func (s *Service) SetContractMatchingProcessor(processor ContractMatchingProcessor) {
 	s.matcher = processor
+}
+
+func (s *Service) SetCommercialValidationProcessor(processor CommercialValidationProcessor) {
+	s.commercial = processor
 }
 
 func (s *Service) SetClassificationProcessor(processor ClassificationProcessor) {

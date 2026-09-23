@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useInvoiceRepository } from '../../app/repository-context'
-import type { Invoice, DomainValue } from '../../domain/invoice'
+import type { Invoice, DomainValue, AccountMappingAction } from '../../domain/invoice'
 import { queryKeys } from '../../app/queryKeys'
 
 function useUpdateInvoice<T>(invoiceId: string, mutationFn: (value: T) => Promise<Invoice>) {
@@ -32,5 +32,5 @@ export function useRequestContract(invoiceId: string) {
 
 export function useReviewClassification(invoiceId: string) {
   const repository = useInvoiceRepository()
-  return useUpdateInvoice(invoiceId, ({ itemId, value, typedValue, reason }: { itemId: string; value?: string; typedValue?: DomainValue; reason?: string }) => repository.reviewClassification(invoiceId, itemId, value, typedValue, reason))
+  return useUpdateInvoice(invoiceId, ({ itemId, value, typedValue, reason, mappingAction, expectedMappingRevision }: { itemId: string; value?: string; typedValue?: DomainValue; reason?: string; mappingAction?:AccountMappingAction;expectedMappingRevision?:number }) => repository.reviewClassification(invoiceId, itemId, value, typedValue, reason, mappingAction, expectedMappingRevision))
 }

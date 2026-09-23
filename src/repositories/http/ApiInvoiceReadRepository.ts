@@ -1,7 +1,7 @@
 import type { AxiosInstance } from 'axios'
 import { apiClient } from '../../features/auth/auth-api'
 import type { ActivityEvent, ClassificationRule, Client, ClientScope, Contract, InvoiceLine, Invoice, LineClassification, PipelineStatus, SagaExport, SagaStatus, ValidationTask, ValidationTaskInboxItem } from '../../domain/invoice'
-import type { ContractDocument, ReviewedContract, CreateClientOverrideInput, CreateRuleVersionInput, InvoiceRepository, SPVConnection } from '../invoiceRepository'
+import type { AccountCatalogEntry, CommercialRule, CommercialValidationRun, ContractDocument, ReviewedContract, CreateClientOverrideInput, CreateRuleVersionInput, InvoiceRepository, SPVConnection } from '../invoiceRepository'
 
 interface InvoiceReadDto {
  modelVersion?: string
@@ -141,6 +141,9 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
     return response.status === 404 ? undefined : response.data
   }
 
+  async deleteContract(id:string,expectedRevision:number):Promise<{changed:boolean}>{const response=await this.http.post<{changed:boolean}>(`/contracts/${encodeURIComponent(id)}/discard`,{expectedRevision});return response.data}
+  async archiveContract(id:string,expectedRevision:number):Promise<{changed:boolean}>{const response=await this.http.post<{changed:boolean}>(`/contracts/${encodeURIComponent(id)}/archive`,{expectedRevision});return response.data}
+
   async listContractInvoices(contractId: string): Promise<Invoice[]> {
     const response = await this.http.get<ContractInvoiceDto[]>(`/contracts/${encodeURIComponent(contractId)}/invoices`)
     return response.data.map((invoice) => mapContractInvoice(invoice, contractId))
@@ -150,9 +153,16 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
   async getContractDocument(clientId:string,documentId:string){const response=await this.http.get<ContractDocument>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}`,{validateStatus:(status)=>status===200||status===404});return response.status===404?undefined:response.data}
   async uploadContractDocument(clientId:string,file:File){const form=new FormData();form.append('file',file);const response=await this.http.post<ContractDocument>(`/clients/${encodeURIComponent(clientId)}/contract-documents`,form,{headers:{'Content-Type':'multipart/form-data'}});return response.data}
   async confirmContractDocument(clientId:string,document:ContractDocument,contract:ReviewedContract,key=crypto.randomUUID()){if(!document.extraction?.id)throw new Error('Extraction attempt is required.');const response=await this.http.post<{contractId:string;changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(document.id)}/confirm`,{extractionAttemptId:document.extraction.id,expectedDocumentRevision:document.revision,contract},{headers:{'Idempotency-Key':key}});return response.data}
+  async confirmProposedCommercialRule(clientId:string,documentId:string,ruleId:string,rule?:CommercialRule,key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/commercial-rules/${encodeURIComponent(ruleId)}/confirm`,rule?{rule}:undefined,{headers:{'Idempotency-Key':key}});return response.data}
+  async activateReviewedServicePrices(clientId:string,documentId:string,key=crypto.randomUUID()){const response=await this.http.post<{activated:number}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/reviewed-service-prices/activate`,undefined,{headers:{'Idempotency-Key':key}});return response.data}
+  async putCommercialDateFact(clientId:string,invoiceId:string,input:{kind:'REMITTANCE'|'RECEIPT'|'ACCEPTANCE';date:string;sourceReference:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/commercial-date-facts`,input,{headers:{'Idempotency-Key':key}});return response.data}
   async getContractDocumentFile(clientId:string,documentId:string){const response=await this.http.get<Blob>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/file`,{responseType:'blob'});return response.data}
   async retryContractExtraction(clientId:string,documentId:string,revision:number){await this.http.post(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/reextract`,{expectedDocumentRevision:revision})}
   async discardContractDocument(clientId:string,documentId:string,revision:number){await this.http.post(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/discard`,{expectedDocumentRevision:revision})}
+  async getCommercialValidation(clientId:string,invoiceId:string){const response=await this.http.get<CommercialValidationRun>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/commercial-validation`,{validateStatus:(status)=>status===200||status===404});return response.status===404?undefined:response.data}
+  async resolveCommercialValidation(clientId:string,invoiceId:string,input:{runId:string;findingId?:string;expectedInvoiceRevision:number;action:'ACCEPT_EXCEPTION'|'WAIT_FOR_CORRECTION'|'RERUN';reason?:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/commercial-validation/resolve`,input,{headers:{'Idempotency-Key':key}});return response.data}
+  async putCommercialVariable(clientId:string,dossierId:string,input:{name:string;value:string;source:'MANUAL';sourceReference:string;periodStart?:string;periodEnd?:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-dossiers/${encodeURIComponent(dossierId)}/variables`,input,{headers:{'Idempotency-Key':key}});return response.data}
+  async confirmCommercialServiceAlias(clientId:string,input:{invoiceId:string;lineId:string;serviceId:string;reuseForDossier:boolean},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/commercial-service-aliases`,input,{headers:{'Idempotency-Key':key}});return response.data}
 
   async resolveContractMatch(id: string, contractId: string): Promise<Invoice> {
     const invoice = await this.requireInvoice(id)
@@ -168,6 +178,11 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
 
   async listRules(scope: ClientScope): Promise<ClassificationRule[]> {
     const response = await this.http.get<ClassificationRule[]>('/rules', { params: scope === 'all' ? undefined : { clientId: scope } })
+    return response.data
+  }
+
+  async searchAccounts(query:string):Promise<AccountCatalogEntry[]> {
+    const response=await this.http.get<AccountCatalogEntry[]>('/accounts',{params:{q:query}})
     return response.data
   }
 
@@ -188,7 +203,7 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
     return response.data
   }
 
-  async reviewClassification(id: string, itemId: string, correctedValue?: string, typedValue?: import('../../domain/invoice').DomainValue, reason?: string): Promise<Invoice> {
+  async reviewClassification(id: string, itemId: string, correctedValue?: string, typedValue?: import('../../domain/invoice').DomainValue, reason?: string, mappingAction?:import('../../domain/invoice').AccountMappingAction, expectedMappingRevision?:number): Promise<Invoice> {
     const invoice = await this.requireInvoice(id)
     const task = invoice.task
     const item = task?.classificationItems?.find((candidate) => candidate.id === itemId)
@@ -202,6 +217,8 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
       ...(correctedValue === undefined ? {} : { correctedValue }),
  ...(typedValue === undefined ? {} : { typedValue }),
  ...(reason === undefined ? {} : { reason }),
+ ...(mappingAction === undefined ? {} : { mappingAction }),
+ ...(expectedMappingRevision === undefined ? {} : { expectedMappingRevision }),
     }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
     return mapInvoice(response.data)
   }
@@ -309,7 +326,9 @@ function pipelinePath(status: PipelineStatus): PipelineStatus[] {
   if (status === 'AWAITING_CONTRACT') return ['DOWNLOADED', 'ARCHIVED', 'MATCHING', 'AWAITING_CONTRACT']
   const path: PipelineStatus[] = ['DOWNLOADED', 'ARCHIVED', 'MATCHING']
   if (status === 'AWAITING_MATCH_CONFIRM') path.push('AWAITING_MATCH_CONFIRM')
-  path.push('DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'CLASSIFIED')
+  path.push('DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'COMMERCIAL_VALIDATING')
+  if (status === 'AWAITING_COMMERCIAL_REVIEW') path.push('AWAITING_COMMERCIAL_REVIEW')
+  path.push('COMMERCIALLY_VALIDATED', 'CLASSIFIED')
   if (status === 'AWAITING_REVIEW') path.push('AWAITING_REVIEW')
   path.push('READY_FOR_SAGA', 'EXPORTING', 'EXPORTED')
   return path

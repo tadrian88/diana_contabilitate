@@ -89,7 +89,7 @@ func TestFakeANAFToDianaPipelineArchivesSourceAndEntersNativeWorkflow(t *testing
 		t.Fatalf("process id=%s created=%t err=%v", invoiceID, created, err)
 	}
 	row, err := store.Client.SPVSourceDocument.Get(ctx, result.Documents[0].ID)
-	if err != nil || row.ProcessingStatus != spvsourcedocument.ProcessingStatusPROCESSED || len(row.RawDocument) == 0 || row.ContentSha256 == nil || row.InvoiceID == nil {
+	if err != nil || row.ProcessingStatus != spvsourcedocument.ProcessingStatusPROCESSED || len(row.RawDocument) == 0 || row.ContentSha256 == nil || row.InvoiceID == nil || row.SourceCreatedAt == nil || spv.RomanianCalendarDay(*row.SourceCreatedAt).Format("2006-01-02") != "2026-09-14" {
 		t.Fatalf("source not archived: %+v err=%v", row, err)
 	}
 	item, err := store.GetInvoice(ctx, invoiceID)
