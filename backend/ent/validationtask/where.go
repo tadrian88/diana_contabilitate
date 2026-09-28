@@ -80,6 +80,11 @@ func ContractMatchRunID(v string) predicate.ValidationTask {
 	return predicate.ValidationTask(sql.FieldEQ(FieldContractMatchRunID, v))
 }
 
+// ClassificationRunID applies equality check predicate on the "classification_run_id" field. It's identical to ClassificationRunIDEQ.
+func ClassificationRunID(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldEQ(FieldClassificationRunID, v))
+}
+
 // Title applies equality check predicate on the "title" field. It's identical to TitleEQ.
 func Title(v string) predicate.ValidationTask {
 	return predicate.ValidationTask(sql.FieldEQ(FieldTitle, v))
@@ -338,6 +343,81 @@ func ContractMatchRunIDEqualFold(v string) predicate.ValidationTask {
 // ContractMatchRunIDContainsFold applies the ContainsFold predicate on the "contract_match_run_id" field.
 func ContractMatchRunIDContainsFold(v string) predicate.ValidationTask {
 	return predicate.ValidationTask(sql.FieldContainsFold(FieldContractMatchRunID, v))
+}
+
+// ClassificationRunIDEQ applies the EQ predicate on the "classification_run_id" field.
+func ClassificationRunIDEQ(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldEQ(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDNEQ applies the NEQ predicate on the "classification_run_id" field.
+func ClassificationRunIDNEQ(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldNEQ(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDIn applies the In predicate on the "classification_run_id" field.
+func ClassificationRunIDIn(vs ...string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldIn(FieldClassificationRunID, vs...))
+}
+
+// ClassificationRunIDNotIn applies the NotIn predicate on the "classification_run_id" field.
+func ClassificationRunIDNotIn(vs ...string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldNotIn(FieldClassificationRunID, vs...))
+}
+
+// ClassificationRunIDGT applies the GT predicate on the "classification_run_id" field.
+func ClassificationRunIDGT(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldGT(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDGTE applies the GTE predicate on the "classification_run_id" field.
+func ClassificationRunIDGTE(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldGTE(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDLT applies the LT predicate on the "classification_run_id" field.
+func ClassificationRunIDLT(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldLT(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDLTE applies the LTE predicate on the "classification_run_id" field.
+func ClassificationRunIDLTE(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldLTE(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDContains applies the Contains predicate on the "classification_run_id" field.
+func ClassificationRunIDContains(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldContains(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDHasPrefix applies the HasPrefix predicate on the "classification_run_id" field.
+func ClassificationRunIDHasPrefix(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldHasPrefix(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDHasSuffix applies the HasSuffix predicate on the "classification_run_id" field.
+func ClassificationRunIDHasSuffix(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldHasSuffix(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDIsNil applies the IsNil predicate on the "classification_run_id" field.
+func ClassificationRunIDIsNil() predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldIsNull(FieldClassificationRunID))
+}
+
+// ClassificationRunIDNotNil applies the NotNil predicate on the "classification_run_id" field.
+func ClassificationRunIDNotNil() predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldNotNull(FieldClassificationRunID))
+}
+
+// ClassificationRunIDEqualFold applies the EqualFold predicate on the "classification_run_id" field.
+func ClassificationRunIDEqualFold(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldEqualFold(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDContainsFold applies the ContainsFold predicate on the "classification_run_id" field.
+func ClassificationRunIDContainsFold(v string) predicate.ValidationTask {
+	return predicate.ValidationTask(sql.FieldContainsFold(FieldClassificationRunID, v))
 }
 
 // TaskTypeEQ applies the EQ predicate on the "task_type" field.

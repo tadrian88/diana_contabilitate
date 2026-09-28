@@ -76,13 +76,20 @@ export interface InvoiceRepository {
   putCommercialVariable(clientId:string,dossierId:string,input:{name:string;value:string;source:'MANUAL';sourceReference:string;periodStart?:string;periodEnd?:string},key?:string):Promise<{changed:boolean}>
   confirmCommercialServiceAlias(clientId:string,input:{invoiceId:string;lineId:string;serviceId:string;reuseForDossier:boolean},key?:string):Promise<{changed:boolean}>
   listRules(scope: ClientScope): Promise<ClassificationRule[]>
+  listApprovedKnowledge(scope:ClientScope):Promise<import('../domain/invoice').ApprovedKnowledge[]>
+  previewApprovedKnowledge(clientId:string,invoiceId:string,classificationId:string):Promise<import('../domain/invoice').PromotionPreview>
+  promoteApprovedKnowledge(clientId:string,invoiceId:string,preview:import('../domain/invoice').PromotionPreview,expectedInvoiceRevision:number,key?:string):Promise<import('../domain/invoice').ApprovedKnowledge>
+  revokeApprovedKnowledge(clientId:string,item:import('../domain/invoice').ApprovedKnowledge,key?:string):Promise<import('../domain/invoice').ApprovedKnowledge>
+  listLegislationSources():Promise<import('../domain/invoice').LegislationSourceView[]>
   searchAccounts(query:string):Promise<AccountCatalogEntry[]>
   getRule(id: string): Promise<ClassificationRule | undefined>
   createRuleVersion(id: string, input: CreateRuleVersionInput): Promise<ClassificationRule>
   createClientOverride(id: string, input: CreateClientOverrideInput): Promise<ClassificationRule>
   resolveContractMatch(id: string, contractId: string): Promise<Invoice>
   requestContract(id: string): Promise<Invoice>
-  reviewClassification(id: string, itemId: string, value?: string, typedValue?: import('../domain/invoice').DomainValue, reason?: string, mappingAction?:import('../domain/invoice').AccountMappingAction, expectedMappingRevision?:number): Promise<Invoice>
+  reviewClassification(id: string, itemId: string, value?: string, typedValue?: import('../domain/invoice').DomainValue, reason?: string, mappingAction?:import('../domain/invoice').AccountMappingAction, expectedMappingRevision?:number, action?:import('../domain/invoice').ClassificationReviewAction): Promise<Invoice>
+  approveAllClassifications(id:string):Promise<Invoice>
+  reanalyzeClassification(clientId:string,invoiceId:string,expectedInvoiceRevision:number,key?:string):Promise<Invoice>
   getSPVConnection(clientId: string): Promise<SPVConnection>
   startSPVOAuth(clientId: string): Promise<string>
   requestSPVSync(clientId: string): Promise<SPVConnection>

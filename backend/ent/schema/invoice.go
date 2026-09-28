@@ -25,6 +25,7 @@ func (Invoice) Fields() []ent.Field {
 		field.JSON("source_facts", &accounting.SourceFacts{}).Optional().Immutable(),
 		field.JSON("accounting_snapshot", &accounting.Snapshot{}).Optional(),
 		field.String("readiness_reason").Default(""),
+		field.String("current_classification_run_id").Optional().Nillable(),
 		field.String("id").Immutable(),
 		field.String("client_id"),
 		field.String("supplier_name").NotEmpty(),

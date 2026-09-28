@@ -11,6 +11,7 @@ import (
 	"diana-contabilitate/backend/ent/accountingclient"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
+	"diana-contabilitate/backend/ent/classificationrun"
 	entcontract "diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/contractmatchrun"
@@ -177,12 +178,19 @@ func seedSagaUXFixture(ctx context.Context, store *postgres.Store, now time.Time
 	if _, err := store.Client.InvoiceLine.Create().SetID(lineID).SetInvoiceID(invoiceID).SetPosition(1).SetDescription("Serviciu sintetic pentru verificarea exportului").SetUnit("BUC").SetVatRate("19.0000").SetVatValue("19.0000").SetQuantity("1.0000").SetUnitPrice("100.0000").SetNetValue("100.0000").SetTotalValue("119.0000").Save(ctx); err != nil {
 		return err
 	}
+	runID := invoiceID + "-classification-run"
+	if _, err := store.Client.ClassificationRun.Create().SetID(runID).SetClientID("client-alfa").SetInvoiceID(invoiceID).SetInvoiceRevision(1).SetSnapshot(&accounting.Snapshot{}).SetContextFingerprint((&accounting.Snapshot{}).Fingerprint()).SetPolicyVersion("SAGA_UX_E2E_V1").SetStatus(classificationrun.StatusCOMPLETED).SetCommandKey("seed:" + runID).SetActorDisplay("Devseed").SetCreatedAt(issue).Save(ctx); err != nil {
+		return err
+	}
+	if _, err := store.Client.Invoice.UpdateOneID(invoiceID).SetCurrentClassificationRunID(runID).Save(ctx); err != nil {
+		return err
+	}
 	classifications := []struct {
 		dimension lineclassification.Dimension
 		value     string
 	}{{lineclassification.DimensionACCOUNT, "628.01"}, {lineclassification.DimensionVAT, "19"}, {lineclassification.DimensionDEDUCTIBILITY, "SAGA_DEFAULT"}}
 	for index, item := range classifications {
-		if _, err := store.Client.LineClassification.Create().SetID(fmt.Sprintf("%s-classification-%d", invoiceID, index)).SetClientID("client-alfa").SetInvoiceID(invoiceID).SetInvoiceLineID(lineID).SetDimension(item.dimension).SetProposedValue(item.value).SetEffectiveValue(item.value).SetConfidenceDisplay("synthetic explicit E2E value").SetExplanation("Synthetic SAGA UX fixture; not accounting advice.").SetLegalBasis("Synthetic test only.").SetReviewedAt(issue).SetReviewedByDisplay("Synthetic fixture accountant").SetRequiredReview(true).SetReviewStatus(lineclassification.ReviewStatusACCEPTED).SetSource(lineclassification.SourceNO_MATCH).SetPolicyVersion("SAGA_UX_E2E_V1").SetRevision(1).SetCreatedAt(issue).SetUpdatedAt(issue).Save(ctx); err != nil {
+		if _, err := store.Client.LineClassification.Create().SetID(fmt.Sprintf("%s-classification-%d", invoiceID, index)).SetClientID("client-alfa").SetInvoiceID(invoiceID).SetInvoiceLineID(lineID).SetClassificationRunID(runID).SetDimension(item.dimension).SetProposedValue(item.value).SetEffectiveValue(item.value).SetConfidenceDisplay("synthetic explicit E2E value").SetExplanation("Synthetic SAGA UX fixture; not accounting advice.").SetLegalBasis("Synthetic test only.").SetReviewedAt(issue).SetReviewedByDisplay("Synthetic fixture accountant").SetRequiredReview(true).SetReviewStatus(lineclassification.ReviewStatusACCEPTED).SetSource(lineclassification.SourceNO_MATCH).SetPolicyVersion("SAGA_UX_E2E_V1").SetRevision(1).SetCreatedAt(issue).SetUpdatedAt(issue).Save(ctx); err != nil {
 			return err
 		}
 	}
@@ -676,6 +684,15 @@ func seedAccountingV2Fixture(ctx context.Context, store *postgres.Store, now tim
 		return err
 	}
 	f, l, p, pack := accountingtest.Fixture(cid)
+	// This persisted fixture must obey the same canonical account rules as a
+	// real client profile. Keep the generic in-memory fixture synthetic for unit
+	// tests, but use postable catalog leaves for the database-backed E2E flow.
+	p.AccountCodes = []string{"6281", "6282"}
+	for index := range pack.Rules {
+		if pack.Rules[index].Dimension == "ACCOUNT" {
+			pack.Rules[index].Result.Account = "6281"
+		}
+	}
 	pack.Mapping.Approved = false
 	if _, err := store.Client.AccountingClient.Create().SetID(cid).SetName("TEST_ONLY — Accounting V2 synthetic client").SetCui(accountingtest.BuyerCUI).SetNormalizedIdentifier(accountingtest.BuyerNormalizedCUI).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountingdate"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/clients"
 	"diana-contabilitate/backend/internal/spv"
@@ -54,6 +55,11 @@ func loadClientDetail(ctx context.Context, q clientQuery, id string) (clients.De
 		}
 		var p accounting.Profile
 		if err = json.Unmarshal(raw, &p); err != nil {
+			rows.Close()
+			return d, err
+		}
+		p.ConfigurationIssues, err = profilePostingIssues(ctx, q, p.AccountCodes)
+		if err != nil {
 			rows.Close()
 			return d, err
 		}
@@ -223,12 +229,18 @@ func (s *Store) ExecuteClientCommand(ctx context.Context, kind string, c clients
 			return clients.Detail{}, apperrors.ErrConflict
 		}
 		p := *c.Profile
+		p.ConfigurationIssues = nil
 		p.ID = stableID("profile", key)
 		p.ClientID = id
 		p.Version = latest + 1
+		p.SupersedesProfileID = ""
 		p.Approval = accounting.Approval{}
+		if validationErr := validateProfilePostingAccounts(ctx, tx, p.AccountCodes); validationErr != nil {
+			return clients.Detail{}, validationErr
+		}
 		event = "ACCOUNTING_PROFILE_CREATED"
 		if c.Approve {
+			p.SupersedesProfileID = c.SupersedesProfileID
 			p.Approval = accounting.Approval{Actor: c.Actor.Display, At: now, Evidence: c.Evidence}
 			if !p.Valid(id, p.EffectiveFrom) {
 				return clients.Detail{}, apperrors.ErrValidation
@@ -237,8 +249,25 @@ func (s *Store) ExecuteClientCommand(ctx context.Context, kind string, c clients
 			if e != nil {
 				return clients.Detail{}, e
 			}
+			var replaced *accounting.Profile
+			if p.SupersedesProfileID != "" {
+				for _, candidate := range existing.Profiles {
+					if candidate != nil && candidate.ID == p.SupersedesProfileID {
+						replaced = candidate
+						break
+					}
+				}
+				if replaced == nil || !replaced.Approval.Valid() || replaced.TestOnly || replaced.EffectiveFrom != p.EffectiveFrom || !sameAccountingDate(replaced.EffectiveTo, p.EffectiveTo) {
+					return clients.Detail{}, fmt.Errorf("%w: profilul succesor trebuie să înlocuiască profilul aprobat curent și să păstreze perioada", apperrors.ErrConflict)
+				}
+				for _, candidate := range existing.Profiles {
+					if candidate != nil && candidate.SupersedesProfileID == replaced.ID && candidate.Approval.Valid() {
+						return clients.Detail{}, fmt.Errorf("%w: profilul are deja un succesor aprobat", apperrors.ErrConflict)
+					}
+				}
+			}
 			for _, v := range existing.Profiles {
-				if v != nil && v.Approval.Valid() && !v.TestOnly && (p.EffectiveTo == nil || v.EffectiveFrom <= *p.EffectiveTo) && (v.EffectiveTo == nil || p.EffectiveFrom <= *v.EffectiveTo) {
+				if v != nil && v.ID != p.SupersedesProfileID && v.Approval.Valid() && !v.TestOnly && (p.EffectiveTo == nil || v.EffectiveFrom <= *p.EffectiveTo) && (v.EffectiveTo == nil || p.EffectiveFrom <= *v.EffectiveTo) {
 					return clients.Detail{}, fmt.Errorf("%w: perioada se suprapune unui profil aprobat imuabil", apperrors.ErrConflict)
 				}
 			}
@@ -248,7 +277,7 @@ func (s *Store) ExecuteClientCommand(ctx context.Context, kind string, c clients
 		if e != nil {
 			return clients.Detail{}, e
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO client_accounting_profiles(id,client_id,version,payload,created_at) VALUES($1,$2,$3,$4,$5)`, p.ID, id, p.Version, raw, now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO client_accounting_profiles(id,client_id,version,payload,created_at,supersedes_profile_id) VALUES($1,$2,$3,$4,$5,$6)`, p.ID, id, p.Version, raw, now, nullText(p.SupersedesProfileID))
 	}
 	if err == nil && kind == "create" {
 		_, err = tx.ExecContext(ctx, `INSERT INTO client_saga_configurations(client_id,enabled,updated_at) VALUES($1,false,$2)`, id, now)
@@ -288,6 +317,47 @@ func (s *Store) ExecuteClientCommand(ctx context.Context, kind string, c clients
 		return clients.Detail{}, err
 	}
 	return after, nil
+}
+
+func validateProfilePostingAccounts(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, codes []string) error {
+	issues, err := profilePostingIssues(ctx, q, codes)
+	if err != nil {
+		return err
+	}
+	if len(issues) > 0 {
+		return accounts.ValidationIssue{Code: accounts.ValidationCode(issues[0].Code), AccountCode: issues[0].AccountCode, Message: issues[0].Message}
+	}
+	return nil
+}
+
+func profilePostingIssues(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, codes []string) ([]accounting.ProfileIssue, error) {
+	issues := []accounting.ProfileIssue{}
+	for _, code := range codes {
+		var item accounts.Account
+		err := q.QueryRowContext(ctx, `SELECT code,name,account_type,is_synthetic,postable,is_active,COALESCE(parent_code,'') FROM accounts WHERE code=$1`, code).Scan(&item.Code, &item.Name, &item.AccountType, &item.Synthetic, &item.Postable, &item.Active, &item.ParentCode)
+		if errors.Is(err, sql.ErrNoRows) {
+			issues = append(issues, accounting.ProfileIssue{Code: string(accounts.AccountNotFound), AccountCode: code, Message: "Contul " + code + " nu există în planul de conturi."})
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err = accounts.ValidatePostingAccount(&item, code, nil); err != nil {
+			issue, _ := accounts.AsValidationIssue(err)
+			issues = append(issues, accounting.ProfileIssue{Code: string(issue.Code), AccountCode: code, Message: issue.Message})
+		}
+	}
+	return issues, nil
+}
+
+func sameAccountingDate(left, right *accountingdate.Date) bool {
+	return left == nil && right == nil || left != nil && right != nil && *left == *right
 }
 
 func (s *Store) CreateClientOAuthAttempt(ctx context.Context, state spv.OAuthState, ciphertext, key string, actor spv.Actor) (string, error) {

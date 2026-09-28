@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 
+	accountdomain "diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/legislation"
 	"diana-contabilitate/backend/internal/money"
 )
@@ -14,18 +15,42 @@ var ErrInvalidProposal = errors.New("invalid accounting analysis proposal")
 
 type AccountCatalog interface{ Postable(code string) bool }
 
-type Catalog map[string]bool
+type DetailedAccountCatalog interface {
+	Account(code string) (*accountdomain.Account, bool)
+	PostableChildren(code string) []accountdomain.Account
+}
 
-func (c Catalog) Postable(code string) bool { return c[code] }
+type Catalog struct {
+	Entries  map[string]accountdomain.Account
+	Children map[string][]accountdomain.Account
+}
 
-type ValidationIssue struct{ Code, Path, Message string }
+func (c Catalog) Postable(code string) bool {
+	item, ok := c.Entries[code]
+	return ok && item.Active && item.Postable
+}
+func (c Catalog) Account(code string) (*accountdomain.Account, bool) {
+	item, ok := c.Entries[code]
+	return &item, ok
+}
+func (c Catalog) PostableChildren(code string) []accountdomain.Account { return c.Children[code] }
+
+type ValidationIssue struct {
+	Code              string                  `json:"code"`
+	Path              string                  `json:"path"`
+	Message           string                  `json:"message"`
+	AccountCode       string                  `json:"accountCode,omitempty"`
+	SuggestedAccounts []accountdomain.Account `json:"suggestedAccounts,omitempty"`
+}
 
 // Validate is the non-LLM trust boundary. Every provider response and every
 // edited review payload must cross it before persistence.
-func Validate(input Input, proposal Proposal, fragments []legislation.Fragment, accounts AccountCatalog) []ValidationIssue {
+func ValidateLegacy(input Input, proposal Proposal, fragments []legislation.Fragment, catalog AccountCatalog) []ValidationIssue {
 	issues := []ValidationIssue{}
-	add := func(code, path, message string) { issues = append(issues, ValidationIssue{code, path, message}) }
-	if proposal.SchemaVersion != SchemaVersion {
+	add := func(code, path, message string) {
+		issues = append(issues, ValidationIssue{Code: code, Path: path, Message: message})
+	}
+	if proposal.SchemaVersion != LegacySchemaVersion {
 		add("SCHEMA_VERSION", "schemaVersion", "versiune de schemă necunoscută")
 	}
 	if proposal.ClientID != input.ClientID {
@@ -60,15 +85,8 @@ func Validate(input Input, proposal Proposal, fragments []legislation.Fragment, 
 		if entry.Currency != input.Currency {
 			add("CURRENCY", path+".currency", "moneda nu corespunde facturii")
 		}
-		if accounts == nil || !accounts.Postable(entry.DebitAccount) {
-			add("ACCOUNT", path+".debitAccount", "cont debit inexistent sau nepostabil")
-		}
-		if accounts == nil || !accounts.Postable(entry.CreditAccount) {
-			add("ACCOUNT", path+".creditAccount", "cont credit inexistent sau nepostabil")
-		}
-		if input.Profile == nil || !input.Profile.AccountAllowed(entry.DebitAccount) || !input.Profile.AccountAllowed(entry.CreditAccount) {
-			add("PROFILE_ACCOUNT", path, "contul nu aparține vocabularului aprobat al clientului")
-		}
+		issues = append(issues, validateAnalysisAccount(catalog, input.Profile, entry.DebitAccount, path+".debitAccount")...)
+		issues = append(issues, validateAnalysisAccount(catalog, input.Profile, entry.CreditAccount, path+".creditAccount")...)
 		if strings.TrimSpace(entry.Explanation) == "" {
 			add("EXPLANATION", path+".explanation", "explicația este obligatorie")
 		}
@@ -166,6 +184,40 @@ func Validate(input Input, proposal Proposal, fragments []legislation.Fragment, 
 		add("LEGAL_CITATION", "citations", "analiza LLM necesită cel puțin o citare verificabilă")
 	}
 	return issues
+}
+
+func validateAnalysisAccount(catalog AccountCatalog, profile interface{ AccountAllowed(string) bool }, code, path string) []ValidationIssue {
+	if detailed, ok := catalog.(DetailedAccountCatalog); ok {
+		item, exists := detailed.Account(code)
+		if !exists {
+			item = nil
+		}
+		var allowed func(string) bool
+		if profile != nil {
+			allowed = profile.AccountAllowed
+		}
+		err := accountdomain.ValidatePostingAccount(item, code, allowed)
+		if err == nil {
+			return nil
+		}
+		issue, _ := accountdomain.AsValidationIssue(err)
+		result := ValidationIssue{Code: string(issue.Code), Path: path, Message: issue.Message, AccountCode: code}
+		if issue.Code == accountdomain.AccountNotPostable {
+			for _, candidate := range detailed.PostableChildren(code) {
+				if profile == nil || profile.AccountAllowed(candidate.Code) {
+					result.SuggestedAccounts = append(result.SuggestedAccounts, candidate)
+				}
+			}
+		}
+		return []ValidationIssue{result}
+	}
+	if catalog == nil || !catalog.Postable(code) {
+		return []ValidationIssue{{Code: string(accountdomain.AccountNotFound), Path: path, Message: "cont inexistent sau nepostabil", AccountCode: code}}
+	}
+	if profile == nil || !profile.AccountAllowed(code) {
+		return []ValidationIssue{{Code: string(accountdomain.AccountNotAllowedProfile), Path: path, Message: "contul nu aparține vocabularului aprobat al clientului", AccountCode: code}}
+	}
+	return nil
 }
 
 func rat(value money.Amount) (*big.Rat, bool) { return new(big.Rat).SetString(value.String()) }

@@ -5,19 +5,22 @@ import { CLASSIFICATION_DIMENSION_LABELS } from '../../domain/invoice'
 import { Link } from 'react-router-dom'
 import { displayDomainValue } from './domain-decision-view'
 import { ClassificationTask } from './ClassificationTask'
+import { AccountingReviewV2 } from './AccountingReviewV2'
 
 const legacyDimensions: LineClassification['dimension'][] = ['ACCOUNT', 'VAT', 'DEDUCTIBILITY']
-const domainDimensions: LineClassification['dimension'][] = ['ACCOUNT', 'VAT_TREATMENT', 'VAT_DEDUCTIBILITY', 'EXPENSE_TAX_TREATMENT']
 
 export function ClassificationWorkspace({ invoice }: { invoice: Invoice }) {
+  if (invoice.modelVersion === 'ACCOUNTING_DOMAIN_V2') return <AccountingReviewV2 invoice={invoice} />
+
   if (!hasReachedClassification(invoice)) {
     return <div className="card p-10 text-center"><Clock3 className="mx-auto size-8 text-[var(--text-muted)]" /><h3 className="mt-3 font-bold">Clasificarea nu este încă disponibilă</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Factura trebuie să ajungă la etapa de clasificare înainte ca aceste date să fie afișate.</p></div>
   }
 
-  const dimensions = invoice.modelVersion === 'ACCOUNTING_DOMAIN_V2' ? domainDimensions : legacyDimensions
+  const dimensions = legacyDimensions
   const uncertainItems = invoice.task?.type === 'CLASSIFICATION' ? invoice.task.classificationItems ?? [] : []
   return (
     <div className="space-y-5">
+      {(invoice.accountingWorkflowStatus==='AI_ANALYSIS_PENDING'||invoice.accountingWorkflowStatus==='AI_ANALYSIS_RUNNING')&&<div role="status" className="card p-4 text-sm text-[var(--accent)]">Analiza asistată completează automat doar dimensiunile încă nerezolvate. Taskul contabil va apărea după finalizarea analizei.</div>}
       {invoice.readinessReason && <div role="alert" className="card p-4 text-sm text-[var(--warning)]">{invoice.readinessReason}</div>}
       {invoice.accountingSnapshot?.profile && <p className="text-xs">Profil fiscal v{invoice.accountingSnapshot.profile.version} · Politică: {invoice.accountingSnapshot.profile.chartPolicy} · {invoice.accountingSnapshot.pack?.testOnly ? "Configurație sintetică TEST_ONLY" : "Configurație contabilă"}</p>}
       {invoice.accountingSnapshot?.profile && <div className="card grid gap-2 p-4 text-xs sm:grid-cols-2">
@@ -55,7 +58,7 @@ export function ClassificationWorkspace({ invoice }: { invoice: Invoice }) {
 }
 
 function ClassificationCell({ label, confident, uncertain, invoiceId }: { label: string; confident?: LineClassification; uncertain?: ClassificationReviewItem; invoiceId: string }) {
-  const pending = uncertain?.status === 'PENDING'
+  const pending = uncertain?.status === 'PENDING' || uncertain?.status === 'REJECTED'
   const value = uncertain?.resolvedValue ?? uncertain?.proposedValue ?? confident?.value
   const confidence = uncertain?.confidence ?? confident?.confidence
   const explanation = uncertain?.explanation ?? confident?.explanation
@@ -67,7 +70,10 @@ function ClassificationCell({ label, confident, uncertain, invoiceId }: { label:
       <div className="mt-3 text-sm font-bold">{displayDomainValue(uncertain?.typedValue ?? uncertain?.proposedTypedValue ?? confident?.typedValue, value)}</div>
       {confidence && <div className="mt-1 text-[11px] text-[var(--text-secondary)]">Încredere: {confidence}</div>}
       {explanation && <p className="mt-3 text-xs leading-5 text-[var(--text-secondary)]">{explanation}</p>}
+      {(uncertain?.source ?? confident?.source) === 'AI_PROPOSAL' && <p className="mt-2 text-[10px] text-[var(--text-muted)]">Propunere AI; nu este valoare finală până la review uman.</p>}
+      {(uncertain?.validationResults ?? confident?.validationResults)?.map(issue => <p className="mt-2 text-[10px] text-[var(--danger)]" key={issue.code}>{issue.code}: {issue.message}</p>)}
       {legalBasis && <p className="mt-3 border-t border-[var(--border)] pt-3 text-[10px] leading-4 text-[var(--text-muted)]">{legalBasis}</p>}
+      {(uncertain?.legalCitations ?? confident?.legalCitations)?.map(citation => <p className="mt-1 text-[10px] text-[var(--text-muted)]" key={`${citation.fragmentId}:${citation.citationKey}`}>{citation.verified ? 'Citare verificată' : 'Citare neverificată'} · {citation.citationKey}</p>)}
       {rule && <p className="mt-2 text-xs">{rule.productionEligible ? "Regulă verificată pentru producție" : "Regulă demo / neverificată"}{rule.effectiveFrom && ` · ${rule.effectiveFrom} — ${rule.effectiveTo ?? "fără dată finală"}`}</p>}
       {rule && <Link to={`/rules/${rule.ruleId}?version=${rule.version}&returnTo=${encodeURIComponent(`/invoices/${invoiceId}?tab=classification`)}`} className="mt-3 block rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-[10px] font-semibold text-[var(--accent)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]">Origine regulă: {rule.origin === 'GLOBAL' ? 'Regulă globală' : 'Override client'} · {rule.reference} · v{rule.version}</Link>}
       <Badge className="mt-3" tone={pending ? 'warning' : 'success'}>{pending ? 'De revizuit' : uncertain?.status === 'CORRECTED' ? 'Corectat' : (uncertain?.humanReviewed ?? confident?.humanReviewed) ? 'Confirmat de contabil' : 'Acceptat automat'}</Badge>

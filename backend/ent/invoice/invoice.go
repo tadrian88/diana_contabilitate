@@ -22,6 +22,8 @@ const (
 	FieldAccountingSnapshot = "accounting_snapshot"
 	// FieldReadinessReason holds the string denoting the readiness_reason field in the database.
 	FieldReadinessReason = "readiness_reason"
+	// FieldCurrentClassificationRunID holds the string denoting the current_classification_run_id field in the database.
+	FieldCurrentClassificationRunID = "current_classification_run_id"
 	// FieldClientID holds the string denoting the client_id field in the database.
 	FieldClientID = "client_id"
 	// FieldSupplierName holds the string denoting the supplier_name field in the database.
@@ -160,6 +162,7 @@ var Columns = []string{
 	FieldSourceFacts,
 	FieldAccountingSnapshot,
 	FieldReadinessReason,
+	FieldCurrentClassificationRunID,
 	FieldClientID,
 	FieldSupplierName,
 	FieldSupplierCui,
@@ -326,6 +329,11 @@ func ByModelVersion(opts ...sql.OrderTermOption) OrderOption {
 // ByReadinessReason orders the results by the readiness_reason field.
 func ByReadinessReason(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldReadinessReason, opts...).ToFunc()
+}
+
+// ByCurrentClassificationRunID orders the results by the current_classification_run_id field.
+func ByCurrentClassificationRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrentClassificationRunID, opts...).ToFunc()
 }
 
 // ByClientID orders the results by the client_id field.

@@ -49,10 +49,12 @@ func Derive(c Client, profiles []*accounting.Profile, packs []*accounting.Pack, 
 			if current == nil || p.Version > current.Version {
 				current = p
 			}
-			if !p.TestOnly && p.Valid(c.ID, date) {
-				applicable++
-				approved = p
-			}
+		}
+	}
+	for _, p := range accounting.ApplicableProfiles(profiles, c.ID, date) {
+		if !p.TestOnly {
+			applicable++
+			approved = p
 		}
 	}
 	if applicable == 1 {
@@ -66,6 +68,9 @@ func Derive(c Client, profiles []*accounting.Profile, packs []*accounting.Pack, 
 		r.AccountingProfile = section("INCOMPLETE", "Profil configurat; aprobarea cu dovezi este necesară.", "Salvează o versiune aprobată", "accounting-profile")
 		if !current.TestOnly && current.Valid(c.ID, date) && applicable == 1 {
 			r.AccountingProfile = section("READY", "Profil aplicabil aprobat; faptele UNKNOWN rămân necunoscute.", "Vezi versiunile profilului", "accounting-profile")
+		}
+		if len(current.ConfigurationIssues) > 0 {
+			r.AccountingProfile = section("ACTION_REQUIRED", "Profilul conține conturi inexistente, inactive sau nepostabile.", "Creează o versiune succesoare corectată", "accounting-profile")
 		}
 		if applicable > 1 {
 			r.AccountingProfile = section("ACTION_REQUIRED", "Mai multe profiluri aprobate se suprapun; clasificarea va cere revizuire.", "Revizuiește perioadele profilurilor", "accounting-profile")

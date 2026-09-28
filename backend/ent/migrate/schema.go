@@ -286,12 +286,50 @@ var (
 			},
 		},
 	}
+	// ClassificationRunsColumns holds the columns for the "classification_runs" table.
+	ClassificationRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "client_id", Type: field.TypeString},
+		{Name: "invoice_id", Type: field.TypeString},
+		{Name: "invoice_revision", Type: field.TypeUint64},
+		{Name: "snapshot", Type: field.TypeJSON},
+		{Name: "profile_id", Type: field.TypeString, Nullable: true},
+		{Name: "profile_version", Type: field.TypeInt, Nullable: true},
+		{Name: "context_fingerprint", Type: field.TypeString},
+		{Name: "policy_version", Type: field.TypeString},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"COMPLETED", "BLOCKED"}},
+		{Name: "blocker_code", Type: field.TypeString, Nullable: true},
+		{Name: "supersedes_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "command_key", Type: field.TypeString, Unique: true},
+		{Name: "actor_id", Type: field.TypeString, Nullable: true},
+		{Name: "actor_display", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// ClassificationRunsTable holds the schema information for the "classification_runs" table.
+	ClassificationRunsTable = &schema.Table{
+		Name:       "classification_runs",
+		Columns:    ClassificationRunsColumns,
+		PrimaryKey: []*schema.Column{ClassificationRunsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "classificationrun_client_id_invoice_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ClassificationRunsColumns[1], ClassificationRunsColumns[2], ClassificationRunsColumns[15]},
+			},
+			{
+				Name:    "classificationrun_id_client_id_invoice_id",
+				Unique:  true,
+				Columns: []*schema.Column{ClassificationRunsColumns[0], ClassificationRunsColumns[1], ClassificationRunsColumns[2]},
+			},
+		},
+	}
 	// ClientAccountingProfilesColumns holds the columns for the "client_accounting_profiles" table.
 	ClientAccountingProfilesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "client_id", Type: field.TypeString},
 		{Name: "version", Type: field.TypeInt},
 		{Name: "payload", Type: field.TypeJSON},
+		{Name: "supersedes_profile_id", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// ClientAccountingProfilesTable holds the schema information for the "client_accounting_profiles" table.
@@ -618,6 +656,7 @@ var (
 		{Name: "source_facts", Type: field.TypeJSON, Nullable: true},
 		{Name: "accounting_snapshot", Type: field.TypeJSON, Nullable: true},
 		{Name: "readiness_reason", Type: field.TypeString, Default: ""},
+		{Name: "current_classification_run_id", Type: field.TypeString, Nullable: true},
 		{Name: "supplier_name", Type: field.TypeString},
 		{Name: "supplier_cui", Type: field.TypeString, Nullable: true},
 		{Name: "normalized_supplier_cui", Type: field.TypeString, Nullable: true},
@@ -650,7 +689,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "invoices_clients_invoices",
-				Columns:    []*schema.Column{InvoicesColumns[27]},
+				Columns:    []*schema.Column{InvoicesColumns[28]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -659,32 +698,32 @@ var (
 			{
 				Name:    "invoice_pipeline_status",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[22]},
+				Columns: []*schema.Column{InvoicesColumns[23]},
 			},
 			{
 				Name:    "invoice_issue_date",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[10]},
+				Columns: []*schema.Column{InvoicesColumns[11]},
 			},
 			{
 				Name:    "invoice_client_id",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[27]},
+				Columns: []*schema.Column{InvoicesColumns[28]},
 			},
 			{
 				Name:    "invoice_id_client_id",
 				Unique:  true,
-				Columns: []*schema.Column{InvoicesColumns[0], InvoicesColumns[27]},
+				Columns: []*schema.Column{InvoicesColumns[0], InvoicesColumns[28]},
 			},
 			{
 				Name:    "invoice_client_id_spv_reference",
 				Unique:  true,
-				Columns: []*schema.Column{InvoicesColumns[27], InvoicesColumns[15]},
+				Columns: []*schema.Column{InvoicesColumns[28], InvoicesColumns[16]},
 			},
 			{
 				Name:    "invoice_client_id_normalized_supplier_cui_normalized_document_number_issue_day",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[27], InvoicesColumns[7], InvoicesColumns[9], InvoicesColumns[11]},
+				Columns: []*schema.Column{InvoicesColumns[28], InvoicesColumns[8], InvoicesColumns[10], InvoicesColumns[12]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "duplicate_of_invoice_id IS NULL AND normalized_supplier_cui IS NOT NULL",
 				},
@@ -692,7 +731,7 @@ var (
 			{
 				Name:    "invoice_client_id_normalized_supplier_cui_normalized_document_number_issue_day",
 				Unique:  true,
-				Columns: []*schema.Column{InvoicesColumns[27], InvoicesColumns[7], InvoicesColumns[9], InvoicesColumns[11]},
+				Columns: []*schema.Column{InvoicesColumns[28], InvoicesColumns[8], InvoicesColumns[10], InvoicesColumns[12]},
 			},
 		},
 	}
@@ -811,17 +850,22 @@ var (
 		{Name: "proposed_typed_value", Type: field.TypeJSON, Nullable: true},
 		{Name: "effective_typed_value", Type: field.TypeJSON, Nullable: true},
 		{Name: "decision_evidence", Type: field.TypeJSON, Nullable: true},
+		{Name: "legal_citations", Type: field.TypeJSON, Nullable: true},
+		{Name: "validation_results", Type: field.TypeJSON, Nullable: true},
+		{Name: "proposal_provenance", Type: field.TypeJSON, Nullable: true},
 		{Name: "review_reason", Type: field.TypeString, Default: ""},
 		{Name: "invoice_date_used", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "classification_run_id", Type: field.TypeString},
 		{Name: "dimension", Type: field.TypeEnum, Enums: []string{"ACCOUNT", "VAT", "DEDUCTIBILITY", "VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT"}},
 		{Name: "proposed_value", Type: field.TypeString},
 		{Name: "effective_value", Type: field.TypeString, Nullable: true},
+		{Name: "effective_source", Type: field.TypeString, Nullable: true},
 		{Name: "confidence_display", Type: field.TypeString},
 		{Name: "explanation", Type: field.TypeString},
 		{Name: "legal_basis", Type: field.TypeString},
 		{Name: "required_review", Type: field.TypeBool},
-		{Name: "review_status", Type: field.TypeEnum, Enums: []string{"PENDING", "ACCEPTED", "CORRECTED"}},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING"}},
+		{Name: "review_status", Type: field.TypeEnum, Enums: []string{"PENDING", "ACCEPTED", "CORRECTED", "REJECTED"}},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL"}},
 		{Name: "account_mapping_id", Type: field.TypeString, Nullable: true},
 		{Name: "account_mapping_version", Type: field.TypeInt, Nullable: true},
 		{Name: "policy_version", Type: field.TypeString},
@@ -844,39 +888,39 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "line_classifications_clients_line_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[25]},
+				Columns:    []*schema.Column{LineClassificationsColumns[30]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "line_classifications_invoices_line_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[26]},
+				Columns:    []*schema.Column{LineClassificationsColumns[31]},
 				RefColumns: []*schema.Column{InvoicesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "line_classifications_invoice_lines_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[27]},
+				Columns:    []*schema.Column{LineClassificationsColumns[32]},
 				RefColumns: []*schema.Column{InvoiceLinesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "line_classifications_rule_versions_line_classifications",
-				Columns:    []*schema.Column{LineClassificationsColumns[28]},
+				Columns:    []*schema.Column{LineClassificationsColumns[33]},
 				RefColumns: []*schema.Column{RuleVersionsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "lineclassification_invoice_line_id_dimension_model_version",
+				Name:    "lineclassification_classification_run_id_invoice_line_id_dimension_model_version",
 				Unique:  true,
-				Columns: []*schema.Column{LineClassificationsColumns[27], LineClassificationsColumns[7], LineClassificationsColumns[1]},
+				Columns: []*schema.Column{LineClassificationsColumns[10], LineClassificationsColumns[32], LineClassificationsColumns[11], LineClassificationsColumns[1]},
 			},
 			{
 				Name:    "lineclassification_invoice_id_review_status",
 				Unique:  false,
-				Columns: []*schema.Column{LineClassificationsColumns[26], LineClassificationsColumns[14]},
+				Columns: []*schema.Column{LineClassificationsColumns[31], LineClassificationsColumns[19]},
 			},
 		},
 	}
@@ -1205,6 +1249,7 @@ var (
 	// ValidationTasksColumns holds the columns for the "validation_tasks" table.
 	ValidationTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
+		{Name: "classification_run_id", Type: field.TypeString, Nullable: true},
 		{Name: "task_type", Type: field.TypeEnum, Enums: []string{"CONTRACT_MATCH", "MISSING_CONTRACT", "COMMERCIAL_REVIEW", "CLASSIFICATION"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"OPEN", "WAITING", "RESOLVED"}, Default: "OPEN"},
 		{Name: "title", Type: field.TypeString},
@@ -1232,19 +1277,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "validation_tasks_clients_validation_tasks",
-				Columns:    []*schema.Column{ValidationTasksColumns[16]},
+				Columns:    []*schema.Column{ValidationTasksColumns[17]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "validation_tasks_contract_match_runs_validation_tasks",
-				Columns:    []*schema.Column{ValidationTasksColumns[17]},
+				Columns:    []*schema.Column{ValidationTasksColumns[18]},
 				RefColumns: []*schema.Column{ContractMatchRunsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "validation_tasks_invoices_validation_tasks",
-				Columns:    []*schema.Column{ValidationTasksColumns[18]},
+				Columns:    []*schema.Column{ValidationTasksColumns[19]},
 				RefColumns: []*schema.Column{InvoicesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1253,22 +1298,22 @@ var (
 			{
 				Name:    "validationtask_client_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ValidationTasksColumns[16], ValidationTasksColumns[2], ValidationTasksColumns[12]},
+				Columns: []*schema.Column{ValidationTasksColumns[17], ValidationTasksColumns[3], ValidationTasksColumns[13]},
 			},
 			{
 				Name:    "validationtask_invoice_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ValidationTasksColumns[18], ValidationTasksColumns[12]},
+				Columns: []*schema.Column{ValidationTasksColumns[19], ValidationTasksColumns[13]},
 			},
 			{
 				Name:    "validationtask_task_type_status",
 				Unique:  false,
-				Columns: []*schema.Column{ValidationTasksColumns[1], ValidationTasksColumns[2]},
+				Columns: []*schema.Column{ValidationTasksColumns[2], ValidationTasksColumns[3]},
 			},
 			{
 				Name:    "validationtask_invoice_id",
 				Unique:  true,
-				Columns: []*schema.Column{ValidationTasksColumns[18]},
+				Columns: []*schema.Column{ValidationTasksColumns[19]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "status <> 'RESOLVED'",
 				},
@@ -1276,9 +1321,17 @@ var (
 			{
 				Name:    "validationtask_contract_match_run_id",
 				Unique:  true,
-				Columns: []*schema.Column{ValidationTasksColumns[17]},
+				Columns: []*schema.Column{ValidationTasksColumns[18]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "contract_match_run_id IS NOT NULL",
+				},
+			},
+			{
+				Name:    "validationtask_classification_run_id",
+				Unique:  true,
+				Columns: []*schema.Column{ValidationTasksColumns[1]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "classification_run_id IS NOT NULL AND task_type = 'CLASSIFICATION'",
 				},
 			},
 		},
@@ -1292,6 +1345,7 @@ var (
 		AccountingRulePacksTable,
 		ActivityEventsTable,
 		ClassificationRulesTable,
+		ClassificationRunsTable,
 		ClientAccountingProfilesTable,
 		ContractsTable,
 		ContractExtractionAttemptsTable,

@@ -22,6 +22,12 @@ const (
 	FieldEffectiveTypedValue = "effective_typed_value"
 	// FieldDecisionEvidence holds the string denoting the decision_evidence field in the database.
 	FieldDecisionEvidence = "decision_evidence"
+	// FieldLegalCitations holds the string denoting the legal_citations field in the database.
+	FieldLegalCitations = "legal_citations"
+	// FieldValidationResults holds the string denoting the validation_results field in the database.
+	FieldValidationResults = "validation_results"
+	// FieldProposalProvenance holds the string denoting the proposal_provenance field in the database.
+	FieldProposalProvenance = "proposal_provenance"
 	// FieldReviewReason holds the string denoting the review_reason field in the database.
 	FieldReviewReason = "review_reason"
 	// FieldInvoiceDateUsed holds the string denoting the invoice_date_used field in the database.
@@ -32,12 +38,16 @@ const (
 	FieldInvoiceID = "invoice_id"
 	// FieldInvoiceLineID holds the string denoting the invoice_line_id field in the database.
 	FieldInvoiceLineID = "invoice_line_id"
+	// FieldClassificationRunID holds the string denoting the classification_run_id field in the database.
+	FieldClassificationRunID = "classification_run_id"
 	// FieldDimension holds the string denoting the dimension field in the database.
 	FieldDimension = "dimension"
 	// FieldProposedValue holds the string denoting the proposed_value field in the database.
 	FieldProposedValue = "proposed_value"
 	// FieldEffectiveValue holds the string denoting the effective_value field in the database.
 	FieldEffectiveValue = "effective_value"
+	// FieldEffectiveSource holds the string denoting the effective_source field in the database.
+	FieldEffectiveSource = "effective_source"
 	// FieldConfidenceDisplay holds the string denoting the confidence_display field in the database.
 	FieldConfidenceDisplay = "confidence_display"
 	// FieldExplanation holds the string denoting the explanation field in the database.
@@ -117,14 +127,19 @@ var Columns = []string{
 	FieldProposedTypedValue,
 	FieldEffectiveTypedValue,
 	FieldDecisionEvidence,
+	FieldLegalCitations,
+	FieldValidationResults,
+	FieldProposalProvenance,
 	FieldReviewReason,
 	FieldInvoiceDateUsed,
 	FieldClientID,
 	FieldInvoiceID,
 	FieldInvoiceLineID,
+	FieldClassificationRunID,
 	FieldDimension,
 	FieldProposedValue,
 	FieldEffectiveValue,
+	FieldEffectiveSource,
 	FieldConfidenceDisplay,
 	FieldExplanation,
 	FieldLegalBasis,
@@ -209,6 +224,7 @@ const (
 	ReviewStatusPENDING   ReviewStatus = "PENDING"
 	ReviewStatusACCEPTED  ReviewStatus = "ACCEPTED"
 	ReviewStatusCORRECTED ReviewStatus = "CORRECTED"
+	ReviewStatusREJECTED  ReviewStatus = "REJECTED"
 )
 
 func (rs ReviewStatus) String() string {
@@ -218,7 +234,7 @@ func (rs ReviewStatus) String() string {
 // ReviewStatusValidator is a validator for the "review_status" field enum values. It is called by the builders before save.
 func ReviewStatusValidator(rs ReviewStatus) error {
 	switch rs {
-	case ReviewStatusPENDING, ReviewStatusACCEPTED, ReviewStatusCORRECTED:
+	case ReviewStatusPENDING, ReviewStatusACCEPTED, ReviewStatusCORRECTED, ReviewStatusREJECTED:
 		return nil
 	default:
 		return fmt.Errorf("lineclassification: invalid enum value for review_status field: %q", rs)
@@ -234,6 +250,7 @@ const (
 	SourceNO_MATCH        Source = "NO_MATCH"
 	SourceAMBIGUOUS       Source = "AMBIGUOUS"
 	SourceLEARNED_MAPPING Source = "LEARNED_MAPPING"
+	SourceAI_PROPOSAL     Source = "AI_PROPOSAL"
 )
 
 func (s Source) String() string {
@@ -243,7 +260,7 @@ func (s Source) String() string {
 // SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
 func SourceValidator(s Source) error {
 	switch s {
-	case SourceRULE, SourceNO_MATCH, SourceAMBIGUOUS, SourceLEARNED_MAPPING:
+	case SourceRULE, SourceNO_MATCH, SourceAMBIGUOUS, SourceLEARNED_MAPPING, SourceAI_PROPOSAL:
 		return nil
 	default:
 		return fmt.Errorf("lineclassification: invalid enum value for source field: %q", s)
@@ -288,6 +305,11 @@ func ByInvoiceLineID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInvoiceLineID, opts...).ToFunc()
 }
 
+// ByClassificationRunID orders the results by the classification_run_id field.
+func ByClassificationRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClassificationRunID, opts...).ToFunc()
+}
+
 // ByDimension orders the results by the dimension field.
 func ByDimension(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDimension, opts...).ToFunc()
@@ -301,6 +323,11 @@ func ByProposedValue(opts ...sql.OrderTermOption) OrderOption {
 // ByEffectiveValue orders the results by the effective_value field.
 func ByEffectiveValue(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEffectiveValue, opts...).ToFunc()
+}
+
+// ByEffectiveSource orders the results by the effective_source field.
+func ByEffectiveSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEffectiveSource, opts...).ToFunc()
 }
 
 // ByConfidenceDisplay orders the results by the confidence_display field.

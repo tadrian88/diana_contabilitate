@@ -49,6 +49,21 @@ func TestDomainClientProfileDatesAndUnknown(t *testing.T) {
 		t.Fatal("synthetic production activation")
 	}
 }
+
+func TestProfileSuccessionKeepsHistoricalVersionButSelectsSuccessor(t *testing.T) {
+	_, _, original, _ := accountingtest.Fixture("A")
+	successor := *original
+	successor.ID = "profile-successor"
+	successor.Version = original.Version + 1
+	successor.SupersedesProfileID = original.ID
+	selected := accounting.ApplicableProfiles([]*accounting.Profile{original, &successor}, "A", "2026-09-15")
+	if len(selected) != 1 || selected[0].ID != successor.ID {
+		t.Fatalf("selected=%#v", selected)
+	}
+	if original.ID == successor.ID || original.SupersedesProfileID != "" {
+		t.Fatal("historical profile was mutated")
+	}
+}
 func TestDomainSourceReconciliation(t *testing.T) {
 	f, l, _, _ := accountingtest.Fixture("A")
 	lines := []accounting.SourceLine{{Facts: l, Net: money.MustParse("100"), VAT: money.MustParse("21"), Total: money.MustParse("121"), Rate: money.MustParse("21")}}
@@ -79,5 +94,26 @@ func TestDomainAccountVocabularyCannotBeInferred(t *testing.T) {
 	pack.Rules[0].Result.Account = "628.UNAPPROVED"
 	if pack.Valid(p, "A", "2026-09-15", true) {
 		t.Fatal("rule outside approved vocabulary")
+	}
+}
+
+func TestAccountingClassificationResolutionSeparatesAIReviewFromFinal(t *testing.T) {
+	account := &accounting.Value{Kind: "ACCOUNT", Account: "626"}
+	if got := accounting.ResolveClassification("ACCOUNT", nil, nil, "NO_MATCH", "PENDING"); got != accounting.ResolutionNeedsAI {
+		t.Fatalf("got %s", got)
+	}
+	if got := accounting.ResolveClassification("ACCOUNT", nil, account, "AI_PROPOSAL", "PENDING"); got != accounting.ResolutionNeedsReview {
+		t.Fatalf("got %s", got)
+	}
+	if got := accounting.ResolveClassification("ACCOUNT", account, account, "AI_PROPOSAL", "ACCEPTED"); got != accounting.ResolutionFinal {
+		t.Fatalf("got %s", got)
+	}
+	items := []accounting.ClassificationResolutionItem{{Dimension: "ACCOUNT", Effective: account, Proposed: account, Source: "AI_PROPOSAL", ReviewStatus: "ACCEPTED"}}
+	if !accounting.IsAccountingClassificationComplete(items, 1) {
+		t.Fatal("accepted typed decision must be complete")
+	}
+	items[0].Effective = nil
+	if accounting.IsAccountingClassificationComplete(items, 1) {
+		t.Fatal("pending AI proposal must not be complete")
 	}
 }

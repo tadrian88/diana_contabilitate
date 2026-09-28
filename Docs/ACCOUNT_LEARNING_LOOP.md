@@ -28,9 +28,8 @@ All exact identities are checked for contradictions. Conflicting mappings, or a 
 
 ## Review semantics
 
-- The safe UI default is `OCCURRENCE_ONLY`; reusable learning is never preselected.
-- Before a reusable action is confirmed, the backend-provided preview shows the client, stable supplier display, exact identity kind/value, and normalizer version.
-- `CREATE` creates the reusable mapping and immutable version atomically with the current classification review.
+- A new account decision is saved as `OCCURRENCE_ONLY`; the classification review does not create a mapping.
+- After the decision is final, the separate „Folosește pentru situații similare” action shows a backend-provided preview with the client, supplier, exact identity kind/value, and normalizer version. Confirmation promotes the account decision.
 - `VALIDATE` records the unchanged learned proposal as `ACCEPTED` for the current occurrence and leaves the mapping version unchanged.
 - `OCCURRENCE_ONLY` applies a changed account only to the current occurrence.
 - `CORRECT` appends an immutable `CORRECTION` version using mapping revision CAS.
@@ -40,7 +39,7 @@ Every reused mapping remains a pending proposal. It is never auto-accepted merel
 
 At every new classification, the referenced account is checked against the active, postable catalogue loaded in the same PostgreSQL read snapshot as the mapping. If that account has since become inactive or non-postable, the historical mapping and all immutable versions remain intact, but the mapping cannot produce a `LEARNED_MAPPING` proposal; the occurrence remains on the existing unresolved/review path.
 
-Mapping suggestions, conflicts, creation, validation, occurrence-only exceptions, corrections, and policy changes emit dedicated activity/audit events in the same transaction as the classification operation.
+Mapping suggestions, conflicts, creation, validation, occurrence-only exceptions, corrections, and policy changes emit dedicated activity/audit events in the transaction that records each action.
 
 ## Acceptance boundary
 

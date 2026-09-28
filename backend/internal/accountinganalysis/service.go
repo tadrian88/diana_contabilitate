@@ -28,25 +28,25 @@ func NewService(corpus legislation.Store, analyzer Analyzer, accounts AccountCat
 // Analyze performs bounded retrieval and a single structured provider call.
 // Persistence/retry/idempotency belong to the workflow adapter, while this
 // boundary remains deterministic and straightforward to evaluate.
-func (s *Service) Analyze(ctx context.Context, input Input, approved []ApprovedKnowledge) (ProviderResult, []ValidationIssue, error) {
+func (s *Service) Analyze(ctx context.Context, input Input, approved []ApprovedKnowledge) (ProviderResult, []ValidatedDecision, []ValidationIssue, error) {
 	if s.legislation == nil || s.analyzer == nil || s.accounts == nil || input.ClientID == "" || input.InvoiceID == "" || input.InvoiceRevision == 0 || !input.IssueDate.Valid() || input.Profile == nil || !input.Profile.Valid(input.ClientID, input.IssueDate) || len(input.Lines) == 0 {
-		return ProviderResult{}, nil, fmt.Errorf("invalid accounting analysis input")
+		return ProviderResult{}, nil, nil, &ProviderError{Code: "INVALID_ANALYSIS_INPUT", Err: fmt.Errorf("invalid accounting analysis input")}
 	}
 	for _, knowledge := range approved {
 		if knowledge.ClientID != input.ClientID {
-			return ProviderResult{}, nil, fmt.Errorf("tenant-isolation violation in approved knowledge")
+			return ProviderResult{}, nil, nil, &ProviderError{Code: "TENANT_ISOLATION_VIOLATION", Err: fmt.Errorf("tenant-isolation violation in approved knowledge")}
 		}
 	}
 	fragments, err := s.legislation.Retrieve(ctx, legislation.Query{Terms: retrievalTerms(input), ApplicableDate: input.IssueDate, Limit: 12})
 	if err != nil {
-		return ProviderResult{}, nil, err
+		return ProviderResult{}, nil, nil, err
 	}
 	started := time.Now()
 	result, err := s.analyzer.Analyze(ctx, AnalysisRequest{Input: input, Fragments: fragments, ApprovedKnowledge: approved})
 	if err != nil {
-		return ProviderResult{}, nil, err
+		return ProviderResult{}, nil, nil, err
 	}
-	issues := Validate(input, result.Proposal, fragments, s.accounts)
+	decisions, issues := ValidateUnified(input, result.Proposal, fragments, s.accounts)
 	if s.observer != nil {
 		var in, out int64
 		if result.InputTokens != nil {
@@ -57,7 +57,7 @@ func (s *Service) Analyze(ctx context.Context, input Input, approved []ApprovedK
 		}
 		s.observer.AccountingAnalysisCompleted(time.Since(started), in, out, len(issues))
 	}
-	return result, issues, nil
+	return result, decisions, issues, nil
 }
 
 func retrievalTerms(input Input) []string {

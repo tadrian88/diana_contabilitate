@@ -40,12 +40,19 @@ func TestRealSAGAArtifactPersistenceIsIdempotentUnderConcurrency(t *testing.T) {
 		SetNetValue("100.0000").SetVatRate("19.0000").SetVatValue("19.0000").SetTotalValue("119.0000").Save(ctx); err != nil {
 		t.Fatal(err)
 	}
+	runID := invoiceID + "-classification-run"
+	if _, err = store.DB.ExecContext(ctx, `INSERT INTO classification_runs(id,client_id,invoice_id,invoice_revision,snapshot,context_fingerprint,policy_version,status,command_key,actor_display,created_at) VALUES($1,$2,$3,3,'{}','integration','SAGA_TEST_POLICY_V1','COMPLETED',$4,'Integration test',$5)`, runID, clientID, invoiceID, "integration:"+runID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.DB.ExecContext(ctx, `UPDATE invoices SET current_classification_run_id=$2 WHERE id=$1`, invoiceID, runID); err != nil {
+		t.Fatal(err)
+	}
 	for index, item := range []struct {
 		dimension lineclassification.Dimension
 		value     string
 	}{{lineclassification.DimensionACCOUNT, "628.01"}, {lineclassification.DimensionVAT, "19"}, {lineclassification.DimensionDEDUCTIBILITY, "SAGA_DEFAULT"}} {
 		if _, err = store.Client.LineClassification.Create().SetID(fmt.Sprintf("%s-classification-%d", invoiceID, index)).
-			SetClientID(clientID).SetInvoiceID(invoiceID).SetInvoiceLineID(lineID).SetDimension(item.dimension).
+			SetClientID(clientID).SetInvoiceID(invoiceID).SetInvoiceLineID(lineID).SetClassificationRunID(runID).SetDimension(item.dimension).
 			SetProposedValue(item.value).SetEffectiveValue(item.value).SetConfidenceDisplay("explicit test value").
 			SetExplanation("synthetic SAGA integration fixture").SetLegalBasis("synthetic test only").
 			SetReviewedAt(now).SetReviewedByDisplay("Fixture accountant").SetRequiredReview(true).SetReviewStatus(lineclassification.ReviewStatusACCEPTED).

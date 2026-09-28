@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"bytes"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/clients"
 	"diana-contabilitate/backend/internal/platform/requestactor"
@@ -42,6 +43,10 @@ func (s *Server) operationalClient(w http.ResponseWriter, r *http.Request, id st
 	return true
 }
 func (s *Server) clientError(w http.ResponseWriter, r *http.Request, err error) {
+	if issue, ok := accounts.AsValidationIssue(err); ok {
+		writeErrorDetails(w, r, http.StatusBadRequest, string(issue.Code), issue.Message, issue)
+		return
+	}
 	switch {
 	case errors.Is(err, apperrors.ErrNotFound):
 		writeError(w, r, 404, "NOT_FOUND", "Clientul nu a fost găsit.")
@@ -102,7 +107,7 @@ func (s *Server) clientCommand(w http.ResponseWriter, r *http.Request, kind stri
 		writeError(w, r, 400, "VALIDATION_ERROR", "Comandă invalidă.")
 		return
 	}
-	fields := map[string][]string{"create": {"company"}, "update": {"company", "expectedRevision"}, "lifecycle": {"status", "expectedRevision"}, "profile": {"profile", "approve", "evidence", "expectedProfileVersion", "expectedRevision"}, "saga": {"sagaEnabled", "expectedRevision"}}
+	fields := map[string][]string{"create": {"company"}, "update": {"company", "expectedRevision"}, "lifecycle": {"status", "expectedRevision"}, "profile": {"profile", "approve", "evidence", "expectedProfileVersion", "expectedRevision", "supersedesProfileId"}, "saga": {"sagaEnabled", "expectedRevision"}}
 	allowed := map[string]bool{}
 	for _, f := range fields[kind] {
 		allowed[f] = true

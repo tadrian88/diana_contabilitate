@@ -10,6 +10,7 @@ import (
 	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
+	"diana-contabilitate/backend/ent/classificationrun"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractextractionattempt"
@@ -228,6 +229,28 @@ func init() {
 	classificationrule.DefaultRevision = classificationruleDescRevision.Default.(uint64)
 	// classificationrule.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
 	classificationrule.RevisionValidator = classificationruleDescRevision.Validators[0].(func(uint64) error)
+	classificationrunFields := schema.ClassificationRun{}.Fields()
+	_ = classificationrunFields
+	// classificationrunDescInvoiceRevision is the schema descriptor for invoice_revision field.
+	classificationrunDescInvoiceRevision := classificationrunFields[3].Descriptor()
+	// classificationrun.InvoiceRevisionValidator is a validator for the "invoice_revision" field. It is called by the builders before save.
+	classificationrun.InvoiceRevisionValidator = classificationrunDescInvoiceRevision.Validators[0].(func(uint64) error)
+	// classificationrunDescContextFingerprint is the schema descriptor for context_fingerprint field.
+	classificationrunDescContextFingerprint := classificationrunFields[7].Descriptor()
+	// classificationrun.ContextFingerprintValidator is a validator for the "context_fingerprint" field. It is called by the builders before save.
+	classificationrun.ContextFingerprintValidator = classificationrunDescContextFingerprint.Validators[0].(func(string) error)
+	// classificationrunDescPolicyVersion is the schema descriptor for policy_version field.
+	classificationrunDescPolicyVersion := classificationrunFields[8].Descriptor()
+	// classificationrun.PolicyVersionValidator is a validator for the "policy_version" field. It is called by the builders before save.
+	classificationrun.PolicyVersionValidator = classificationrunDescPolicyVersion.Validators[0].(func(string) error)
+	// classificationrunDescCommandKey is the schema descriptor for command_key field.
+	classificationrunDescCommandKey := classificationrunFields[12].Descriptor()
+	// classificationrun.CommandKeyValidator is a validator for the "command_key" field. It is called by the builders before save.
+	classificationrun.CommandKeyValidator = classificationrunDescCommandKey.Validators[0].(func(string) error)
+	// classificationrunDescActorDisplay is the schema descriptor for actor_display field.
+	classificationrunDescActorDisplay := classificationrunFields[14].Descriptor()
+	// classificationrun.ActorDisplayValidator is a validator for the "actor_display" field. It is called by the builders before save.
+	classificationrun.ActorDisplayValidator = classificationrunDescActorDisplay.Validators[0].(func(string) error)
 	clientaccountingprofileFields := schema.ClientAccountingProfile{}.Fields()
 	_ = clientaccountingprofileFields
 	// clientaccountingprofileDescVersion is the schema descriptor for version field.
@@ -397,19 +420,19 @@ func init() {
 	// invoice.DefaultReadinessReason holds the default value on creation for the readiness_reason field.
 	invoice.DefaultReadinessReason = invoiceDescReadinessReason.Default.(string)
 	// invoiceDescSupplierName is the schema descriptor for supplier_name field.
-	invoiceDescSupplierName := invoiceFields[6].Descriptor()
+	invoiceDescSupplierName := invoiceFields[7].Descriptor()
 	// invoice.SupplierNameValidator is a validator for the "supplier_name" field. It is called by the builders before save.
 	invoice.SupplierNameValidator = invoiceDescSupplierName.Validators[0].(func(string) error)
 	// invoiceDescDocumentNumber is the schema descriptor for document_number field.
-	invoiceDescDocumentNumber := invoiceFields[9].Descriptor()
+	invoiceDescDocumentNumber := invoiceFields[10].Descriptor()
 	// invoice.DocumentNumberValidator is a validator for the "document_number" field. It is called by the builders before save.
 	invoice.DocumentNumberValidator = invoiceDescDocumentNumber.Validators[0].(func(string) error)
 	// invoiceDescNormalizedDocumentNumber is the schema descriptor for normalized_document_number field.
-	invoiceDescNormalizedDocumentNumber := invoiceFields[10].Descriptor()
+	invoiceDescNormalizedDocumentNumber := invoiceFields[11].Descriptor()
 	// invoice.NormalizedDocumentNumberValidator is a validator for the "normalized_document_number" field. It is called by the builders before save.
 	invoice.NormalizedDocumentNumberValidator = invoiceDescNormalizedDocumentNumber.Validators[0].(func(string) error)
 	// invoiceDescCurrency is the schema descriptor for currency field.
-	invoiceDescCurrency := invoiceFields[15].Descriptor()
+	invoiceDescCurrency := invoiceFields[16].Descriptor()
 	// invoice.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	invoice.CurrencyValidator = func() func(string) error {
 		validators := invoiceDescCurrency.Validators
@@ -427,19 +450,19 @@ func init() {
 		}
 	}()
 	// invoiceDescSpvReference is the schema descriptor for spv_reference field.
-	invoiceDescSpvReference := invoiceFields[16].Descriptor()
+	invoiceDescSpvReference := invoiceFields[17].Descriptor()
 	// invoice.SpvReferenceValidator is a validator for the "spv_reference" field. It is called by the builders before save.
 	invoice.SpvReferenceValidator = invoiceDescSpvReference.Validators[0].(func(string) error)
 	// invoiceDescIngestionSource is the schema descriptor for ingestion_source field.
-	invoiceDescIngestionSource := invoiceFields[17].Descriptor()
+	invoiceDescIngestionSource := invoiceFields[18].Descriptor()
 	// invoice.IngestionSourceValidator is a validator for the "ingestion_source" field. It is called by the builders before save.
 	invoice.IngestionSourceValidator = invoiceDescIngestionSource.Validators[0].(func(string) error)
 	// invoiceDescExternalDeliveryID is the schema descriptor for external_delivery_id field.
-	invoiceDescExternalDeliveryID := invoiceFields[18].Descriptor()
+	invoiceDescExternalDeliveryID := invoiceFields[19].Descriptor()
 	// invoice.ExternalDeliveryIDValidator is a validator for the "external_delivery_id" field. It is called by the builders before save.
 	invoice.ExternalDeliveryIDValidator = invoiceDescExternalDeliveryID.Validators[0].(func(string) error)
 	// invoiceDescRevision is the schema descriptor for revision field.
-	invoiceDescRevision := invoiceFields[25].Descriptor()
+	invoiceDescRevision := invoiceFields[26].Descriptor()
 	// invoice.DefaultRevision holds the default value on creation for the revision field.
 	invoice.DefaultRevision = invoiceDescRevision.Default.(uint64)
 	// invoice.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
@@ -505,31 +528,31 @@ func init() {
 	// lineclassification.DefaultModelVersion holds the default value on creation for the model_version field.
 	lineclassification.DefaultModelVersion = lineclassificationDescModelVersion.Default.(string)
 	// lineclassificationDescReviewReason is the schema descriptor for review_reason field.
-	lineclassificationDescReviewReason := lineclassificationFields[4].Descriptor()
+	lineclassificationDescReviewReason := lineclassificationFields[7].Descriptor()
 	// lineclassification.DefaultReviewReason holds the default value on creation for the review_reason field.
 	lineclassification.DefaultReviewReason = lineclassificationDescReviewReason.Default.(string)
 	// lineclassificationDescProposedValue is the schema descriptor for proposed_value field.
-	lineclassificationDescProposedValue := lineclassificationFields[11].Descriptor()
+	lineclassificationDescProposedValue := lineclassificationFields[15].Descriptor()
 	// lineclassification.ProposedValueValidator is a validator for the "proposed_value" field. It is called by the builders before save.
 	lineclassification.ProposedValueValidator = lineclassificationDescProposedValue.Validators[0].(func(string) error)
 	// lineclassificationDescConfidenceDisplay is the schema descriptor for confidence_display field.
-	lineclassificationDescConfidenceDisplay := lineclassificationFields[13].Descriptor()
+	lineclassificationDescConfidenceDisplay := lineclassificationFields[18].Descriptor()
 	// lineclassification.ConfidenceDisplayValidator is a validator for the "confidence_display" field. It is called by the builders before save.
 	lineclassification.ConfidenceDisplayValidator = lineclassificationDescConfidenceDisplay.Validators[0].(func(string) error)
 	// lineclassificationDescExplanation is the schema descriptor for explanation field.
-	lineclassificationDescExplanation := lineclassificationFields[14].Descriptor()
+	lineclassificationDescExplanation := lineclassificationFields[19].Descriptor()
 	// lineclassification.ExplanationValidator is a validator for the "explanation" field. It is called by the builders before save.
 	lineclassification.ExplanationValidator = lineclassificationDescExplanation.Validators[0].(func(string) error)
 	// lineclassificationDescLegalBasis is the schema descriptor for legal_basis field.
-	lineclassificationDescLegalBasis := lineclassificationFields[15].Descriptor()
+	lineclassificationDescLegalBasis := lineclassificationFields[20].Descriptor()
 	// lineclassification.LegalBasisValidator is a validator for the "legal_basis" field. It is called by the builders before save.
 	lineclassification.LegalBasisValidator = lineclassificationDescLegalBasis.Validators[0].(func(string) error)
 	// lineclassificationDescPolicyVersion is the schema descriptor for policy_version field.
-	lineclassificationDescPolicyVersion := lineclassificationFields[22].Descriptor()
+	lineclassificationDescPolicyVersion := lineclassificationFields[27].Descriptor()
 	// lineclassification.PolicyVersionValidator is a validator for the "policy_version" field. It is called by the builders before save.
 	lineclassification.PolicyVersionValidator = lineclassificationDescPolicyVersion.Validators[0].(func(string) error)
 	// lineclassificationDescRevision is the schema descriptor for revision field.
-	lineclassificationDescRevision := lineclassificationFields[26].Descriptor()
+	lineclassificationDescRevision := lineclassificationFields[31].Descriptor()
 	// lineclassification.DefaultRevision holds the default value on creation for the revision field.
 	lineclassification.DefaultRevision = lineclassificationDescRevision.Default.(uint64)
 	// lineclassification.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
@@ -633,19 +656,19 @@ func init() {
 	validationtaskFields := schema.ValidationTask{}.Fields()
 	_ = validationtaskFields
 	// validationtaskDescTitle is the schema descriptor for title field.
-	validationtaskDescTitle := validationtaskFields[6].Descriptor()
+	validationtaskDescTitle := validationtaskFields[7].Descriptor()
 	// validationtask.TitleValidator is a validator for the "title" field. It is called by the builders before save.
 	validationtask.TitleValidator = validationtaskDescTitle.Validators[0].(func(string) error)
 	// validationtaskDescReason is the schema descriptor for reason field.
-	validationtaskDescReason := validationtaskFields[7].Descriptor()
+	validationtaskDescReason := validationtaskFields[8].Descriptor()
 	// validationtask.ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
 	validationtask.ReasonValidator = validationtaskDescReason.Validators[0].(func(string) error)
 	// validationtaskDescCreationKey is the schema descriptor for creation_key field.
-	validationtaskDescCreationKey := validationtaskFields[13].Descriptor()
+	validationtaskDescCreationKey := validationtaskFields[14].Descriptor()
 	// validationtask.CreationKeyValidator is a validator for the "creation_key" field. It is called by the builders before save.
 	validationtask.CreationKeyValidator = validationtaskDescCreationKey.Validators[0].(func(string) error)
 	// validationtaskDescRevision is the schema descriptor for revision field.
-	validationtaskDescRevision := validationtaskFields[14].Descriptor()
+	validationtaskDescRevision := validationtaskFields[15].Descriptor()
 	// validationtask.DefaultRevision holds the default value on creation for the revision field.
 	validationtask.DefaultRevision = validationtaskDescRevision.Default.(uint64)
 	// validationtask.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.

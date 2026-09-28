@@ -64,6 +64,26 @@ func (_u *InvoiceUpdate) SetNillableReadinessReason(v *string) *InvoiceUpdate {
 	return _u
 }
 
+// SetCurrentClassificationRunID sets the "current_classification_run_id" field.
+func (_u *InvoiceUpdate) SetCurrentClassificationRunID(v string) *InvoiceUpdate {
+	_u.mutation.SetCurrentClassificationRunID(v)
+	return _u
+}
+
+// SetNillableCurrentClassificationRunID sets the "current_classification_run_id" field if the given value is not nil.
+func (_u *InvoiceUpdate) SetNillableCurrentClassificationRunID(v *string) *InvoiceUpdate {
+	if v != nil {
+		_u.SetCurrentClassificationRunID(*v)
+	}
+	return _u
+}
+
+// ClearCurrentClassificationRunID clears the value of the "current_classification_run_id" field.
+func (_u *InvoiceUpdate) ClearCurrentClassificationRunID() *InvoiceUpdate {
+	_u.mutation.ClearCurrentClassificationRunID()
+	return _u
+}
+
 // SetClientID sets the "client_id" field.
 func (_u *InvoiceUpdate) SetClientID(v string) *InvoiceUpdate {
 	_u.mutation.SetClientID(v)
@@ -732,6 +752,12 @@ func (_u *InvoiceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.ReadinessReason(); ok {
 		_spec.SetField(invoice.FieldReadinessReason, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.CurrentClassificationRunID(); ok {
+		_spec.SetField(invoice.FieldCurrentClassificationRunID, field.TypeString, value)
+	}
+	if _u.mutation.CurrentClassificationRunIDCleared() {
+		_spec.ClearField(invoice.FieldCurrentClassificationRunID, field.TypeString)
+	}
 	if value, ok := _u.mutation.SupplierName(); ok {
 		_spec.SetField(invoice.FieldSupplierName, field.TypeString, value)
 	}
@@ -1204,6 +1230,26 @@ func (_u *InvoiceUpdateOne) SetNillableReadinessReason(v *string) *InvoiceUpdate
 	if v != nil {
 		_u.SetReadinessReason(*v)
 	}
+	return _u
+}
+
+// SetCurrentClassificationRunID sets the "current_classification_run_id" field.
+func (_u *InvoiceUpdateOne) SetCurrentClassificationRunID(v string) *InvoiceUpdateOne {
+	_u.mutation.SetCurrentClassificationRunID(v)
+	return _u
+}
+
+// SetNillableCurrentClassificationRunID sets the "current_classification_run_id" field if the given value is not nil.
+func (_u *InvoiceUpdateOne) SetNillableCurrentClassificationRunID(v *string) *InvoiceUpdateOne {
+	if v != nil {
+		_u.SetCurrentClassificationRunID(*v)
+	}
+	return _u
+}
+
+// ClearCurrentClassificationRunID clears the value of the "current_classification_run_id" field.
+func (_u *InvoiceUpdateOne) ClearCurrentClassificationRunID() *InvoiceUpdateOne {
+	_u.mutation.ClearCurrentClassificationRunID()
 	return _u
 }
 
@@ -1904,6 +1950,12 @@ func (_u *InvoiceUpdateOne) sqlSave(ctx context.Context) (_node *Invoice, err er
 	}
 	if value, ok := _u.mutation.ReadinessReason(); ok {
 		_spec.SetField(invoice.FieldReadinessReason, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CurrentClassificationRunID(); ok {
+		_spec.SetField(invoice.FieldCurrentClassificationRunID, field.TypeString, value)
+	}
+	if _u.mutation.CurrentClassificationRunIDCleared() {
+		_spec.ClearField(invoice.FieldCurrentClassificationRunID, field.TypeString)
 	}
 	if value, ok := _u.mutation.SupplierName(); ok {
 		_spec.SetField(invoice.FieldSupplierName, field.TypeString, value)

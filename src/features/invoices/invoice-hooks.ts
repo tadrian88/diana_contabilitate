@@ -64,6 +64,11 @@ export function useInvoice(id: string) {
   })
 }
 
+export function useReanalyzeClassification(invoice:Invoice){
+ const repository=useInvoiceRepository();const queryClient=useQueryClient()
+ return useMutation({mutationFn:()=>{if(!invoice.revision)throw new Error('Revizia facturii lipsește.');return repository.reanalyzeClassification(invoice.clientId,invoice.id,invoice.revision)},onSuccess:updated=>{queryClient.setQueryData(queryKeys.invoices.detail(invoice.id),updated);void queryClient.invalidateQueries({queryKey:queryKeys.invoices.root})}})
+}
+
 export function useCommercialValidation(invoice: Invoice | undefined) {
   const repository = useInvoiceRepository()
   return useQuery({

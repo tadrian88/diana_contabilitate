@@ -15,7 +15,7 @@ const navItems = [
   { label: 'Task-uri', icon: ClipboardCheck, to: '/tasks', enabled: true },
   { label: 'Facturi', icon: FileText, to: '/invoices', enabled: true },
   { label: 'Contracte', icon: ScrollText, to: '/contracts', enabled: true },
-  { label: 'Reguli', icon: Scale, to: '/rules', enabled: true },
+  { label: 'Reguli și surse', icon: Scale, to: '/rules', enabled: true },
   { label: 'Clienți', icon: Building2, to: '/clients', enabled: true },
 ]
 
@@ -28,7 +28,7 @@ export function AppShell() {
   const { theme, toggleTheme } = useTheme()
   const auth = useAuth()
   const activeClient = clients.find((client) => client.id === scope)
-  const pageTitle = location.pathname.startsWith('/invoices/') ? 'Detaliu factură' : location.pathname === '/invoices' ? 'Facturi' : location.pathname.startsWith('/contracts/') ? 'Detaliu contract' : location.pathname === '/contracts' ? 'Contracte' : location.pathname.startsWith('/rules/') ? 'Detaliu regulă' : location.pathname === '/rules' ? 'Reguli' : location.pathname.startsWith('/clients/') ? 'Context client' : location.pathname === '/clients' ? 'Clienți' : location.pathname === '/tasks' ? 'Task Inbox' : 'Dashboard operațional'
+  const pageTitle = location.pathname.startsWith('/invoices/') ? 'Detaliu factură' : location.pathname === '/invoices' ? 'Facturi' : location.pathname.startsWith('/contracts/') ? 'Detaliu contract' : location.pathname === '/contracts' ? 'Contracte' : location.pathname.startsWith('/rules/') ? 'Detaliu regulă' : location.pathname === '/rules' ? 'Reguli și surse' : location.pathname.startsWith('/clients/') ? 'Context client' : location.pathname === '/clients' ? 'Clienți' : location.pathname === '/tasks' ? 'Task Inbox' : 'Dashboard operațional'
 
   const changeScope = async (nextScope: string) => {
     let destination: string | undefined

@@ -92,7 +92,7 @@ o oră; dacă este `EXPIRED`, repetă pașii 2 și 3.
 cd /Users/adriantudoran/Projects/diana_contabilitate/backend
 GOCACHE=/private/tmp/diana-go-cache \
 go run ./cmd/spvconnect import-fixture \
-  --accounting-client-id client-89b8b13035d9592b3c3ed554 \
+  --accounting-client-id client-62de3c292832b8d3aac72068 \
   --zip /Users/adriantudoran/Downloads/8253499374.zip \
   --external-message-id 8253499374
 ```

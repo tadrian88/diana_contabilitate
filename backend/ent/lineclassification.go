@@ -31,6 +31,12 @@ type LineClassification struct {
 	EffectiveTypedValue *accounting.Value `json:"effective_typed_value,omitempty"`
 	// DecisionEvidence holds the value of the "decision_evidence" field.
 	DecisionEvidence *accounting.Evidence `json:"decision_evidence,omitempty"`
+	// LegalCitations holds the value of the "legal_citations" field.
+	LegalCitations []accounting.LegalCitation `json:"legal_citations,omitempty"`
+	// ValidationResults holds the value of the "validation_results" field.
+	ValidationResults []accounting.ValidationResult `json:"validation_results,omitempty"`
+	// ProposalProvenance holds the value of the "proposal_provenance" field.
+	ProposalProvenance *accounting.ProposalProvenance `json:"proposal_provenance,omitempty"`
 	// ReviewReason holds the value of the "review_reason" field.
 	ReviewReason string `json:"review_reason,omitempty"`
 	// InvoiceDateUsed holds the value of the "invoice_date_used" field.
@@ -41,12 +47,16 @@ type LineClassification struct {
 	InvoiceID string `json:"invoice_id,omitempty"`
 	// InvoiceLineID holds the value of the "invoice_line_id" field.
 	InvoiceLineID string `json:"invoice_line_id,omitempty"`
+	// ClassificationRunID holds the value of the "classification_run_id" field.
+	ClassificationRunID string `json:"classification_run_id,omitempty"`
 	// Dimension holds the value of the "dimension" field.
 	Dimension lineclassification.Dimension `json:"dimension,omitempty"`
 	// ProposedValue holds the value of the "proposed_value" field.
 	ProposedValue string `json:"proposed_value,omitempty"`
 	// EffectiveValue holds the value of the "effective_value" field.
 	EffectiveValue *string `json:"effective_value,omitempty"`
+	// EffectiveSource holds the value of the "effective_source" field.
+	EffectiveSource *string `json:"effective_source,omitempty"`
 	// ConfidenceDisplay holds the value of the "confidence_display" field.
 	ConfidenceDisplay string `json:"confidence_display,omitempty"`
 	// Explanation holds the value of the "explanation" field.
@@ -149,13 +159,13 @@ func (*LineClassification) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case lineclassification.FieldProposedTypedValue, lineclassification.FieldEffectiveTypedValue, lineclassification.FieldDecisionEvidence:
+		case lineclassification.FieldProposedTypedValue, lineclassification.FieldEffectiveTypedValue, lineclassification.FieldDecisionEvidence, lineclassification.FieldLegalCitations, lineclassification.FieldValidationResults, lineclassification.FieldProposalProvenance:
 			values[i] = new([]byte)
 		case lineclassification.FieldRequiredReview:
 			values[i] = new(sql.NullBool)
 		case lineclassification.FieldAccountMappingVersion, lineclassification.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case lineclassification.FieldID, lineclassification.FieldModelVersion, lineclassification.FieldReviewReason, lineclassification.FieldClientID, lineclassification.FieldInvoiceID, lineclassification.FieldInvoiceLineID, lineclassification.FieldDimension, lineclassification.FieldProposedValue, lineclassification.FieldEffectiveValue, lineclassification.FieldConfidenceDisplay, lineclassification.FieldExplanation, lineclassification.FieldLegalBasis, lineclassification.FieldReviewStatus, lineclassification.FieldSource, lineclassification.FieldRuleVersionID, lineclassification.FieldAccountMappingID, lineclassification.FieldPolicyVersion, lineclassification.FieldReviewedByID, lineclassification.FieldReviewedByDisplay:
+		case lineclassification.FieldID, lineclassification.FieldModelVersion, lineclassification.FieldReviewReason, lineclassification.FieldClientID, lineclassification.FieldInvoiceID, lineclassification.FieldInvoiceLineID, lineclassification.FieldClassificationRunID, lineclassification.FieldDimension, lineclassification.FieldProposedValue, lineclassification.FieldEffectiveValue, lineclassification.FieldEffectiveSource, lineclassification.FieldConfidenceDisplay, lineclassification.FieldExplanation, lineclassification.FieldLegalBasis, lineclassification.FieldReviewStatus, lineclassification.FieldSource, lineclassification.FieldRuleVersionID, lineclassification.FieldAccountMappingID, lineclassification.FieldPolicyVersion, lineclassification.FieldReviewedByID, lineclassification.FieldReviewedByDisplay:
 			values[i] = new(sql.NullString)
 		case lineclassification.FieldInvoiceDateUsed, lineclassification.FieldReviewedAt, lineclassification.FieldCreatedAt, lineclassification.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -210,6 +220,30 @@ func (_m *LineClassification) assignValues(columns []string, values []any) error
 					return fmt.Errorf("unmarshal field decision_evidence: %w", err)
 				}
 			}
+		case lineclassification.FieldLegalCitations:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field legal_citations", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.LegalCitations); err != nil {
+					return fmt.Errorf("unmarshal field legal_citations: %w", err)
+				}
+			}
+		case lineclassification.FieldValidationResults:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field validation_results", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ValidationResults); err != nil {
+					return fmt.Errorf("unmarshal field validation_results: %w", err)
+				}
+			}
+		case lineclassification.FieldProposalProvenance:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field proposal_provenance", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ProposalProvenance); err != nil {
+					return fmt.Errorf("unmarshal field proposal_provenance: %w", err)
+				}
+			}
 		case lineclassification.FieldReviewReason:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field review_reason", values[i])
@@ -241,6 +275,12 @@ func (_m *LineClassification) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.InvoiceLineID = value.String
 			}
+		case lineclassification.FieldClassificationRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field classification_run_id", values[i])
+			} else if value.Valid {
+				_m.ClassificationRunID = value.String
+			}
 		case lineclassification.FieldDimension:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field dimension", values[i])
@@ -259,6 +299,13 @@ func (_m *LineClassification) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.EffectiveValue = new(string)
 				*_m.EffectiveValue = value.String
+			}
+		case lineclassification.FieldEffectiveSource:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field effective_source", values[i])
+			} else if value.Valid {
+				_m.EffectiveSource = new(string)
+				*_m.EffectiveSource = value.String
 			}
 		case lineclassification.FieldConfidenceDisplay:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -430,6 +477,15 @@ func (_m *LineClassification) String() string {
 	builder.WriteString("decision_evidence=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DecisionEvidence))
 	builder.WriteString(", ")
+	builder.WriteString("legal_citations=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LegalCitations))
+	builder.WriteString(", ")
+	builder.WriteString("validation_results=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ValidationResults))
+	builder.WriteString(", ")
+	builder.WriteString("proposal_provenance=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProposalProvenance))
+	builder.WriteString(", ")
 	builder.WriteString("review_reason=")
 	builder.WriteString(_m.ReviewReason)
 	builder.WriteString(", ")
@@ -447,6 +503,9 @@ func (_m *LineClassification) String() string {
 	builder.WriteString("invoice_line_id=")
 	builder.WriteString(_m.InvoiceLineID)
 	builder.WriteString(", ")
+	builder.WriteString("classification_run_id=")
+	builder.WriteString(_m.ClassificationRunID)
+	builder.WriteString(", ")
 	builder.WriteString("dimension=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Dimension))
 	builder.WriteString(", ")
@@ -455,6 +514,11 @@ func (_m *LineClassification) String() string {
 	builder.WriteString(", ")
 	if v := _m.EffectiveValue; v != nil {
 		builder.WriteString("effective_value=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.EffectiveSource; v != nil {
+		builder.WriteString("effective_source=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

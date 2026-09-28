@@ -68,6 +68,7 @@ func main() {
 
 	metrics := observability.NewMetrics()
 	store.AccountingReadinessObserver = metrics
+	store.AccountingWorkflowObserver = metrics
 	var sagaExporter invoicing.SagaExporter = saga.NewFileExporter(store, nil)
 	if cfg.SagaMode == "fake" {
 		sagaExporter = invoicing.NewFakeSagaExporter("inv-module6-saga-failed", "inv-module7-saga-failed")
@@ -82,7 +83,8 @@ func main() {
 	contractIngestion := contractingestion.NewService(store, contractExtractor, contractService, cfg.ContractMaxPDFBytes, nil)
 	pipeline.SetContractMatchingProcessor(contractService)
 	pipeline.SetCommercialValidationProcessor(commercialvalidation.NewService(store, nil))
-	pipeline.SetClassificationProcessor(classification.NewService(store, classification.ProductionPolicy{Observer: metrics}, nil))
+	classificationService := classification.NewService(store, classification.ProductionPolicy{Observer: metrics}, nil)
+	pipeline.SetClassificationProcessor(classificationService)
 	publisher := workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.WorkerJobTimeout)
 	dispatcher := workerruntime.NewDispatcher(store, publisher, workerruntime.DispatcherConfig{Owner: ownerID(), BatchSize: cfg.DispatcherBatchSize, MaxAttempts: uint(cfg.DispatcherMaxAttempts), PollInterval: cfg.DispatcherPollInterval, ClaimTTL: cfg.DispatcherClaimTTL, RetryMin: cfg.DispatcherRetryMin, RetryMax: cfg.DispatcherRetryMax}, logger, metrics)
 
@@ -109,7 +111,8 @@ func main() {
 	mux.Handle(workerruntime.ContractActivationTask, workerruntime.NewContractActivationHandler(contractService))
 	if cfg.AccountingAnalysisEnabled {
 		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout})
-		analysisService := accountinganalysis.NewWorkflowService(store, nil, analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+		analysisService := accountinganalysis.NewWorkflowService(store, publisher, analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+		classificationService.SetAutomaticAccountingFallback(analysisService)
 		mux.Handle(workerruntime.AccountingAnalysisTask, workerruntime.NewAccountingAnalysisHandler(analysisService))
 	}
 	var spvScheduler *workerruntime.SPVScheduler

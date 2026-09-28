@@ -68,6 +68,9 @@ func (_u *ClientAccountingProfileUpdate) sqlSave(ctx context.Context) (_node int
 			}
 		}
 	}
+	if _u.mutation.SupersedesProfileIDCleared() {
+		_spec.ClearField(clientaccountingprofile.FieldSupersedesProfileID, field.TypeString)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{clientaccountingprofile.Label}
@@ -158,6 +161,9 @@ func (_u *ClientAccountingProfileUpdateOne) sqlSave(ctx context.Context) (_node 
 				ps[i](selector)
 			}
 		}
+	}
+	if _u.mutation.SupersedesProfileIDCleared() {
+		_spec.ClearField(clientaccountingprofile.FieldSupersedesProfileID, field.TypeString)
 	}
 	_node = &ClientAccountingProfile{config: _u.config}
 	_spec.Assign = _node.assignValues

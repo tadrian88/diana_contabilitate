@@ -58,6 +58,7 @@ func main() {
 	contractIngestion := contractingestion.NewService(store, contractExtractor, contractService, cfg.ContractMaxPDFBytes, nil)
 	metrics := observability.NewMetrics()
 	store.AccountingReadinessObserver = metrics
+	store.AccountingWorkflowObserver = metrics
 	classificationService := classification.NewService(store, classification.ProductionPolicy{Observer: metrics}, nil)
 	var sagaExporter invoicing.SagaExporter = saga.NewFileExporter(store, nil)
 	if cfg.SagaMode == "fake" {
@@ -99,6 +100,7 @@ func main() {
 	if cfg.AccountingAnalysisEnabled {
 		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout})
 		analysisService = accountinganalysis.NewWorkflowService(store, workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.WorkerJobTimeout), analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+		classificationService.SetAutomaticAccountingFallback(analysisService)
 	}
 	handler := httpserver.NewWithAccountingAnalysis(clients.NewService(store), pipelineService, validationtasks.NewService(store, nil), contractService, classificationService, rules.NewService(store, nil), spvManager, sagaHandoff, contractIngestion, commercialService, analysisService, readiness, logger, metrics)
 	authHTTP := authentication.NewHTTP(authentication.SQLStore{DB: store.DB}, redisClient, authentication.Config{

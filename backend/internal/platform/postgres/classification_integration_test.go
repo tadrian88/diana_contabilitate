@@ -27,7 +27,11 @@ import (
 	"diana-contabilitate/backend/internal/validationtasks"
 )
 
-var classificationTestSequence atomic.Uint64
+var classificationTestSequence = func() atomic.Uint64 {
+	var sequence atomic.Uint64
+	sequence.Store(uint64(time.Now().UnixNano()))
+	return sequence
+}()
 
 type module5TestContext struct {
 	ctx      context.Context
@@ -71,11 +75,12 @@ func newModule5TestContext(t *testing.T) *module5TestContext {
 		t.Fatal(err)
 	}
 	sequence := classificationTestSequence.Add(1)
-	tc := &module5TestContext{ctx: context.Background(), store: store, clientID: fmt.Sprintf("module5-client-%d", sequence), now: time.Date(2026, 9, 20, 9, int(sequence), 0, 0, time.UTC)}
+	tc := &module5TestContext{ctx: context.Background(), store: store, clientID: fmt.Sprintf("module5-client-%d", sequence), now: time.Date(2026, 9, 20, 9, int(sequence%60), 0, 0, time.UTC)}
 	if _, err = store.Client.AccountingClient.Create().SetID(tc.clientID).SetName("Module 5 client").SetCui(fmt.Sprintf("RO-M5-%d", sequence)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		_, _ = store.DB.ExecContext(tc.ctx, `DELETE FROM approved_accounting_knowledge WHERE client_id=$1`, tc.clientID)
 		if len(tc.invoices) > 0 {
 			_, _ = store.Client.ActivityEvent.Delete().Where(activityevent.InvoiceIDIn(tc.invoices...)).Exec(tc.ctx)
 			_, _ = store.Client.OutboxEntry.Delete().Where(outboxentry.AggregateIDIn(tc.invoices...)).Exec(tc.ctx)
@@ -434,7 +439,11 @@ func TestModule5ForeignKeysRejectCrossClientClassificationAndNonGlobalOverrideOr
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tc.store.Client.AccountingClient.DeleteOneID(otherClient).Exec(tc.ctx) })
-	_, err := tc.store.Client.LineClassification.Create().SetID("cross-client-classification").SetClientID(otherClient).SetInvoiceID(invoiceID).SetInvoiceLineID(invoiceID + "-line-1").SetDimension(lineclassification.DimensionACCOUNT).SetProposedValue("Demo").SetConfidenceDisplay("Demo").SetExplanation("Demo").SetLegalBasis(rules.LegalBasisPlaceholder).SetRequiredReview(true).SetReviewStatus(lineclassification.ReviewStatusPENDING).SetSource(lineclassification.SourceNO_MATCH).SetPolicyVersion(classification.BaselinePolicyVersion).SetRevision(1).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx)
+	runID := invoiceID + "-cross-client-run"
+	if _, err := tc.store.DB.ExecContext(tc.ctx, `INSERT INTO classification_runs(id,client_id,invoice_id,invoice_revision,snapshot,context_fingerprint,policy_version,status,command_key,actor_display,created_at) VALUES($1,$2,$3,1,'{}','integration',$4,'COMPLETED',$5,'Integration test',$6)`, runID, tc.clientID, invoiceID, classification.BaselinePolicyVersion, "integration:"+runID, tc.now); err != nil {
+		t.Fatal(err)
+	}
+	_, err := tc.store.Client.LineClassification.Create().SetID("cross-client-classification").SetClientID(otherClient).SetInvoiceID(invoiceID).SetInvoiceLineID(invoiceID + "-line-1").SetClassificationRunID(runID).SetDimension(lineclassification.DimensionACCOUNT).SetProposedValue("Demo").SetConfidenceDisplay("Demo").SetExplanation("Demo").SetLegalBasis(rules.LegalBasisPlaceholder).SetRequiredReview(true).SetReviewStatus(lineclassification.ReviewStatusPENDING).SetSource(lineclassification.SourceNO_MATCH).SetPolicyVersion(classification.BaselinePolicyVersion).SetRevision(1).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx)
 	if err == nil {
 		t.Fatal("cross-client classification should violate composite invoice ownership")
 	}

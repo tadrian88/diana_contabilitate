@@ -6,94 +6,162 @@ import (
 	"testing"
 
 	"diana-contabilitate/backend/internal/accounting"
-	"diana-contabilitate/backend/internal/accountingdate"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/legislation"
 	"diana-contabilitate/backend/internal/money"
 )
 
-type catalog map[string]bool
-
-func (c catalog) Postable(code string) bool { return c[code] }
-
-func amount(value string) money.Amount { return money.MustParse(value) }
-func fragment() legislation.Fragment {
-	text := "TEST_ONLY fragment supplied as corpus evidence; not a legal assertion."
+func testFragment() legislation.Fragment {
+	text := "TEST_ONLY corpus evidence; not a normative legal assertion."
 	sum := sha256.Sum256([]byte(text))
 	return legislation.Fragment{ID: "fragment-1", VersionID: "law-v1", CitationKey: "TEST_ONLY art. 1", Text: text, ContentHash: hex.EncodeToString(sum[:]), Ordinal: 1}
 }
-func profile(accounts ...string) *accounting.Profile {
-	return &accounting.Profile{ID: "profile-1", ClientID: "client-a", AccountCodes: accounts}
-}
-func citation(f legislation.Fragment) []Citation {
-	return []Citation{{FragmentID: f.ID, VersionID: f.VersionID, CitationKey: f.CitationKey, ContentHash: f.ContentHash}}
-}
-func treatment(id, net, vat, kind, account string) LineTreatment {
-	return LineTreatment{InvoiceLineID: id, VATKind: kind, VATBase: amount(net), VATAmount: amount(vat), VATTiming: "DEFERRED", VATAccount: account, VATDeductibility: "FULL", ExpenseDeductibility: "FULL", DeductibilityCondition: "TEST_ONLY accountant confirmation required"}
-}
-func base(input Input, entries []Entry, treatments []LineTreatment, f legislation.Fragment) Proposal {
-	return Proposal{SchemaVersion: SchemaVersion, ClientID: input.ClientID, InvoiceID: input.InvoiceID, InvoiceRevision: input.InvoiceRevision, Entries: entries, LineTreatments: treatments, Citations: citation(f), ReasoningSummary: "TEST_ONLY structured proposal", Confidence: ConfidenceHigh, Source: SourceLLMLegislation, RequiresReview: true}
-}
-func entry(phase Phase, debit, credit, value string, lines ...string) Entry {
-	return Entry{Phase: phase, DebitAccount: debit, CreditAccount: credit, Amount: amount(value), Currency: "RON", InvoiceLineIDs: lines, Explanation: "TEST_ONLY"}
+
+func testInput(direction Direction, lines ...Line) Input {
+	return Input{ClientID: "client-a", InvoiceID: "invoice-a", ClassificationRunID: "run-a", InvoiceRevision: 3, Direction: direction,
+		Profile: &accounting.Profile{ID: "profile-a", ClientID: "client-a", AccountCodes: []string{"626", "613", "665", "704", "6281"}}, Lines: lines}
 }
 
-func TestGoldenOrangeCashAccountingProposal(t *testing.T) {
-	f := fragment()
-	input := Input{ClientID: "client-a", InvoiceID: "orange", InvoiceRevision: 7, IssueDate: accountingdate.Date("2026-01-10"), Direction: Incoming, Currency: "RON", Total: amount("97.20"), Profile: profile("626", "401", "4428", "5121", "4426"), Lines: []Line{{ID: "telecom", Net: amount("80.33"), VAT: amount("16.87"), Gross: amount("97.20")}}}
-	proposal := base(input, []Entry{entry(InvoicePhase, "626", "401", "80.33", "telecom"), entry(InvoicePhase, "4428", "401", "16.87", "telecom"), entry(PaymentPhase, "401", "5121", "97.20", "telecom"), entry(PaymentPhase, "4426", "4428", "16.87", "telecom")}, []LineTreatment{treatment("telecom", "80.33", "16.87", "INPUT_VAT", "4428")}, f)
-	if issues := Validate(input, proposal, []legislation.Fragment{f}, catalog{"626": true, "401": true, "4428": true, "5121": true, "4426": true}); len(issues) != 0 {
-		t.Fatalf("golden Orange rejected: %#v", issues)
+func testCatalog() Catalog {
+	entries := map[string]accounts.Account{}
+	for _, code := range []string{"626", "613", "665", "704", "6281"} {
+		entries[code] = accounts.Account{Code: code, Name: "TEST_ONLY " + code, Active: true, Postable: true, ParentCode: map[string]string{"6281": "628"}[code]}
+	}
+	entries["628"] = accounts.Account{Code: "628", Name: "Synthetic", Active: true, Postable: false, Synthetic: true}
+	return Catalog{Entries: entries, Children: map[string][]accounts.Account{"628": {entries["6281"]}}}
+}
+
+func citedDecision(dimension string, value accounting.Value, fragment legislation.Fragment) DimensionProposal {
+	return DimensionProposal{Dimension: dimension, ProposedValue: value, Explanation: "TEST_ONLY concise explanation", Confidence: ConfidenceHigh,
+		Citations: []Citation{{FragmentID: fragment.ID, VersionID: fragment.VersionID, CitationKey: fragment.CitationKey, ContentHash: fragment.ContentHash}}}
+}
+
+func proposal(lineID string, decisions ...DimensionProposal) Proposal {
+	return Proposal{SchemaVersion: SchemaVersion, Source: SourceAIProposal, Summary: "TEST_ONLY", Lines: []LineProposal{{InvoiceLineID: lineID, Decisions: decisions}}}
+}
+
+func ordinary(rate string) accounting.Value {
+	r := money.MustParse(rate)
+	return accounting.Value{Kind: "ORDINARY", Timing: "IMMEDIATE", SourceCategory: "S", SourceRate: &r}
+}
+
+func fullProposal(lineID, account string, fragment legislation.Fragment) Proposal {
+	return proposal(lineID,
+		citedDecision("ACCOUNT", accounting.Value{Kind: "ACCOUNT", Account: account}, fragment),
+		citedDecision("VAT_TREATMENT", ordinary("21"), fragment),
+		citedDecision("VAT_DEDUCTIBILITY", accounting.Value{Kind: "FULL"}, fragment),
+		citedDecision("EXPENSE_TAX_TREATMENT", accounting.Value{Kind: "FULLY_DEDUCTIBLE"}, fragment),
+	)
+}
+
+func testLine(id, rate string) Line {
+	r := money.MustParse(rate)
+	vat := money.MustParse("21")
+	if rate == "0" {
+		vat = money.MustParse("0")
+	}
+	return Line{ID: id, VAT: vat, Facts: &accounting.LineFacts{TaxCategory: accounting.TaxCategory{Code: "S", Rate: &r}}}
+}
+
+func findDecision(t *testing.T, results []ValidatedDecision, dimension string) ValidatedDecision {
+	t.Helper()
+	for _, result := range results {
+		if result.Dimension == dimension {
+			return result
+		}
+	}
+	t.Fatalf("missing %s", dimension)
+	return ValidatedDecision{}
+}
+
+func TestAIProposalIsTypedReviewableAndNotEffective(t *testing.T) {
+	f := testFragment()
+	input := testInput(Incoming, testLine("line-a", "21"))
+	results, issues := ValidateUnified(input, fullProposal("line-a", "626", f), []legislation.Fragment{f}, testCatalog())
+	if len(issues) != 0 || len(results) != 4 {
+		t.Fatalf("valid AI proposal rejected: %#v", issues)
+	}
+	account := findDecision(t, results, "ACCOUNT")
+	if !account.Valid() || account.TypedValue == nil || account.TypedValue.Account != "626" {
+		t.Fatalf("ACCOUNT was not retained as a valid proposal: %#v", account)
 	}
 }
 
-func TestGoldenBTLeasingMultipleTreatmentsNoVAT(t *testing.T) {
-	f := fragment()
-	input := Input{ClientID: "client-a", InvoiceID: "insurance", InvoiceRevision: 2, Direction: Incoming, Currency: "RON", Total: amount("1394.78"), Profile: profile("613", "665", "401"), Lines: []Line{{ID: "rca", Net: amount("445"), VAT: amount("0"), Gross: amount("445")}, {ID: "casco", Net: amount("949.76"), VAT: amount("0"), Gross: amount("949.76")}, {ID: "fx", Net: amount("0.02"), VAT: amount("0"), Gross: amount("0.02")}}}
-	proposal := base(input, []Entry{entry(InvoicePhase, "613", "401", "445", "rca"), entry(InvoicePhase, "613", "401", "949.76", "casco"), entry(InvoicePhase, "665", "401", "0.02", "fx")}, []LineTreatment{treatment("rca", "445", "0", "NO_VAT", ""), treatment("casco", "949.76", "0", "NO_VAT", ""), treatment("fx", "0.02", "0", "NO_VAT", "")}, f)
-	if issues := Validate(input, proposal, []legislation.Fragment{f}, catalog{"613": true, "665": true, "401": true}); len(issues) != 0 {
-		t.Fatalf("golden BT Leasing rejected: %#v", issues)
+func TestInvalidAccountDoesNotDiscardValidVAT(t *testing.T) {
+	f := testFragment()
+	input := testInput(Incoming, testLine("line-a", "21"))
+	results, _ := ValidateUnified(input, fullProposal("line-a", "628", f), []legislation.Fragment{f}, testCatalog())
+	account, vat := findDecision(t, results, "ACCOUNT"), findDecision(t, results, "VAT_TREATMENT")
+	if account.Valid() || len(account.Issues) == 0 || account.Issues[0].Code != "ACCOUNT_NOT_POSTABLE" || len(account.Issues[0].SuggestedAccounts) != 1 {
+		t.Fatalf("expected typed non-postable failure: %#v", account)
+	}
+	if !vat.Valid() {
+		t.Fatalf("valid VAT was discarded: %#v", vat.Issues)
 	}
 }
 
-func TestGoldenOutgoingConsultingCashAccounting(t *testing.T) {
-	f := fragment()
-	input := Input{ClientID: "client-a", InvoiceID: "consulting", InvoiceRevision: 3, Direction: Outgoing, Currency: "RON", Total: amount("11885.83"), Profile: profile("4111", "704", "4428", "5121", "4427"), Lines: []Line{{ID: "consulting-line", Net: amount("9823"), VAT: amount("2062.83"), Gross: amount("11885.83")}}}
-	proposal := base(input, []Entry{entry(InvoicePhase, "4111", "704", "9823", "consulting-line"), entry(InvoicePhase, "4111", "4428", "2062.83", "consulting-line"), entry(CollectionPhase, "5121", "4111", "11885.83", "consulting-line"), entry(CollectionPhase, "4428", "4427", "2062.83", "consulting-line")}, []LineTreatment{treatment("consulting-line", "9823", "2062.83", "OUTPUT_VAT", "4428")}, f)
-	if issues := Validate(input, proposal, []legislation.Fragment{f}, catalog{"4111": true, "704": true, "4428": true, "5121": true, "4427": true}); len(issues) != 0 {
-		t.Fatalf("golden consulting rejected: %#v", issues)
+func TestInvalidCitationAndEnumAreGranular(t *testing.T) {
+	f := testFragment()
+	input := testInput(Incoming, testLine("line-a", "21"))
+	p := fullProposal("line-a", "626", f)
+	p.Lines[0].Decisions[0].Citations[0].CitationKey = "invented"
+	p.Lines[0].Decisions[2].ProposedValue.Kind = "MOSTLY_DEDUCTIBLE"
+	results, _ := ValidateUnified(input, p, []legislation.Fragment{f}, testCatalog())
+	if findDecision(t, results, "ACCOUNT").Issues[0].Code != "LEGAL_CITATION" {
+		t.Fatal("invented citation was not rejected")
+	}
+	if findDecision(t, results, "VAT_DEDUCTIBILITY").Issues[0].Code != "INVALID_TYPED_VALUE" {
+		t.Fatal("invalid enum was not isolated")
+	}
+	if !findDecision(t, results, "VAT_TREATMENT").Valid() {
+		t.Fatal("sibling dimension did not survive")
 	}
 }
 
-func TestProposalGuardrailsFailClosed(t *testing.T) {
-	f := fragment()
-	input := Input{ClientID: "client-a", InvoiceID: "inv", InvoiceRevision: 1, Direction: Incoming, Currency: "RON", Total: amount("121"), Profile: profile("628", "401", "4426"), Lines: []Line{{ID: "line-a", Net: amount("100"), VAT: amount("21"), Gross: amount("121")}}}
-	valid := base(input, []Entry{entry(InvoicePhase, "628", "401", "100", "line-a"), entry(InvoicePhase, "4426", "401", "21", "line-a")}, []LineTreatment{treatment("line-a", "100", "21", "INPUT_VAT", "4426")}, f)
+func TestForeignLineAndResolvedDimensionCannotBeWritten(t *testing.T) {
+	f := testFragment()
+	input := testInput(Incoming, testLine("line-a", "21"))
+	input.ResolvedDimensions = []ResolvedDimension{{InvoiceLineID: "line-a", Dimension: "ACCOUNT", Value: accounting.Value{Kind: "ACCOUNT", Account: "626"}}}
+	p := proposal("other-line", citedDecision("ACCOUNT", accounting.Value{Kind: "ACCOUNT", Account: "626"}, f))
+	results, _ := ValidateUnified(input, p, []legislation.Fragment{f}, testCatalog())
+	if len(results) != 1 || results[0].Issues[0].Code != "FOREIGN_LINE" {
+		t.Fatalf("foreign line accepted: %#v", results)
+	}
+	p = proposal("line-a", citedDecision("ACCOUNT", accounting.Value{Kind: "ACCOUNT", Account: "6281"}, f))
+	results, _ = ValidateUnified(input, p, []legislation.Fragment{f}, testCatalog())
+	if findDecision(t, results, "ACCOUNT").Issues[0].Code != "DIMENSION_ALREADY_RESOLVED" {
+		t.Fatal("AI overwrote a resolved dimension")
+	}
+}
+
+func TestGoldenUnifiedContractsDoNotModelFutureEvents(t *testing.T) {
+	f := testFragment()
 	tests := []struct {
-		name   string
-		mutate func(*Proposal)
-		code   string
+		name      string
+		direction Direction
+		lines     []Line
+		accounts  []string
 	}{
-		{"foreign tenant", func(p *Proposal) { p.ClientID = "client-b" }, "TENANT_MISMATCH"},
-		{"invented account", func(p *Proposal) { p.Entries[0].DebitAccount = "9999" }, "ACCOUNT"},
-		{"wrong amount", func(p *Proposal) { p.Entries[0].Amount = amount("99") }, "INVOICE_RECONCILIATION"},
-		{"wrong vat", func(p *Proposal) { p.Entries[1].Amount = amount("20") }, "VAT_RECONCILIATION"},
-		{"invented citation", func(p *Proposal) { p.Citations[0].CitationKey = "art. invented" }, "LEGAL_CITATION"},
-		{"foreign line", func(p *Proposal) { p.Entries[0].InvoiceLineIDs = []string{"other"} }, "FOREIGN_LINE"},
-		{"llm bypass review", func(p *Proposal) { p.RequiresReview = false }, "REVIEW_REQUIRED"},
+		{"Orange telecom", Incoming, []Line{testLine("telecom", "21")}, []string{"626"}},
+		{"BT Leasing", Incoming, []Line{testLine("rca", "0"), testLine("casco", "0"), testLine("fx", "0")}, []string{"613", "613", "665"}},
+		{"issued consulting", Outgoing, []Line{testLine("consulting", "21")}, []string{"704"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			proposal := valid
-			proposal.Entries = append([]Entry(nil), valid.Entries...)
-			proposal.Citations = append([]Citation(nil), valid.Citations...)
-			tc.mutate(&proposal)
-			issues := Validate(input, proposal, []legislation.Fragment{f}, catalog{"628": true, "401": true, "4426": true})
-			for _, issue := range issues {
-				if issue.Code == tc.code {
-					return
+			input := testInput(tc.direction, tc.lines...)
+			for _, line := range tc.lines {
+				for _, dimension := range []string{"VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT"} {
+					input.ResolvedDimensions = append(input.ResolvedDimensions, ResolvedDimension{InvoiceLineID: line.ID, Dimension: dimension, Value: accounting.Value{Kind: "NOT_APPLICABLE", Reason: "TEST_ONLY"}})
 				}
 			}
-			t.Fatalf("missing issue %s in %#v", tc.code, issues)
+			p := Proposal{SchemaVersion: SchemaVersion, Source: SourceAIProposal, Summary: "invoice event only"}
+			for index, line := range tc.lines {
+				p.Lines = append(p.Lines, LineProposal{InvoiceLineID: line.ID, Decisions: []DimensionProposal{citedDecision("ACCOUNT", accounting.Value{Kind: "ACCOUNT", Account: tc.accounts[index]}, f)}})
+			}
+			results, issues := ValidateUnified(input, p, []legislation.Fragment{f}, testCatalog())
+			if len(issues) != 0 || len(results) != len(tc.lines) {
+				t.Fatalf("golden contract rejected: %#v", issues)
+			}
 		})
 	}
 }

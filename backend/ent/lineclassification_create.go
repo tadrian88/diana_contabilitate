@@ -57,6 +57,24 @@ func (_c *LineClassificationCreate) SetDecisionEvidence(v *accounting.Evidence) 
 	return _c
 }
 
+// SetLegalCitations sets the "legal_citations" field.
+func (_c *LineClassificationCreate) SetLegalCitations(v []accounting.LegalCitation) *LineClassificationCreate {
+	_c.mutation.SetLegalCitations(v)
+	return _c
+}
+
+// SetValidationResults sets the "validation_results" field.
+func (_c *LineClassificationCreate) SetValidationResults(v []accounting.ValidationResult) *LineClassificationCreate {
+	_c.mutation.SetValidationResults(v)
+	return _c
+}
+
+// SetProposalProvenance sets the "proposal_provenance" field.
+func (_c *LineClassificationCreate) SetProposalProvenance(v *accounting.ProposalProvenance) *LineClassificationCreate {
+	_c.mutation.SetProposalProvenance(v)
+	return _c
+}
+
 // SetReviewReason sets the "review_reason" field.
 func (_c *LineClassificationCreate) SetReviewReason(v string) *LineClassificationCreate {
 	_c.mutation.SetReviewReason(v)
@@ -103,6 +121,12 @@ func (_c *LineClassificationCreate) SetInvoiceLineID(v string) *LineClassificati
 	return _c
 }
 
+// SetClassificationRunID sets the "classification_run_id" field.
+func (_c *LineClassificationCreate) SetClassificationRunID(v string) *LineClassificationCreate {
+	_c.mutation.SetClassificationRunID(v)
+	return _c
+}
+
 // SetDimension sets the "dimension" field.
 func (_c *LineClassificationCreate) SetDimension(v lineclassification.Dimension) *LineClassificationCreate {
 	_c.mutation.SetDimension(v)
@@ -125,6 +149,20 @@ func (_c *LineClassificationCreate) SetEffectiveValue(v string) *LineClassificat
 func (_c *LineClassificationCreate) SetNillableEffectiveValue(v *string) *LineClassificationCreate {
 	if v != nil {
 		_c.SetEffectiveValue(*v)
+	}
+	return _c
+}
+
+// SetEffectiveSource sets the "effective_source" field.
+func (_c *LineClassificationCreate) SetEffectiveSource(v string) *LineClassificationCreate {
+	_c.mutation.SetEffectiveSource(v)
+	return _c
+}
+
+// SetNillableEffectiveSource sets the "effective_source" field if the given value is not nil.
+func (_c *LineClassificationCreate) SetNillableEffectiveSource(v *string) *LineClassificationCreate {
+	if v != nil {
+		_c.SetEffectiveSource(*v)
 	}
 	return _c
 }
@@ -373,6 +411,9 @@ func (_c *LineClassificationCreate) check() error {
 	if _, ok := _c.mutation.InvoiceLineID(); !ok {
 		return &ValidationError{Name: "invoice_line_id", err: errors.New(`ent: missing required field "LineClassification.invoice_line_id"`)}
 	}
+	if _, ok := _c.mutation.ClassificationRunID(); !ok {
+		return &ValidationError{Name: "classification_run_id", err: errors.New(`ent: missing required field "LineClassification.classification_run_id"`)}
+	}
 	if _, ok := _c.mutation.Dimension(); !ok {
 		return &ValidationError{Name: "dimension", err: errors.New(`ent: missing required field "LineClassification.dimension"`)}
 	}
@@ -514,6 +555,18 @@ func (_c *LineClassificationCreate) createSpec() (*LineClassification, *sqlgraph
 		_spec.SetField(lineclassification.FieldDecisionEvidence, field.TypeJSON, value)
 		_node.DecisionEvidence = value
 	}
+	if value, ok := _c.mutation.LegalCitations(); ok {
+		_spec.SetField(lineclassification.FieldLegalCitations, field.TypeJSON, value)
+		_node.LegalCitations = value
+	}
+	if value, ok := _c.mutation.ValidationResults(); ok {
+		_spec.SetField(lineclassification.FieldValidationResults, field.TypeJSON, value)
+		_node.ValidationResults = value
+	}
+	if value, ok := _c.mutation.ProposalProvenance(); ok {
+		_spec.SetField(lineclassification.FieldProposalProvenance, field.TypeJSON, value)
+		_node.ProposalProvenance = value
+	}
 	if value, ok := _c.mutation.ReviewReason(); ok {
 		_spec.SetField(lineclassification.FieldReviewReason, field.TypeString, value)
 		_node.ReviewReason = value
@@ -521,6 +574,10 @@ func (_c *LineClassificationCreate) createSpec() (*LineClassification, *sqlgraph
 	if value, ok := _c.mutation.InvoiceDateUsed(); ok {
 		_spec.SetField(lineclassification.FieldInvoiceDateUsed, field.TypeTime, value)
 		_node.InvoiceDateUsed = &value
+	}
+	if value, ok := _c.mutation.ClassificationRunID(); ok {
+		_spec.SetField(lineclassification.FieldClassificationRunID, field.TypeString, value)
+		_node.ClassificationRunID = value
 	}
 	if value, ok := _c.mutation.Dimension(); ok {
 		_spec.SetField(lineclassification.FieldDimension, field.TypeEnum, value)
@@ -533,6 +590,10 @@ func (_c *LineClassificationCreate) createSpec() (*LineClassification, *sqlgraph
 	if value, ok := _c.mutation.EffectiveValue(); ok {
 		_spec.SetField(lineclassification.FieldEffectiveValue, field.TypeString, value)
 		_node.EffectiveValue = &value
+	}
+	if value, ok := _c.mutation.EffectiveSource(); ok {
+		_spec.SetField(lineclassification.FieldEffectiveSource, field.TypeString, value)
+		_node.EffectiveSource = &value
 	}
 	if value, ok := _c.mutation.ConfidenceDisplay(); ok {
 		_spec.SetField(lineclassification.FieldConfidenceDisplay, field.TypeString, value)

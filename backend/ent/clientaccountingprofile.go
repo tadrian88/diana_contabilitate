@@ -25,6 +25,8 @@ type ClientAccountingProfile struct {
 	Version int `json:"version,omitempty"`
 	// Payload holds the value of the "payload" field.
 	Payload *accounting.Profile `json:"payload,omitempty"`
+	// SupersedesProfileID holds the value of the "supersedes_profile_id" field.
+	SupersedesProfileID *string `json:"supersedes_profile_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -39,7 +41,7 @@ func (*ClientAccountingProfile) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case clientaccountingprofile.FieldVersion:
 			values[i] = new(sql.NullInt64)
-		case clientaccountingprofile.FieldID, clientaccountingprofile.FieldClientID:
+		case clientaccountingprofile.FieldID, clientaccountingprofile.FieldClientID, clientaccountingprofile.FieldSupersedesProfileID:
 			values[i] = new(sql.NullString)
 		case clientaccountingprofile.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -83,6 +85,13 @@ func (_m *ClientAccountingProfile) assignValues(columns []string, values []any) 
 				if err := json.Unmarshal(*value, &_m.Payload); err != nil {
 					return fmt.Errorf("unmarshal field payload: %w", err)
 				}
+			}
+		case clientaccountingprofile.FieldSupersedesProfileID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field supersedes_profile_id", values[i])
+			} else if value.Valid {
+				_m.SupersedesProfileID = new(string)
+				*_m.SupersedesProfileID = value.String
 			}
 		case clientaccountingprofile.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -134,6 +143,11 @@ func (_m *ClientAccountingProfile) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("payload=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Payload))
+	builder.WriteString(", ")
+	if v := _m.SupersedesProfileID; v != nil {
+		builder.WriteString("supersedes_profile_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

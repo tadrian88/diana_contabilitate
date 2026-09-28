@@ -11,6 +11,7 @@ import (
 	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
+	"diana-contabilitate/backend/ent/classificationrun"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractextractionattempt"
@@ -104,6 +105,7 @@ func checkColumn(t, c string) error {
 			accountingrulepack.Table:         accountingrulepack.ValidColumn,
 			activityevent.Table:              activityevent.ValidColumn,
 			classificationrule.Table:         classificationrule.ValidColumn,
+			classificationrun.Table:          classificationrun.ValidColumn,
 			clientaccountingprofile.Table:    clientaccountingprofile.ValidColumn,
 			contract.Table:                   contract.ValidColumn,
 			contractextractionattempt.Table:  contractextractionattempt.ValidColumn,

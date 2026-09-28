@@ -67,7 +67,7 @@ describe('Clients workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Variație TVA pentru Client Demo Beta' })).toBeInTheDocument()
     await user.click(screen.getByLabelText('Selectează clientul'))
     await user.click(screen.getByRole('option', { name: 'Client Demo Alfa SRL' }))
-    expect(await screen.findByRole('heading', { name: 'Reguli de clasificare' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Reguli și surse', level: 2 })).toBeInTheDocument()
   })
 
   it('renders client not-found, empty and repository-error states', async () => {

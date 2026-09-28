@@ -18,6 +18,7 @@ import (
 	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
+	"diana-contabilitate/backend/ent/classificationrun"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractextractionattempt"
@@ -62,6 +63,8 @@ type Client struct {
 	ActivityEvent *ActivityEventClient
 	// ClassificationRule is the client for interacting with the ClassificationRule builders.
 	ClassificationRule *ClassificationRuleClient
+	// ClassificationRun is the client for interacting with the ClassificationRun builders.
+	ClassificationRun *ClassificationRunClient
 	// ClientAccountingProfile is the client for interacting with the ClientAccountingProfile builders.
 	ClientAccountingProfile *ClientAccountingProfileClient
 	// Contract is the client for interacting with the Contract builders.
@@ -116,6 +119,7 @@ func (c *Client) init() {
 	c.AccountingRulePack = NewAccountingRulePackClient(c.config)
 	c.ActivityEvent = NewActivityEventClient(c.config)
 	c.ClassificationRule = NewClassificationRuleClient(c.config)
+	c.ClassificationRun = NewClassificationRunClient(c.config)
 	c.ClientAccountingProfile = NewClientAccountingProfileClient(c.config)
 	c.Contract = NewContractClient(c.config)
 	c.ContractExtractionAttempt = NewContractExtractionAttemptClient(c.config)
@@ -233,6 +237,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AccountingRulePack:         NewAccountingRulePackClient(cfg),
 		ActivityEvent:              NewActivityEventClient(cfg),
 		ClassificationRule:         NewClassificationRuleClient(cfg),
+		ClassificationRun:          NewClassificationRunClient(cfg),
 		ClientAccountingProfile:    NewClientAccountingProfileClient(cfg),
 		Contract:                   NewContractClient(cfg),
 		ContractExtractionAttempt:  NewContractExtractionAttemptClient(cfg),
@@ -277,6 +282,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AccountingRulePack:         NewAccountingRulePackClient(cfg),
 		ActivityEvent:              NewActivityEventClient(cfg),
 		ClassificationRule:         NewClassificationRuleClient(cfg),
+		ClassificationRun:          NewClassificationRunClient(cfg),
 		ClientAccountingProfile:    NewClientAccountingProfileClient(cfg),
 		Contract:                   NewContractClient(cfg),
 		ContractExtractionAttempt:  NewContractExtractionAttemptClient(cfg),
@@ -326,12 +332,12 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Account, c.AccountMapping, c.AccountMappingVersion, c.AccountingClient,
 		c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
-		c.ClientAccountingProfile, c.Contract, c.ContractExtractionAttempt,
-		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractServiceTerm,
-		c.ContractSourceDocument, c.Invoice, c.InvoiceContractAssociation,
-		c.InvoiceLine, c.LineClassification, c.OutboxEntry, c.RuleVersion,
-		c.SPVConnection, c.SPVOAuthState, c.SPVSourceDocument, c.SagaExportAttempt,
-		c.ValidationTask,
+		c.ClassificationRun, c.ClientAccountingProfile, c.Contract,
+		c.ContractExtractionAttempt, c.ContractMatchCandidate, c.ContractMatchRun,
+		c.ContractServiceTerm, c.ContractSourceDocument, c.Invoice,
+		c.InvoiceContractAssociation, c.InvoiceLine, c.LineClassification,
+		c.OutboxEntry, c.RuleVersion, c.SPVConnection, c.SPVOAuthState,
+		c.SPVSourceDocument, c.SagaExportAttempt, c.ValidationTask,
 	} {
 		n.Use(hooks...)
 	}
@@ -343,12 +349,12 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Account, c.AccountMapping, c.AccountMappingVersion, c.AccountingClient,
 		c.AccountingRulePack, c.ActivityEvent, c.ClassificationRule,
-		c.ClientAccountingProfile, c.Contract, c.ContractExtractionAttempt,
-		c.ContractMatchCandidate, c.ContractMatchRun, c.ContractServiceTerm,
-		c.ContractSourceDocument, c.Invoice, c.InvoiceContractAssociation,
-		c.InvoiceLine, c.LineClassification, c.OutboxEntry, c.RuleVersion,
-		c.SPVConnection, c.SPVOAuthState, c.SPVSourceDocument, c.SagaExportAttempt,
-		c.ValidationTask,
+		c.ClassificationRun, c.ClientAccountingProfile, c.Contract,
+		c.ContractExtractionAttempt, c.ContractMatchCandidate, c.ContractMatchRun,
+		c.ContractServiceTerm, c.ContractSourceDocument, c.Invoice,
+		c.InvoiceContractAssociation, c.InvoiceLine, c.LineClassification,
+		c.OutboxEntry, c.RuleVersion, c.SPVConnection, c.SPVOAuthState,
+		c.SPVSourceDocument, c.SagaExportAttempt, c.ValidationTask,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -371,6 +377,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ActivityEvent.mutate(ctx, m)
 	case *ClassificationRuleMutation:
 		return c.ClassificationRule.mutate(ctx, m)
+	case *ClassificationRunMutation:
+		return c.ClassificationRun.mutate(ctx, m)
 	case *ClientAccountingProfileMutation:
 		return c.ClientAccountingProfile.mutate(ctx, m)
 	case *ContractMutation:
@@ -1676,6 +1684,139 @@ func (c *ClassificationRuleClient) mutate(ctx context.Context, m *Classification
 		return (&ClassificationRuleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown ClassificationRule mutation op: %q", m.Op())
+	}
+}
+
+// ClassificationRunClient is a client for the ClassificationRun schema.
+type ClassificationRunClient struct {
+	config
+}
+
+// NewClassificationRunClient returns a client for the ClassificationRun from the given config.
+func NewClassificationRunClient(c config) *ClassificationRunClient {
+	return &ClassificationRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `classificationrun.Hooks(f(g(h())))`.
+func (c *ClassificationRunClient) Use(hooks ...Hook) {
+	c.hooks.ClassificationRun = append(c.hooks.ClassificationRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `classificationrun.Intercept(f(g(h())))`.
+func (c *ClassificationRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ClassificationRun = append(c.inters.ClassificationRun, interceptors...)
+}
+
+// Create returns a builder for creating a ClassificationRun entity.
+func (c *ClassificationRunClient) Create() *ClassificationRunCreate {
+	mutation := newClassificationRunMutation(c.config, OpCreate)
+	return &ClassificationRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ClassificationRun entities.
+func (c *ClassificationRunClient) CreateBulk(builders ...*ClassificationRunCreate) *ClassificationRunCreateBulk {
+	return &ClassificationRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ClassificationRunClient) MapCreateBulk(slice any, setFunc func(*ClassificationRunCreate, int)) *ClassificationRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ClassificationRunCreateBulk{err: fmt.Errorf("calling to ClassificationRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ClassificationRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ClassificationRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ClassificationRun.
+func (c *ClassificationRunClient) Update() *ClassificationRunUpdate {
+	mutation := newClassificationRunMutation(c.config, OpUpdate)
+	return &ClassificationRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ClassificationRunClient) UpdateOne(_m *ClassificationRun) *ClassificationRunUpdateOne {
+	mutation := newClassificationRunMutation(c.config, OpUpdateOne, withClassificationRun(_m))
+	return &ClassificationRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ClassificationRunClient) UpdateOneID(id string) *ClassificationRunUpdateOne {
+	mutation := newClassificationRunMutation(c.config, OpUpdateOne, withClassificationRunID(id))
+	return &ClassificationRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ClassificationRun.
+func (c *ClassificationRunClient) Delete() *ClassificationRunDelete {
+	mutation := newClassificationRunMutation(c.config, OpDelete)
+	return &ClassificationRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ClassificationRunClient) DeleteOne(_m *ClassificationRun) *ClassificationRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ClassificationRunClient) DeleteOneID(id string) *ClassificationRunDeleteOne {
+	builder := c.Delete().Where(classificationrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ClassificationRunDeleteOne{builder}
+}
+
+// Query returns a query builder for ClassificationRun.
+func (c *ClassificationRunClient) Query() *ClassificationRunQuery {
+	return &ClassificationRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeClassificationRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ClassificationRun entity by its id.
+func (c *ClassificationRunClient) Get(ctx context.Context, id string) (*ClassificationRun, error) {
+	return c.Query().Where(classificationrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ClassificationRunClient) GetX(ctx context.Context, id string) *ClassificationRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ClassificationRunClient) Hooks() []Hook {
+	return c.hooks.ClassificationRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *ClassificationRunClient) Interceptors() []Interceptor {
+	return c.inters.ClassificationRun
+}
+
+func (c *ClassificationRunClient) mutate(ctx context.Context, m *ClassificationRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ClassificationRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ClassificationRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ClassificationRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ClassificationRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ClassificationRun mutation op: %q", m.Op())
 	}
 }
 
@@ -4861,20 +5002,20 @@ func (c *ValidationTaskClient) mutate(ctx context.Context, m *ValidationTaskMuta
 type (
 	hooks struct {
 		Account, AccountMapping, AccountMappingVersion, AccountingClient,
-		AccountingRulePack, ActivityEvent, ClassificationRule, ClientAccountingProfile,
-		Contract, ContractExtractionAttempt, ContractMatchCandidate, ContractMatchRun,
-		ContractServiceTerm, ContractSourceDocument, Invoice,
-		InvoiceContractAssociation, InvoiceLine, LineClassification, OutboxEntry,
-		RuleVersion, SPVConnection, SPVOAuthState, SPVSourceDocument,
-		SagaExportAttempt, ValidationTask []ent.Hook
+		AccountingRulePack, ActivityEvent, ClassificationRule, ClassificationRun,
+		ClientAccountingProfile, Contract, ContractExtractionAttempt,
+		ContractMatchCandidate, ContractMatchRun, ContractServiceTerm,
+		ContractSourceDocument, Invoice, InvoiceContractAssociation, InvoiceLine,
+		LineClassification, OutboxEntry, RuleVersion, SPVConnection, SPVOAuthState,
+		SPVSourceDocument, SagaExportAttempt, ValidationTask []ent.Hook
 	}
 	inters struct {
 		Account, AccountMapping, AccountMappingVersion, AccountingClient,
-		AccountingRulePack, ActivityEvent, ClassificationRule, ClientAccountingProfile,
-		Contract, ContractExtractionAttempt, ContractMatchCandidate, ContractMatchRun,
-		ContractServiceTerm, ContractSourceDocument, Invoice,
-		InvoiceContractAssociation, InvoiceLine, LineClassification, OutboxEntry,
-		RuleVersion, SPVConnection, SPVOAuthState, SPVSourceDocument,
-		SagaExportAttempt, ValidationTask []ent.Interceptor
+		AccountingRulePack, ActivityEvent, ClassificationRule, ClassificationRun,
+		ClientAccountingProfile, Contract, ContractExtractionAttempt,
+		ContractMatchCandidate, ContractMatchRun, ContractServiceTerm,
+		ContractSourceDocument, Invoice, InvoiceContractAssociation, InvoiceLine,
+		LineClassification, OutboxEntry, RuleVersion, SPVConnection, SPVOAuthState,
+		SPVSourceDocument, SagaExportAttempt, ValidationTask []ent.Interceptor
 	}
 )

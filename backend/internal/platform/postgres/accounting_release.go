@@ -23,22 +23,19 @@ func (s *Store) ApproveAccountingProfile(ctx context.Context, p accounting.Profi
 	if p.TestOnly || !p.Valid(p.ClientID, p.EffectiveFrom) {
 		return fmt.Errorf("invalid approved accounting profile")
 	}
-	var selectable int
-	if err := s.DB.QueryRowContext(ctx, `
-		SELECT count(*)
-		FROM accounts
-		WHERE code = ANY($1::text[]) AND is_active AND postable`, p.AccountCodes).Scan(&selectable); err != nil {
+	if err := validateProfilePostingAccounts(ctx, s.DB, p.AccountCodes); err != nil {
 		return fmt.Errorf("validate approved profile accounts: %w", err)
-	}
-	if selectable != len(p.AccountCodes) {
-		return fmt.Errorf("approved profile contains missing, inactive, or non-postable accounts")
 	}
 	tx, err := s.Client.Tx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ClientAccountingProfile.Create().SetID(p.ID).SetClientID(p.ClientID).SetVersion(p.Version).SetPayload(&p).SetCreatedAt(p.Approval.At).Save(ctx); err != nil {
+	create := tx.ClientAccountingProfile.Create().SetID(p.ID).SetClientID(p.ClientID).SetVersion(p.Version).SetPayload(&p).SetCreatedAt(p.Approval.At)
+	if p.SupersedesProfileID != "" {
+		create.SetSupersedesProfileID(p.SupersedesProfileID)
+	}
+	if _, err = create.Save(ctx); err != nil {
 		return err
 	}
 	if err = createAudit(tx, ctx, auditRecord{key: "accounting-profile:" + p.ID, clientID: p.ClientID, aggregateType: "ACCOUNTING_PROFILE", aggregateID: p.ID, eventType: "ACCOUNTING_PROFILE_APPROVED", trigger: "OPERATOR_APPROVAL", detail: accountingApprovalDetail(p), actor: audit.ActorUser, actorDisplay: p.Approval.Actor, at: p.Approval.At}); err != nil {

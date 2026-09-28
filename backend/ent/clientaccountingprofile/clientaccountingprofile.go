@@ -17,6 +17,8 @@ const (
 	FieldVersion = "version"
 	// FieldPayload holds the string denoting the payload field in the database.
 	FieldPayload = "payload"
+	// FieldSupersedesProfileID holds the string denoting the supersedes_profile_id field in the database.
+	FieldSupersedesProfileID = "supersedes_profile_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the clientaccountingprofile in the database.
@@ -29,6 +31,7 @@ var Columns = []string{
 	FieldClientID,
 	FieldVersion,
 	FieldPayload,
+	FieldSupersedesProfileID,
 	FieldCreatedAt,
 }
 
@@ -63,6 +66,11 @@ func ByClientID(opts ...sql.OrderTermOption) OrderOption {
 // ByVersion orders the results by the version field.
 func ByVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldVersion, opts...).ToFunc()
+}
+
+// BySupersedesProfileID orders the results by the supersedes_profile_id field.
+func BySupersedesProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSupersedesProfileID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

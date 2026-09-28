@@ -75,6 +75,11 @@ func ReadinessReason(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldEQ(FieldReadinessReason, v))
 }
 
+// CurrentClassificationRunID applies equality check predicate on the "current_classification_run_id" field. It's identical to CurrentClassificationRunIDEQ.
+func CurrentClassificationRunID(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCurrentClassificationRunID, v))
+}
+
 // ClientID applies equality check predicate on the "client_id" field. It's identical to ClientIDEQ.
 func ClientID(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldEQ(FieldClientID, v))
@@ -323,6 +328,81 @@ func ReadinessReasonEqualFold(v string) predicate.Invoice {
 // ReadinessReasonContainsFold applies the ContainsFold predicate on the "readiness_reason" field.
 func ReadinessReasonContainsFold(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldContainsFold(FieldReadinessReason, v))
+}
+
+// CurrentClassificationRunIDEQ applies the EQ predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDNEQ applies the NEQ predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDNEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDIn applies the In predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldCurrentClassificationRunID, vs...))
+}
+
+// CurrentClassificationRunIDNotIn applies the NotIn predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDNotIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldCurrentClassificationRunID, vs...))
+}
+
+// CurrentClassificationRunIDGT applies the GT predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDGT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGT(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDGTE applies the GTE predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDGTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGTE(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDLT applies the LT predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDLT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLT(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDLTE applies the LTE predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDLTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLTE(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDContains applies the Contains predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDContains(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContains(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDHasPrefix applies the HasPrefix predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDHasPrefix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasPrefix(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDHasSuffix applies the HasSuffix predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDHasSuffix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasSuffix(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDIsNil applies the IsNil predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDIsNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldIsNull(FieldCurrentClassificationRunID))
+}
+
+// CurrentClassificationRunIDNotNil applies the NotNil predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDNotNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotNull(FieldCurrentClassificationRunID))
+}
+
+// CurrentClassificationRunIDEqualFold applies the EqualFold predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDEqualFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEqualFold(FieldCurrentClassificationRunID, v))
+}
+
+// CurrentClassificationRunIDContainsFold applies the ContainsFold predicate on the "current_classification_run_id" field.
+func CurrentClassificationRunIDContainsFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContainsFold(FieldCurrentClassificationRunID, v))
 }
 
 // ClientIDEQ applies the EQ predicate on the "client_id" field.

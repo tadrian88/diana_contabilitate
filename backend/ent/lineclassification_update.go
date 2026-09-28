@@ -13,6 +13,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 )
 
@@ -38,6 +39,54 @@ func (_u *LineClassificationUpdate) SetEffectiveTypedValue(v *accounting.Value) 
 // ClearEffectiveTypedValue clears the value of the "effective_typed_value" field.
 func (_u *LineClassificationUpdate) ClearEffectiveTypedValue() *LineClassificationUpdate {
 	_u.mutation.ClearEffectiveTypedValue()
+	return _u
+}
+
+// SetLegalCitations sets the "legal_citations" field.
+func (_u *LineClassificationUpdate) SetLegalCitations(v []accounting.LegalCitation) *LineClassificationUpdate {
+	_u.mutation.SetLegalCitations(v)
+	return _u
+}
+
+// AppendLegalCitations appends value to the "legal_citations" field.
+func (_u *LineClassificationUpdate) AppendLegalCitations(v []accounting.LegalCitation) *LineClassificationUpdate {
+	_u.mutation.AppendLegalCitations(v)
+	return _u
+}
+
+// ClearLegalCitations clears the value of the "legal_citations" field.
+func (_u *LineClassificationUpdate) ClearLegalCitations() *LineClassificationUpdate {
+	_u.mutation.ClearLegalCitations()
+	return _u
+}
+
+// SetValidationResults sets the "validation_results" field.
+func (_u *LineClassificationUpdate) SetValidationResults(v []accounting.ValidationResult) *LineClassificationUpdate {
+	_u.mutation.SetValidationResults(v)
+	return _u
+}
+
+// AppendValidationResults appends value to the "validation_results" field.
+func (_u *LineClassificationUpdate) AppendValidationResults(v []accounting.ValidationResult) *LineClassificationUpdate {
+	_u.mutation.AppendValidationResults(v)
+	return _u
+}
+
+// ClearValidationResults clears the value of the "validation_results" field.
+func (_u *LineClassificationUpdate) ClearValidationResults() *LineClassificationUpdate {
+	_u.mutation.ClearValidationResults()
+	return _u
+}
+
+// SetProposalProvenance sets the "proposal_provenance" field.
+func (_u *LineClassificationUpdate) SetProposalProvenance(v *accounting.ProposalProvenance) *LineClassificationUpdate {
+	_u.mutation.SetProposalProvenance(v)
+	return _u
+}
+
+// ClearProposalProvenance clears the value of the "proposal_provenance" field.
+func (_u *LineClassificationUpdate) ClearProposalProvenance() *LineClassificationUpdate {
+	_u.mutation.ClearProposalProvenance()
 	return _u
 }
 
@@ -75,6 +124,26 @@ func (_u *LineClassificationUpdate) ClearEffectiveValue() *LineClassificationUpd
 	return _u
 }
 
+// SetEffectiveSource sets the "effective_source" field.
+func (_u *LineClassificationUpdate) SetEffectiveSource(v string) *LineClassificationUpdate {
+	_u.mutation.SetEffectiveSource(v)
+	return _u
+}
+
+// SetNillableEffectiveSource sets the "effective_source" field if the given value is not nil.
+func (_u *LineClassificationUpdate) SetNillableEffectiveSource(v *string) *LineClassificationUpdate {
+	if v != nil {
+		_u.SetEffectiveSource(*v)
+	}
+	return _u
+}
+
+// ClearEffectiveSource clears the value of the "effective_source" field.
+func (_u *LineClassificationUpdate) ClearEffectiveSource() *LineClassificationUpdate {
+	_u.mutation.ClearEffectiveSource()
+	return _u
+}
+
 // SetReviewStatus sets the "review_status" field.
 func (_u *LineClassificationUpdate) SetReviewStatus(v lineclassification.ReviewStatus) *LineClassificationUpdate {
 	_u.mutation.SetReviewStatus(v)
@@ -85,6 +154,20 @@ func (_u *LineClassificationUpdate) SetReviewStatus(v lineclassification.ReviewS
 func (_u *LineClassificationUpdate) SetNillableReviewStatus(v *lineclassification.ReviewStatus) *LineClassificationUpdate {
 	if v != nil {
 		_u.SetReviewStatus(*v)
+	}
+	return _u
+}
+
+// SetSource sets the "source" field.
+func (_u *LineClassificationUpdate) SetSource(v lineclassification.Source) *LineClassificationUpdate {
+	_u.mutation.SetSource(v)
+	return _u
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_u *LineClassificationUpdate) SetNillableSource(v *lineclassification.Source) *LineClassificationUpdate {
+	if v != nil {
+		_u.SetSource(*v)
 	}
 	return _u
 }
@@ -223,6 +306,11 @@ func (_u *LineClassificationUpdate) check() error {
 			return &ValidationError{Name: "review_status", err: fmt.Errorf(`ent: validator failed for field "LineClassification.review_status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Source(); ok {
+		if err := lineclassification.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "LineClassification.source": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Revision(); ok {
 		if err := lineclassification.RevisionValidator(v); err != nil {
 			return &ValidationError{Name: "revision", err: fmt.Errorf(`ent: validator failed for field "LineClassification.revision": %w`, err)}
@@ -264,6 +352,34 @@ func (_u *LineClassificationUpdate) sqlSave(ctx context.Context) (_node int, err
 	if _u.mutation.DecisionEvidenceCleared() {
 		_spec.ClearField(lineclassification.FieldDecisionEvidence, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.LegalCitations(); ok {
+		_spec.SetField(lineclassification.FieldLegalCitations, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedLegalCitations(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, lineclassification.FieldLegalCitations, value)
+		})
+	}
+	if _u.mutation.LegalCitationsCleared() {
+		_spec.ClearField(lineclassification.FieldLegalCitations, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ValidationResults(); ok {
+		_spec.SetField(lineclassification.FieldValidationResults, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedValidationResults(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, lineclassification.FieldValidationResults, value)
+		})
+	}
+	if _u.mutation.ValidationResultsCleared() {
+		_spec.ClearField(lineclassification.FieldValidationResults, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ProposalProvenance(); ok {
+		_spec.SetField(lineclassification.FieldProposalProvenance, field.TypeJSON, value)
+	}
+	if _u.mutation.ProposalProvenanceCleared() {
+		_spec.ClearField(lineclassification.FieldProposalProvenance, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ReviewReason(); ok {
 		_spec.SetField(lineclassification.FieldReviewReason, field.TypeString, value)
 	}
@@ -276,8 +392,17 @@ func (_u *LineClassificationUpdate) sqlSave(ctx context.Context) (_node int, err
 	if _u.mutation.EffectiveValueCleared() {
 		_spec.ClearField(lineclassification.FieldEffectiveValue, field.TypeString)
 	}
+	if value, ok := _u.mutation.EffectiveSource(); ok {
+		_spec.SetField(lineclassification.FieldEffectiveSource, field.TypeString, value)
+	}
+	if _u.mutation.EffectiveSourceCleared() {
+		_spec.ClearField(lineclassification.FieldEffectiveSource, field.TypeString)
+	}
 	if value, ok := _u.mutation.ReviewStatus(); ok {
 		_spec.SetField(lineclassification.FieldReviewStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.Source(); ok {
+		_spec.SetField(lineclassification.FieldSource, field.TypeEnum, value)
 	}
 	if _u.mutation.AccountMappingIDCleared() {
 		_spec.ClearField(lineclassification.FieldAccountMappingID, field.TypeString)
@@ -344,6 +469,54 @@ func (_u *LineClassificationUpdateOne) ClearEffectiveTypedValue() *LineClassific
 	return _u
 }
 
+// SetLegalCitations sets the "legal_citations" field.
+func (_u *LineClassificationUpdateOne) SetLegalCitations(v []accounting.LegalCitation) *LineClassificationUpdateOne {
+	_u.mutation.SetLegalCitations(v)
+	return _u
+}
+
+// AppendLegalCitations appends value to the "legal_citations" field.
+func (_u *LineClassificationUpdateOne) AppendLegalCitations(v []accounting.LegalCitation) *LineClassificationUpdateOne {
+	_u.mutation.AppendLegalCitations(v)
+	return _u
+}
+
+// ClearLegalCitations clears the value of the "legal_citations" field.
+func (_u *LineClassificationUpdateOne) ClearLegalCitations() *LineClassificationUpdateOne {
+	_u.mutation.ClearLegalCitations()
+	return _u
+}
+
+// SetValidationResults sets the "validation_results" field.
+func (_u *LineClassificationUpdateOne) SetValidationResults(v []accounting.ValidationResult) *LineClassificationUpdateOne {
+	_u.mutation.SetValidationResults(v)
+	return _u
+}
+
+// AppendValidationResults appends value to the "validation_results" field.
+func (_u *LineClassificationUpdateOne) AppendValidationResults(v []accounting.ValidationResult) *LineClassificationUpdateOne {
+	_u.mutation.AppendValidationResults(v)
+	return _u
+}
+
+// ClearValidationResults clears the value of the "validation_results" field.
+func (_u *LineClassificationUpdateOne) ClearValidationResults() *LineClassificationUpdateOne {
+	_u.mutation.ClearValidationResults()
+	return _u
+}
+
+// SetProposalProvenance sets the "proposal_provenance" field.
+func (_u *LineClassificationUpdateOne) SetProposalProvenance(v *accounting.ProposalProvenance) *LineClassificationUpdateOne {
+	_u.mutation.SetProposalProvenance(v)
+	return _u
+}
+
+// ClearProposalProvenance clears the value of the "proposal_provenance" field.
+func (_u *LineClassificationUpdateOne) ClearProposalProvenance() *LineClassificationUpdateOne {
+	_u.mutation.ClearProposalProvenance()
+	return _u
+}
+
 // SetReviewReason sets the "review_reason" field.
 func (_u *LineClassificationUpdateOne) SetReviewReason(v string) *LineClassificationUpdateOne {
 	_u.mutation.SetReviewReason(v)
@@ -378,6 +551,26 @@ func (_u *LineClassificationUpdateOne) ClearEffectiveValue() *LineClassification
 	return _u
 }
 
+// SetEffectiveSource sets the "effective_source" field.
+func (_u *LineClassificationUpdateOne) SetEffectiveSource(v string) *LineClassificationUpdateOne {
+	_u.mutation.SetEffectiveSource(v)
+	return _u
+}
+
+// SetNillableEffectiveSource sets the "effective_source" field if the given value is not nil.
+func (_u *LineClassificationUpdateOne) SetNillableEffectiveSource(v *string) *LineClassificationUpdateOne {
+	if v != nil {
+		_u.SetEffectiveSource(*v)
+	}
+	return _u
+}
+
+// ClearEffectiveSource clears the value of the "effective_source" field.
+func (_u *LineClassificationUpdateOne) ClearEffectiveSource() *LineClassificationUpdateOne {
+	_u.mutation.ClearEffectiveSource()
+	return _u
+}
+
 // SetReviewStatus sets the "review_status" field.
 func (_u *LineClassificationUpdateOne) SetReviewStatus(v lineclassification.ReviewStatus) *LineClassificationUpdateOne {
 	_u.mutation.SetReviewStatus(v)
@@ -388,6 +581,20 @@ func (_u *LineClassificationUpdateOne) SetReviewStatus(v lineclassification.Revi
 func (_u *LineClassificationUpdateOne) SetNillableReviewStatus(v *lineclassification.ReviewStatus) *LineClassificationUpdateOne {
 	if v != nil {
 		_u.SetReviewStatus(*v)
+	}
+	return _u
+}
+
+// SetSource sets the "source" field.
+func (_u *LineClassificationUpdateOne) SetSource(v lineclassification.Source) *LineClassificationUpdateOne {
+	_u.mutation.SetSource(v)
+	return _u
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_u *LineClassificationUpdateOne) SetNillableSource(v *lineclassification.Source) *LineClassificationUpdateOne {
+	if v != nil {
+		_u.SetSource(*v)
 	}
 	return _u
 }
@@ -539,6 +746,11 @@ func (_u *LineClassificationUpdateOne) check() error {
 			return &ValidationError{Name: "review_status", err: fmt.Errorf(`ent: validator failed for field "LineClassification.review_status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Source(); ok {
+		if err := lineclassification.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "LineClassification.source": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Revision(); ok {
 		if err := lineclassification.RevisionValidator(v); err != nil {
 			return &ValidationError{Name: "revision", err: fmt.Errorf(`ent: validator failed for field "LineClassification.revision": %w`, err)}
@@ -597,6 +809,34 @@ func (_u *LineClassificationUpdateOne) sqlSave(ctx context.Context) (_node *Line
 	if _u.mutation.DecisionEvidenceCleared() {
 		_spec.ClearField(lineclassification.FieldDecisionEvidence, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.LegalCitations(); ok {
+		_spec.SetField(lineclassification.FieldLegalCitations, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedLegalCitations(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, lineclassification.FieldLegalCitations, value)
+		})
+	}
+	if _u.mutation.LegalCitationsCleared() {
+		_spec.ClearField(lineclassification.FieldLegalCitations, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ValidationResults(); ok {
+		_spec.SetField(lineclassification.FieldValidationResults, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedValidationResults(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, lineclassification.FieldValidationResults, value)
+		})
+	}
+	if _u.mutation.ValidationResultsCleared() {
+		_spec.ClearField(lineclassification.FieldValidationResults, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ProposalProvenance(); ok {
+		_spec.SetField(lineclassification.FieldProposalProvenance, field.TypeJSON, value)
+	}
+	if _u.mutation.ProposalProvenanceCleared() {
+		_spec.ClearField(lineclassification.FieldProposalProvenance, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ReviewReason(); ok {
 		_spec.SetField(lineclassification.FieldReviewReason, field.TypeString, value)
 	}
@@ -609,8 +849,17 @@ func (_u *LineClassificationUpdateOne) sqlSave(ctx context.Context) (_node *Line
 	if _u.mutation.EffectiveValueCleared() {
 		_spec.ClearField(lineclassification.FieldEffectiveValue, field.TypeString)
 	}
+	if value, ok := _u.mutation.EffectiveSource(); ok {
+		_spec.SetField(lineclassification.FieldEffectiveSource, field.TypeString, value)
+	}
+	if _u.mutation.EffectiveSourceCleared() {
+		_spec.ClearField(lineclassification.FieldEffectiveSource, field.TypeString)
+	}
 	if value, ok := _u.mutation.ReviewStatus(); ok {
 		_spec.SetField(lineclassification.FieldReviewStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.Source(); ok {
+		_spec.SetField(lineclassification.FieldSource, field.TypeEnum, value)
 	}
 	if _u.mutation.AccountMappingIDCleared() {
 		_spec.ClearField(lineclassification.FieldAccountMappingID, field.TypeString)

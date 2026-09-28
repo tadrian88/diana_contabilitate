@@ -21,6 +21,7 @@ type Command struct {
 	Approve                bool                `json:"approve"`
 	Evidence               []string            `json:"evidence"`
 	ExpectedProfileVersion int                 `json:"expectedProfileVersion"`
+	SupersedesProfileID    string              `json:"supersedesProfileId"`
 	SagaEnabled            bool                `json:"sagaEnabled"`
 	CommandID              string              `json:"-"`
 	Actor                  requestactor.Actor  `json:"-"`

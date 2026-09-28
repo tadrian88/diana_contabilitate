@@ -26,6 +26,8 @@ type Tx struct {
 	ActivityEvent *ActivityEventClient
 	// ClassificationRule is the client for interacting with the ClassificationRule builders.
 	ClassificationRule *ClassificationRuleClient
+	// ClassificationRun is the client for interacting with the ClassificationRun builders.
+	ClassificationRun *ClassificationRunClient
 	// ClientAccountingProfile is the client for interacting with the ClientAccountingProfile builders.
 	ClientAccountingProfile *ClientAccountingProfileClient
 	// Contract is the client for interacting with the Contract builders.
@@ -200,6 +202,7 @@ func (tx *Tx) init() {
 	tx.AccountingRulePack = NewAccountingRulePackClient(tx.config)
 	tx.ActivityEvent = NewActivityEventClient(tx.config)
 	tx.ClassificationRule = NewClassificationRuleClient(tx.config)
+	tx.ClassificationRun = NewClassificationRunClient(tx.config)
 	tx.ClientAccountingProfile = NewClientAccountingProfileClient(tx.config)
 	tx.Contract = NewContractClient(tx.config)
 	tx.ContractExtractionAttempt = NewContractExtractionAttemptClient(tx.config)

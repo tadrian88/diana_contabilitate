@@ -24,4 +24,6 @@ export const queryKeys = {
     list: (scope: ClientScope) => ['rules', 'list', scope] as const,
     detail: (id: string) => ['rules', 'detail', id] as const,
   },
+  knowledge: {root:['approved-knowledge'] as const,list:(scope:ClientScope)=>['approved-knowledge',scope] as const},
+  legislation: ['legislation-sources'] as const,
 }

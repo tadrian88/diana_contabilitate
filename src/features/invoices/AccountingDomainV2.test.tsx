@@ -5,6 +5,7 @@ import type { ClassificationReviewItem, Invoice, DomainValue } from '../../domai
 import { DomainCorrectionDialog } from './DomainCorrectionDialog'
 import { ClassificationWorkspace } from './ClassificationWorkspace'
 import { CLASSIFICATION_DIMENSION_LABELS } from '../../domain/invoice'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 function fixture(): Invoice {
   return { id: 'TEST_ONLY-domain', scenario: 'PROCESSING', primaryDemo: false, clientId: 'TEST_ONLY-client', supplierName: 'TEST_ONLY supplier', documentNumber: 'TEST_ONLY-001', issueDate: '2026-09-15', total: { amount: 121, currency: 'RON' }, spvReference: 'TEST_ONLY-source', modelVersion: 'ACCOUNTING_DOMAIN_V2', pipelineStatus: 'READY_FOR_SAGA', pipelinePath: ['DOWNLOADED', 'ARCHIVED', 'MATCHING', 'DEDUPE_CHECKED', 'HEADER_READ', 'LINES_READ', 'CLASSIFIED', 'READY_FOR_SAGA', 'EXPORTING', 'EXPORTED'], sagaStatus: 'READY', autoRun: false, revision: 3, authority: 'MOCK', activity: [], lines: [{ id: 'line', position: 1, description: 'TEST_ONLY service', unit: 'H87', quantity: 1, unitPrice: { amount: 100, currency: 'RON' }, netValue: { amount: 100, currency: 'RON' }, vatValue: { amount: 21, currency: 'RON' }, grossValue: { amount: 121, currency: 'RON' }, vatLabel: '21%', sourceFacts: { sourceId: 'SOURCE-1', path: '/Invoice/InvoiceLine[1]', code: 'S', rate: '21', scheme: 'VAT', vatOrigin: 'CALCULATED' }, classifications: [] }] }
@@ -13,7 +14,8 @@ function item(dimension: ClassificationReviewItem['dimension']): ClassificationR
 
 describe('accounting domain v2', () => {
   it('shows four dimensions and source VAT origin without legacy instruction', () => {
-    render(<MemoryRouter><ClassificationWorkspace invoice={fixture()} /></MemoryRouter>)
+    const client = new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}})
+    render(<QueryClientProvider client={client}><MemoryRouter><ClassificationWorkspace invoice={fixture()} /></MemoryRouter></QueryClientProvider>)
     expect(screen.getByText('Tratament TVA')).toBeInTheDocument()
     expect(screen.getByText('Drept de deducere TVA')).toBeInTheDocument()
     expect(screen.getByText(CLASSIFICATION_DIMENSION_LABELS.EXPENSE_TAX_TREATMENT)).toBeInTheDocument()
@@ -57,5 +59,21 @@ describe('accounting domain v2', () => {
     await user.click(screen.getByRole('button', { name: 'Salvează decizia' }))
     expect(submit).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toHaveTextContent('Sursa nu conține cota/categoria')
+  })
+  it('shows granular AI validation while retaining a valid sibling proposal', async () => {
+    const invoice = fixture()
+    invoice.pipelineStatus = 'AWAITING_REVIEW'
+    invoice.pipelinePath.splice(-3, 0, 'AWAITING_REVIEW')
+    invoice.task = {id:'task-ai',type:'CLASSIFICATION',status:'OPEN',createdAt:'2026-09-25T10:00:00Z',title:'Revizuiește propunerile AI',reason:'TEST_ONLY',revision:1,classificationItems:[
+      {...item('ACCOUNT'),id:'account-ai',source:'AI_PROPOSAL',proposedValue:'628',proposedTypedValue:{kind:'ACCOUNT',account:'628'},explanation:'AI account proposal',validationResults:[{code:'ACCOUNT_NOT_POSTABLE',message:'Cont sintetic.',suggestedAccounts:['6281']}],legalCitations:[{fragmentId:'f1',versionId:'v1',citationKey:'TEST_ONLY cont 628',contentHash:'hash',verified:true}]},
+      {...item('VAT_TREATMENT'),id:'vat-ai',source:'AI_PROPOSAL',proposedValue:'ORDINARY',proposedTypedValue:{kind:'ORDINARY',timing:'IMMEDIATE',sourceCategory:'S',sourceRate:'21'},explanation:'Valid VAT sibling',validationResults:[],legalCitations:[{fragmentId:'f2',versionId:'v1',citationKey:'TEST_ONLY VAT',contentHash:'hash',verified:true}]},
+    ]}
+    const client = new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}})
+    render(<QueryClientProvider client={client}><MemoryRouter><ClassificationWorkspace invoice={invoice} /></MemoryRouter></QueryClientProvider>)
+    expect(screen.getByText(/Contul este sintetic și nu poate fi utilizat direct/)).toBeInTheDocument()
+    expect(await screen.findByRole('button', {name:/Selectează contul 6281 —/})).toBeInTheDocument()
+    expect(screen.getAllByText('Valid VAT sibling').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Sursă: Propunere automată/)).toHaveLength(2)
+    expect(screen.getByText('TEST_ONLY VAT')).toBeInTheDocument()
   })
 })

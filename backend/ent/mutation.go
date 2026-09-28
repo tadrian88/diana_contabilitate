@@ -11,6 +11,7 @@ import (
 	"diana-contabilitate/backend/ent/accountmappingversion"
 	"diana-contabilitate/backend/ent/activityevent"
 	"diana-contabilitate/backend/ent/classificationrule"
+	"diana-contabilitate/backend/ent/classificationrun"
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
 	"diana-contabilitate/backend/ent/contract"
 	"diana-contabilitate/backend/ent/contractextractionattempt"
@@ -58,6 +59,7 @@ const (
 	TypeAccountingRulePack         = "AccountingRulePack"
 	TypeActivityEvent              = "ActivityEvent"
 	TypeClassificationRule         = "ClassificationRule"
+	TypeClassificationRun          = "ClassificationRun"
 	TypeClientAccountingProfile    = "ClientAccountingProfile"
 	TypeContract                   = "Contract"
 	TypeContractExtractionAttempt  = "ContractExtractionAttempt"
@@ -8615,21 +8617,1278 @@ func (m *ClassificationRuleMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown ClassificationRule edge %s", name)
 }
 
+// ClassificationRunMutation represents an operation that mutates the ClassificationRun nodes in the graph.
+type ClassificationRunMutation struct {
+	config
+	op                  Op
+	typ                 string
+	id                  *string
+	client_id           *string
+	invoice_id          *string
+	invoice_revision    *uint64
+	addinvoice_revision *int64
+	snapshot            **accounting.Snapshot
+	profile_id          *string
+	profile_version     *int
+	addprofile_version  *int
+	context_fingerprint *string
+	policy_version      *string
+	status              *classificationrun.Status
+	blocker_code        *string
+	supersedes_run_id   *string
+	command_key         *string
+	actor_id            *string
+	actor_display       *string
+	created_at          *time.Time
+	clearedFields       map[string]struct{}
+	done                bool
+	oldValue            func(context.Context) (*ClassificationRun, error)
+	predicates          []predicate.ClassificationRun
+}
+
+var _ ent.Mutation = (*ClassificationRunMutation)(nil)
+
+// classificationrunOption allows management of the mutation configuration using functional options.
+type classificationrunOption func(*ClassificationRunMutation)
+
+// newClassificationRunMutation creates new mutation for the ClassificationRun entity.
+func newClassificationRunMutation(c config, op Op, opts ...classificationrunOption) *ClassificationRunMutation {
+	m := &ClassificationRunMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeClassificationRun,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withClassificationRunID sets the ID field of the mutation.
+func withClassificationRunID(id string) classificationrunOption {
+	return func(m *ClassificationRunMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ClassificationRun
+		)
+		m.oldValue = func(ctx context.Context) (*ClassificationRun, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ClassificationRun.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withClassificationRun sets the old ClassificationRun of the mutation.
+func withClassificationRun(node *ClassificationRun) classificationrunOption {
+	return func(m *ClassificationRunMutation) {
+		m.oldValue = func(context.Context) (*ClassificationRun, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ClassificationRunMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ClassificationRunMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ClassificationRun entities.
+func (m *ClassificationRunMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ClassificationRunMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ClassificationRunMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ClassificationRun.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetClientID sets the "client_id" field.
+func (m *ClassificationRunMutation) SetClientID(s string) {
+	m.client_id = &s
+}
+
+// ClientID returns the value of the "client_id" field in the mutation.
+func (m *ClassificationRunMutation) ClientID() (r string, exists bool) {
+	v := m.client_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientID returns the old "client_id" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldClientID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientID: %w", err)
+	}
+	return oldValue.ClientID, nil
+}
+
+// ResetClientID resets all changes to the "client_id" field.
+func (m *ClassificationRunMutation) ResetClientID() {
+	m.client_id = nil
+}
+
+// SetInvoiceID sets the "invoice_id" field.
+func (m *ClassificationRunMutation) SetInvoiceID(s string) {
+	m.invoice_id = &s
+}
+
+// InvoiceID returns the value of the "invoice_id" field in the mutation.
+func (m *ClassificationRunMutation) InvoiceID() (r string, exists bool) {
+	v := m.invoice_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInvoiceID returns the old "invoice_id" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldInvoiceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInvoiceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInvoiceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInvoiceID: %w", err)
+	}
+	return oldValue.InvoiceID, nil
+}
+
+// ResetInvoiceID resets all changes to the "invoice_id" field.
+func (m *ClassificationRunMutation) ResetInvoiceID() {
+	m.invoice_id = nil
+}
+
+// SetInvoiceRevision sets the "invoice_revision" field.
+func (m *ClassificationRunMutation) SetInvoiceRevision(u uint64) {
+	m.invoice_revision = &u
+	m.addinvoice_revision = nil
+}
+
+// InvoiceRevision returns the value of the "invoice_revision" field in the mutation.
+func (m *ClassificationRunMutation) InvoiceRevision() (r uint64, exists bool) {
+	v := m.invoice_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInvoiceRevision returns the old "invoice_revision" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldInvoiceRevision(ctx context.Context) (v uint64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInvoiceRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInvoiceRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInvoiceRevision: %w", err)
+	}
+	return oldValue.InvoiceRevision, nil
+}
+
+// AddInvoiceRevision adds u to the "invoice_revision" field.
+func (m *ClassificationRunMutation) AddInvoiceRevision(u int64) {
+	if m.addinvoice_revision != nil {
+		*m.addinvoice_revision += u
+	} else {
+		m.addinvoice_revision = &u
+	}
+}
+
+// AddedInvoiceRevision returns the value that was added to the "invoice_revision" field in this mutation.
+func (m *ClassificationRunMutation) AddedInvoiceRevision() (r int64, exists bool) {
+	v := m.addinvoice_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetInvoiceRevision resets all changes to the "invoice_revision" field.
+func (m *ClassificationRunMutation) ResetInvoiceRevision() {
+	m.invoice_revision = nil
+	m.addinvoice_revision = nil
+}
+
+// SetSnapshot sets the "snapshot" field.
+func (m *ClassificationRunMutation) SetSnapshot(a *accounting.Snapshot) {
+	m.snapshot = &a
+}
+
+// Snapshot returns the value of the "snapshot" field in the mutation.
+func (m *ClassificationRunMutation) Snapshot() (r *accounting.Snapshot, exists bool) {
+	v := m.snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSnapshot returns the old "snapshot" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldSnapshot(ctx context.Context) (v *accounting.Snapshot, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSnapshot: %w", err)
+	}
+	return oldValue.Snapshot, nil
+}
+
+// ResetSnapshot resets all changes to the "snapshot" field.
+func (m *ClassificationRunMutation) ResetSnapshot() {
+	m.snapshot = nil
+}
+
+// SetProfileID sets the "profile_id" field.
+func (m *ClassificationRunMutation) SetProfileID(s string) {
+	m.profile_id = &s
+}
+
+// ProfileID returns the value of the "profile_id" field in the mutation.
+func (m *ClassificationRunMutation) ProfileID() (r string, exists bool) {
+	v := m.profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProfileID returns the old "profile_id" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldProfileID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProfileID: %w", err)
+	}
+	return oldValue.ProfileID, nil
+}
+
+// ClearProfileID clears the value of the "profile_id" field.
+func (m *ClassificationRunMutation) ClearProfileID() {
+	m.profile_id = nil
+	m.clearedFields[classificationrun.FieldProfileID] = struct{}{}
+}
+
+// ProfileIDCleared returns if the "profile_id" field was cleared in this mutation.
+func (m *ClassificationRunMutation) ProfileIDCleared() bool {
+	_, ok := m.clearedFields[classificationrun.FieldProfileID]
+	return ok
+}
+
+// ResetProfileID resets all changes to the "profile_id" field.
+func (m *ClassificationRunMutation) ResetProfileID() {
+	m.profile_id = nil
+	delete(m.clearedFields, classificationrun.FieldProfileID)
+}
+
+// SetProfileVersion sets the "profile_version" field.
+func (m *ClassificationRunMutation) SetProfileVersion(i int) {
+	m.profile_version = &i
+	m.addprofile_version = nil
+}
+
+// ProfileVersion returns the value of the "profile_version" field in the mutation.
+func (m *ClassificationRunMutation) ProfileVersion() (r int, exists bool) {
+	v := m.profile_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProfileVersion returns the old "profile_version" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldProfileVersion(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProfileVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProfileVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProfileVersion: %w", err)
+	}
+	return oldValue.ProfileVersion, nil
+}
+
+// AddProfileVersion adds i to the "profile_version" field.
+func (m *ClassificationRunMutation) AddProfileVersion(i int) {
+	if m.addprofile_version != nil {
+		*m.addprofile_version += i
+	} else {
+		m.addprofile_version = &i
+	}
+}
+
+// AddedProfileVersion returns the value that was added to the "profile_version" field in this mutation.
+func (m *ClassificationRunMutation) AddedProfileVersion() (r int, exists bool) {
+	v := m.addprofile_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearProfileVersion clears the value of the "profile_version" field.
+func (m *ClassificationRunMutation) ClearProfileVersion() {
+	m.profile_version = nil
+	m.addprofile_version = nil
+	m.clearedFields[classificationrun.FieldProfileVersion] = struct{}{}
+}
+
+// ProfileVersionCleared returns if the "profile_version" field was cleared in this mutation.
+func (m *ClassificationRunMutation) ProfileVersionCleared() bool {
+	_, ok := m.clearedFields[classificationrun.FieldProfileVersion]
+	return ok
+}
+
+// ResetProfileVersion resets all changes to the "profile_version" field.
+func (m *ClassificationRunMutation) ResetProfileVersion() {
+	m.profile_version = nil
+	m.addprofile_version = nil
+	delete(m.clearedFields, classificationrun.FieldProfileVersion)
+}
+
+// SetContextFingerprint sets the "context_fingerprint" field.
+func (m *ClassificationRunMutation) SetContextFingerprint(s string) {
+	m.context_fingerprint = &s
+}
+
+// ContextFingerprint returns the value of the "context_fingerprint" field in the mutation.
+func (m *ClassificationRunMutation) ContextFingerprint() (r string, exists bool) {
+	v := m.context_fingerprint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContextFingerprint returns the old "context_fingerprint" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldContextFingerprint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContextFingerprint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContextFingerprint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContextFingerprint: %w", err)
+	}
+	return oldValue.ContextFingerprint, nil
+}
+
+// ResetContextFingerprint resets all changes to the "context_fingerprint" field.
+func (m *ClassificationRunMutation) ResetContextFingerprint() {
+	m.context_fingerprint = nil
+}
+
+// SetPolicyVersion sets the "policy_version" field.
+func (m *ClassificationRunMutation) SetPolicyVersion(s string) {
+	m.policy_version = &s
+}
+
+// PolicyVersion returns the value of the "policy_version" field in the mutation.
+func (m *ClassificationRunMutation) PolicyVersion() (r string, exists bool) {
+	v := m.policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPolicyVersion returns the old "policy_version" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldPolicyVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPolicyVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPolicyVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPolicyVersion: %w", err)
+	}
+	return oldValue.PolicyVersion, nil
+}
+
+// ResetPolicyVersion resets all changes to the "policy_version" field.
+func (m *ClassificationRunMutation) ResetPolicyVersion() {
+	m.policy_version = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ClassificationRunMutation) SetStatus(c classificationrun.Status) {
+	m.status = &c
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ClassificationRunMutation) Status() (r classificationrun.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldStatus(ctx context.Context) (v classificationrun.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ClassificationRunMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetBlockerCode sets the "blocker_code" field.
+func (m *ClassificationRunMutation) SetBlockerCode(s string) {
+	m.blocker_code = &s
+}
+
+// BlockerCode returns the value of the "blocker_code" field in the mutation.
+func (m *ClassificationRunMutation) BlockerCode() (r string, exists bool) {
+	v := m.blocker_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBlockerCode returns the old "blocker_code" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldBlockerCode(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBlockerCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBlockerCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBlockerCode: %w", err)
+	}
+	return oldValue.BlockerCode, nil
+}
+
+// ClearBlockerCode clears the value of the "blocker_code" field.
+func (m *ClassificationRunMutation) ClearBlockerCode() {
+	m.blocker_code = nil
+	m.clearedFields[classificationrun.FieldBlockerCode] = struct{}{}
+}
+
+// BlockerCodeCleared returns if the "blocker_code" field was cleared in this mutation.
+func (m *ClassificationRunMutation) BlockerCodeCleared() bool {
+	_, ok := m.clearedFields[classificationrun.FieldBlockerCode]
+	return ok
+}
+
+// ResetBlockerCode resets all changes to the "blocker_code" field.
+func (m *ClassificationRunMutation) ResetBlockerCode() {
+	m.blocker_code = nil
+	delete(m.clearedFields, classificationrun.FieldBlockerCode)
+}
+
+// SetSupersedesRunID sets the "supersedes_run_id" field.
+func (m *ClassificationRunMutation) SetSupersedesRunID(s string) {
+	m.supersedes_run_id = &s
+}
+
+// SupersedesRunID returns the value of the "supersedes_run_id" field in the mutation.
+func (m *ClassificationRunMutation) SupersedesRunID() (r string, exists bool) {
+	v := m.supersedes_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSupersedesRunID returns the old "supersedes_run_id" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldSupersedesRunID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSupersedesRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSupersedesRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSupersedesRunID: %w", err)
+	}
+	return oldValue.SupersedesRunID, nil
+}
+
+// ClearSupersedesRunID clears the value of the "supersedes_run_id" field.
+func (m *ClassificationRunMutation) ClearSupersedesRunID() {
+	m.supersedes_run_id = nil
+	m.clearedFields[classificationrun.FieldSupersedesRunID] = struct{}{}
+}
+
+// SupersedesRunIDCleared returns if the "supersedes_run_id" field was cleared in this mutation.
+func (m *ClassificationRunMutation) SupersedesRunIDCleared() bool {
+	_, ok := m.clearedFields[classificationrun.FieldSupersedesRunID]
+	return ok
+}
+
+// ResetSupersedesRunID resets all changes to the "supersedes_run_id" field.
+func (m *ClassificationRunMutation) ResetSupersedesRunID() {
+	m.supersedes_run_id = nil
+	delete(m.clearedFields, classificationrun.FieldSupersedesRunID)
+}
+
+// SetCommandKey sets the "command_key" field.
+func (m *ClassificationRunMutation) SetCommandKey(s string) {
+	m.command_key = &s
+}
+
+// CommandKey returns the value of the "command_key" field in the mutation.
+func (m *ClassificationRunMutation) CommandKey() (r string, exists bool) {
+	v := m.command_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCommandKey returns the old "command_key" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldCommandKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCommandKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCommandKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCommandKey: %w", err)
+	}
+	return oldValue.CommandKey, nil
+}
+
+// ResetCommandKey resets all changes to the "command_key" field.
+func (m *ClassificationRunMutation) ResetCommandKey() {
+	m.command_key = nil
+}
+
+// SetActorID sets the "actor_id" field.
+func (m *ClassificationRunMutation) SetActorID(s string) {
+	m.actor_id = &s
+}
+
+// ActorID returns the value of the "actor_id" field in the mutation.
+func (m *ClassificationRunMutation) ActorID() (r string, exists bool) {
+	v := m.actor_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActorID returns the old "actor_id" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldActorID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActorID: %w", err)
+	}
+	return oldValue.ActorID, nil
+}
+
+// ClearActorID clears the value of the "actor_id" field.
+func (m *ClassificationRunMutation) ClearActorID() {
+	m.actor_id = nil
+	m.clearedFields[classificationrun.FieldActorID] = struct{}{}
+}
+
+// ActorIDCleared returns if the "actor_id" field was cleared in this mutation.
+func (m *ClassificationRunMutation) ActorIDCleared() bool {
+	_, ok := m.clearedFields[classificationrun.FieldActorID]
+	return ok
+}
+
+// ResetActorID resets all changes to the "actor_id" field.
+func (m *ClassificationRunMutation) ResetActorID() {
+	m.actor_id = nil
+	delete(m.clearedFields, classificationrun.FieldActorID)
+}
+
+// SetActorDisplay sets the "actor_display" field.
+func (m *ClassificationRunMutation) SetActorDisplay(s string) {
+	m.actor_display = &s
+}
+
+// ActorDisplay returns the value of the "actor_display" field in the mutation.
+func (m *ClassificationRunMutation) ActorDisplay() (r string, exists bool) {
+	v := m.actor_display
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActorDisplay returns the old "actor_display" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldActorDisplay(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActorDisplay is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActorDisplay requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActorDisplay: %w", err)
+	}
+	return oldValue.ActorDisplay, nil
+}
+
+// ResetActorDisplay resets all changes to the "actor_display" field.
+func (m *ClassificationRunMutation) ResetActorDisplay() {
+	m.actor_display = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ClassificationRunMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ClassificationRunMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ClassificationRun entity.
+// If the ClassificationRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClassificationRunMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ClassificationRunMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the ClassificationRunMutation builder.
+func (m *ClassificationRunMutation) Where(ps ...predicate.ClassificationRun) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ClassificationRunMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ClassificationRunMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ClassificationRun, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ClassificationRunMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ClassificationRunMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ClassificationRun).
+func (m *ClassificationRunMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ClassificationRunMutation) Fields() []string {
+	fields := make([]string, 0, 15)
+	if m.client_id != nil {
+		fields = append(fields, classificationrun.FieldClientID)
+	}
+	if m.invoice_id != nil {
+		fields = append(fields, classificationrun.FieldInvoiceID)
+	}
+	if m.invoice_revision != nil {
+		fields = append(fields, classificationrun.FieldInvoiceRevision)
+	}
+	if m.snapshot != nil {
+		fields = append(fields, classificationrun.FieldSnapshot)
+	}
+	if m.profile_id != nil {
+		fields = append(fields, classificationrun.FieldProfileID)
+	}
+	if m.profile_version != nil {
+		fields = append(fields, classificationrun.FieldProfileVersion)
+	}
+	if m.context_fingerprint != nil {
+		fields = append(fields, classificationrun.FieldContextFingerprint)
+	}
+	if m.policy_version != nil {
+		fields = append(fields, classificationrun.FieldPolicyVersion)
+	}
+	if m.status != nil {
+		fields = append(fields, classificationrun.FieldStatus)
+	}
+	if m.blocker_code != nil {
+		fields = append(fields, classificationrun.FieldBlockerCode)
+	}
+	if m.supersedes_run_id != nil {
+		fields = append(fields, classificationrun.FieldSupersedesRunID)
+	}
+	if m.command_key != nil {
+		fields = append(fields, classificationrun.FieldCommandKey)
+	}
+	if m.actor_id != nil {
+		fields = append(fields, classificationrun.FieldActorID)
+	}
+	if m.actor_display != nil {
+		fields = append(fields, classificationrun.FieldActorDisplay)
+	}
+	if m.created_at != nil {
+		fields = append(fields, classificationrun.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ClassificationRunMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case classificationrun.FieldClientID:
+		return m.ClientID()
+	case classificationrun.FieldInvoiceID:
+		return m.InvoiceID()
+	case classificationrun.FieldInvoiceRevision:
+		return m.InvoiceRevision()
+	case classificationrun.FieldSnapshot:
+		return m.Snapshot()
+	case classificationrun.FieldProfileID:
+		return m.ProfileID()
+	case classificationrun.FieldProfileVersion:
+		return m.ProfileVersion()
+	case classificationrun.FieldContextFingerprint:
+		return m.ContextFingerprint()
+	case classificationrun.FieldPolicyVersion:
+		return m.PolicyVersion()
+	case classificationrun.FieldStatus:
+		return m.Status()
+	case classificationrun.FieldBlockerCode:
+		return m.BlockerCode()
+	case classificationrun.FieldSupersedesRunID:
+		return m.SupersedesRunID()
+	case classificationrun.FieldCommandKey:
+		return m.CommandKey()
+	case classificationrun.FieldActorID:
+		return m.ActorID()
+	case classificationrun.FieldActorDisplay:
+		return m.ActorDisplay()
+	case classificationrun.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ClassificationRunMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case classificationrun.FieldClientID:
+		return m.OldClientID(ctx)
+	case classificationrun.FieldInvoiceID:
+		return m.OldInvoiceID(ctx)
+	case classificationrun.FieldInvoiceRevision:
+		return m.OldInvoiceRevision(ctx)
+	case classificationrun.FieldSnapshot:
+		return m.OldSnapshot(ctx)
+	case classificationrun.FieldProfileID:
+		return m.OldProfileID(ctx)
+	case classificationrun.FieldProfileVersion:
+		return m.OldProfileVersion(ctx)
+	case classificationrun.FieldContextFingerprint:
+		return m.OldContextFingerprint(ctx)
+	case classificationrun.FieldPolicyVersion:
+		return m.OldPolicyVersion(ctx)
+	case classificationrun.FieldStatus:
+		return m.OldStatus(ctx)
+	case classificationrun.FieldBlockerCode:
+		return m.OldBlockerCode(ctx)
+	case classificationrun.FieldSupersedesRunID:
+		return m.OldSupersedesRunID(ctx)
+	case classificationrun.FieldCommandKey:
+		return m.OldCommandKey(ctx)
+	case classificationrun.FieldActorID:
+		return m.OldActorID(ctx)
+	case classificationrun.FieldActorDisplay:
+		return m.OldActorDisplay(ctx)
+	case classificationrun.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ClassificationRun field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ClassificationRunMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case classificationrun.FieldClientID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientID(v)
+		return nil
+	case classificationrun.FieldInvoiceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInvoiceID(v)
+		return nil
+	case classificationrun.FieldInvoiceRevision:
+		v, ok := value.(uint64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInvoiceRevision(v)
+		return nil
+	case classificationrun.FieldSnapshot:
+		v, ok := value.(*accounting.Snapshot)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSnapshot(v)
+		return nil
+	case classificationrun.FieldProfileID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProfileID(v)
+		return nil
+	case classificationrun.FieldProfileVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProfileVersion(v)
+		return nil
+	case classificationrun.FieldContextFingerprint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContextFingerprint(v)
+		return nil
+	case classificationrun.FieldPolicyVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPolicyVersion(v)
+		return nil
+	case classificationrun.FieldStatus:
+		v, ok := value.(classificationrun.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case classificationrun.FieldBlockerCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBlockerCode(v)
+		return nil
+	case classificationrun.FieldSupersedesRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSupersedesRunID(v)
+		return nil
+	case classificationrun.FieldCommandKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCommandKey(v)
+		return nil
+	case classificationrun.FieldActorID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActorID(v)
+		return nil
+	case classificationrun.FieldActorDisplay:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActorDisplay(v)
+		return nil
+	case classificationrun.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ClassificationRun field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ClassificationRunMutation) AddedFields() []string {
+	var fields []string
+	if m.addinvoice_revision != nil {
+		fields = append(fields, classificationrun.FieldInvoiceRevision)
+	}
+	if m.addprofile_version != nil {
+		fields = append(fields, classificationrun.FieldProfileVersion)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ClassificationRunMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case classificationrun.FieldInvoiceRevision:
+		return m.AddedInvoiceRevision()
+	case classificationrun.FieldProfileVersion:
+		return m.AddedProfileVersion()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ClassificationRunMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case classificationrun.FieldInvoiceRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddInvoiceRevision(v)
+		return nil
+	case classificationrun.FieldProfileVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProfileVersion(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ClassificationRun numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ClassificationRunMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(classificationrun.FieldProfileID) {
+		fields = append(fields, classificationrun.FieldProfileID)
+	}
+	if m.FieldCleared(classificationrun.FieldProfileVersion) {
+		fields = append(fields, classificationrun.FieldProfileVersion)
+	}
+	if m.FieldCleared(classificationrun.FieldBlockerCode) {
+		fields = append(fields, classificationrun.FieldBlockerCode)
+	}
+	if m.FieldCleared(classificationrun.FieldSupersedesRunID) {
+		fields = append(fields, classificationrun.FieldSupersedesRunID)
+	}
+	if m.FieldCleared(classificationrun.FieldActorID) {
+		fields = append(fields, classificationrun.FieldActorID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ClassificationRunMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ClassificationRunMutation) ClearField(name string) error {
+	switch name {
+	case classificationrun.FieldProfileID:
+		m.ClearProfileID()
+		return nil
+	case classificationrun.FieldProfileVersion:
+		m.ClearProfileVersion()
+		return nil
+	case classificationrun.FieldBlockerCode:
+		m.ClearBlockerCode()
+		return nil
+	case classificationrun.FieldSupersedesRunID:
+		m.ClearSupersedesRunID()
+		return nil
+	case classificationrun.FieldActorID:
+		m.ClearActorID()
+		return nil
+	}
+	return fmt.Errorf("unknown ClassificationRun nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ClassificationRunMutation) ResetField(name string) error {
+	switch name {
+	case classificationrun.FieldClientID:
+		m.ResetClientID()
+		return nil
+	case classificationrun.FieldInvoiceID:
+		m.ResetInvoiceID()
+		return nil
+	case classificationrun.FieldInvoiceRevision:
+		m.ResetInvoiceRevision()
+		return nil
+	case classificationrun.FieldSnapshot:
+		m.ResetSnapshot()
+		return nil
+	case classificationrun.FieldProfileID:
+		m.ResetProfileID()
+		return nil
+	case classificationrun.FieldProfileVersion:
+		m.ResetProfileVersion()
+		return nil
+	case classificationrun.FieldContextFingerprint:
+		m.ResetContextFingerprint()
+		return nil
+	case classificationrun.FieldPolicyVersion:
+		m.ResetPolicyVersion()
+		return nil
+	case classificationrun.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case classificationrun.FieldBlockerCode:
+		m.ResetBlockerCode()
+		return nil
+	case classificationrun.FieldSupersedesRunID:
+		m.ResetSupersedesRunID()
+		return nil
+	case classificationrun.FieldCommandKey:
+		m.ResetCommandKey()
+		return nil
+	case classificationrun.FieldActorID:
+		m.ResetActorID()
+		return nil
+	case classificationrun.FieldActorDisplay:
+		m.ResetActorDisplay()
+		return nil
+	case classificationrun.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ClassificationRun field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ClassificationRunMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ClassificationRunMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ClassificationRunMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ClassificationRunMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ClassificationRunMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ClassificationRunMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ClassificationRunMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ClassificationRun unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ClassificationRunMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ClassificationRun edge %s", name)
+}
+
 // ClientAccountingProfileMutation represents an operation that mutates the ClientAccountingProfile nodes in the graph.
 type ClientAccountingProfileMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *string
-	client_id     *string
-	version       *int
-	addversion    *int
-	payload       **accounting.Profile
-	created_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*ClientAccountingProfile, error)
-	predicates    []predicate.ClientAccountingProfile
+	op                    Op
+	typ                   string
+	id                    *string
+	client_id             *string
+	version               *int
+	addversion            *int
+	payload               **accounting.Profile
+	supersedes_profile_id *string
+	created_at            *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*ClientAccountingProfile, error)
+	predicates            []predicate.ClientAccountingProfile
 }
 
 var _ ent.Mutation = (*ClientAccountingProfileMutation)(nil)
@@ -8864,6 +10123,55 @@ func (m *ClientAccountingProfileMutation) ResetPayload() {
 	m.payload = nil
 }
 
+// SetSupersedesProfileID sets the "supersedes_profile_id" field.
+func (m *ClientAccountingProfileMutation) SetSupersedesProfileID(s string) {
+	m.supersedes_profile_id = &s
+}
+
+// SupersedesProfileID returns the value of the "supersedes_profile_id" field in the mutation.
+func (m *ClientAccountingProfileMutation) SupersedesProfileID() (r string, exists bool) {
+	v := m.supersedes_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSupersedesProfileID returns the old "supersedes_profile_id" field's value of the ClientAccountingProfile entity.
+// If the ClientAccountingProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ClientAccountingProfileMutation) OldSupersedesProfileID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSupersedesProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSupersedesProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSupersedesProfileID: %w", err)
+	}
+	return oldValue.SupersedesProfileID, nil
+}
+
+// ClearSupersedesProfileID clears the value of the "supersedes_profile_id" field.
+func (m *ClientAccountingProfileMutation) ClearSupersedesProfileID() {
+	m.supersedes_profile_id = nil
+	m.clearedFields[clientaccountingprofile.FieldSupersedesProfileID] = struct{}{}
+}
+
+// SupersedesProfileIDCleared returns if the "supersedes_profile_id" field was cleared in this mutation.
+func (m *ClientAccountingProfileMutation) SupersedesProfileIDCleared() bool {
+	_, ok := m.clearedFields[clientaccountingprofile.FieldSupersedesProfileID]
+	return ok
+}
+
+// ResetSupersedesProfileID resets all changes to the "supersedes_profile_id" field.
+func (m *ClientAccountingProfileMutation) ResetSupersedesProfileID() {
+	m.supersedes_profile_id = nil
+	delete(m.clearedFields, clientaccountingprofile.FieldSupersedesProfileID)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *ClientAccountingProfileMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -8934,7 +10242,7 @@ func (m *ClientAccountingProfileMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ClientAccountingProfileMutation) Fields() []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 5)
 	if m.client_id != nil {
 		fields = append(fields, clientaccountingprofile.FieldClientID)
 	}
@@ -8943,6 +10251,9 @@ func (m *ClientAccountingProfileMutation) Fields() []string {
 	}
 	if m.payload != nil {
 		fields = append(fields, clientaccountingprofile.FieldPayload)
+	}
+	if m.supersedes_profile_id != nil {
+		fields = append(fields, clientaccountingprofile.FieldSupersedesProfileID)
 	}
 	if m.created_at != nil {
 		fields = append(fields, clientaccountingprofile.FieldCreatedAt)
@@ -8961,6 +10272,8 @@ func (m *ClientAccountingProfileMutation) Field(name string) (ent.Value, bool) {
 		return m.Version()
 	case clientaccountingprofile.FieldPayload:
 		return m.Payload()
+	case clientaccountingprofile.FieldSupersedesProfileID:
+		return m.SupersedesProfileID()
 	case clientaccountingprofile.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -8978,6 +10291,8 @@ func (m *ClientAccountingProfileMutation) OldField(ctx context.Context, name str
 		return m.OldVersion(ctx)
 	case clientaccountingprofile.FieldPayload:
 		return m.OldPayload(ctx)
+	case clientaccountingprofile.FieldSupersedesProfileID:
+		return m.OldSupersedesProfileID(ctx)
 	case clientaccountingprofile.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -9009,6 +10324,13 @@ func (m *ClientAccountingProfileMutation) SetField(name string, value ent.Value)
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPayload(v)
+		return nil
+	case clientaccountingprofile.FieldSupersedesProfileID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSupersedesProfileID(v)
 		return nil
 	case clientaccountingprofile.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -9061,7 +10383,11 @@ func (m *ClientAccountingProfileMutation) AddField(name string, value ent.Value)
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *ClientAccountingProfileMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(clientaccountingprofile.FieldSupersedesProfileID) {
+		fields = append(fields, clientaccountingprofile.FieldSupersedesProfileID)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -9074,6 +10400,11 @@ func (m *ClientAccountingProfileMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *ClientAccountingProfileMutation) ClearField(name string) error {
+	switch name {
+	case clientaccountingprofile.FieldSupersedesProfileID:
+		m.ClearSupersedesProfileID()
+		return nil
+	}
 	return fmt.Errorf("unknown ClientAccountingProfile nullable field %s", name)
 }
 
@@ -9089,6 +10420,9 @@ func (m *ClientAccountingProfileMutation) ResetField(name string) error {
 		return nil
 	case clientaccountingprofile.FieldPayload:
 		m.ResetPayload()
+		return nil
+	case clientaccountingprofile.FieldSupersedesProfileID:
+		m.ResetSupersedesProfileID()
 		return nil
 	case clientaccountingprofile.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -17218,64 +18552,65 @@ func (m *ContractSourceDocumentMutation) ResetEdge(name string) error {
 // InvoiceMutation represents an operation that mutates the Invoice nodes in the graph.
 type InvoiceMutation struct {
 	config
-	op                          Op
-	typ                         string
-	id                          *string
-	model_version               *string
-	source_facts                **accounting.SourceFacts
-	accounting_snapshot         **accounting.Snapshot
-	readiness_reason            *string
-	supplier_name               *string
-	supplier_cui                *string
-	normalized_supplier_cui     *string
-	document_number             *string
-	normalized_document_number  *string
-	issue_date                  *time.Time
-	issue_day                   *time.Time
-	due_date                    *time.Time
-	total_amount                *string
-	currency                    *string
-	spv_reference               *string
-	ingestion_source            *string
-	external_delivery_id        *string
-	duplicate_of_invoice_id     *string
-	duplicate_amount_matches    *bool
-	duplicate_currency_matches  *bool
-	document_type               *invoice.DocumentType
-	pipeline_status             *invoice.PipelineStatus
-	saga_status                 *invoice.SagaStatus
-	revision                    *uint64
-	addrevision                 *int64
-	created_at                  *time.Time
-	updated_at                  *time.Time
-	clearedFields               map[string]struct{}
-	client                      *string
-	clearedclient               bool
-	activity_events             map[string]struct{}
-	removedactivity_events      map[string]struct{}
-	clearedactivity_events      bool
-	lines                       map[string]struct{}
-	removedlines                map[string]struct{}
-	clearedlines                bool
-	validation_tasks            map[string]struct{}
-	removedvalidation_tasks     map[string]struct{}
-	clearedvalidation_tasks     bool
-	contract_match_runs         map[string]struct{}
-	removedcontract_match_runs  map[string]struct{}
-	clearedcontract_match_runs  bool
-	contract_association        *string
-	clearedcontract_association bool
-	line_classifications        map[string]struct{}
-	removedline_classifications map[string]struct{}
-	clearedline_classifications bool
-	spv_source_document         *string
-	clearedspv_source_document  bool
-	saga_export_attempts        map[string]struct{}
-	removedsaga_export_attempts map[string]struct{}
-	clearedsaga_export_attempts bool
-	done                        bool
-	oldValue                    func(context.Context) (*Invoice, error)
-	predicates                  []predicate.Invoice
+	op                            Op
+	typ                           string
+	id                            *string
+	model_version                 *string
+	source_facts                  **accounting.SourceFacts
+	accounting_snapshot           **accounting.Snapshot
+	readiness_reason              *string
+	current_classification_run_id *string
+	supplier_name                 *string
+	supplier_cui                  *string
+	normalized_supplier_cui       *string
+	document_number               *string
+	normalized_document_number    *string
+	issue_date                    *time.Time
+	issue_day                     *time.Time
+	due_date                      *time.Time
+	total_amount                  *string
+	currency                      *string
+	spv_reference                 *string
+	ingestion_source              *string
+	external_delivery_id          *string
+	duplicate_of_invoice_id       *string
+	duplicate_amount_matches      *bool
+	duplicate_currency_matches    *bool
+	document_type                 *invoice.DocumentType
+	pipeline_status               *invoice.PipelineStatus
+	saga_status                   *invoice.SagaStatus
+	revision                      *uint64
+	addrevision                   *int64
+	created_at                    *time.Time
+	updated_at                    *time.Time
+	clearedFields                 map[string]struct{}
+	client                        *string
+	clearedclient                 bool
+	activity_events               map[string]struct{}
+	removedactivity_events        map[string]struct{}
+	clearedactivity_events        bool
+	lines                         map[string]struct{}
+	removedlines                  map[string]struct{}
+	clearedlines                  bool
+	validation_tasks              map[string]struct{}
+	removedvalidation_tasks       map[string]struct{}
+	clearedvalidation_tasks       bool
+	contract_match_runs           map[string]struct{}
+	removedcontract_match_runs    map[string]struct{}
+	clearedcontract_match_runs    bool
+	contract_association          *string
+	clearedcontract_association   bool
+	line_classifications          map[string]struct{}
+	removedline_classifications   map[string]struct{}
+	clearedline_classifications   bool
+	spv_source_document           *string
+	clearedspv_source_document    bool
+	saga_export_attempts          map[string]struct{}
+	removedsaga_export_attempts   map[string]struct{}
+	clearedsaga_export_attempts   bool
+	done                          bool
+	oldValue                      func(context.Context) (*Invoice, error)
+	predicates                    []predicate.Invoice
 }
 
 var _ ent.Mutation = (*InvoiceMutation)(nil)
@@ -17550,6 +18885,55 @@ func (m *InvoiceMutation) OldReadinessReason(ctx context.Context) (v string, err
 // ResetReadinessReason resets all changes to the "readiness_reason" field.
 func (m *InvoiceMutation) ResetReadinessReason() {
 	m.readiness_reason = nil
+}
+
+// SetCurrentClassificationRunID sets the "current_classification_run_id" field.
+func (m *InvoiceMutation) SetCurrentClassificationRunID(s string) {
+	m.current_classification_run_id = &s
+}
+
+// CurrentClassificationRunID returns the value of the "current_classification_run_id" field in the mutation.
+func (m *InvoiceMutation) CurrentClassificationRunID() (r string, exists bool) {
+	v := m.current_classification_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrentClassificationRunID returns the old "current_classification_run_id" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldCurrentClassificationRunID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrentClassificationRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrentClassificationRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrentClassificationRunID: %w", err)
+	}
+	return oldValue.CurrentClassificationRunID, nil
+}
+
+// ClearCurrentClassificationRunID clears the value of the "current_classification_run_id" field.
+func (m *InvoiceMutation) ClearCurrentClassificationRunID() {
+	m.current_classification_run_id = nil
+	m.clearedFields[invoice.FieldCurrentClassificationRunID] = struct{}{}
+}
+
+// CurrentClassificationRunIDCleared returns if the "current_classification_run_id" field was cleared in this mutation.
+func (m *InvoiceMutation) CurrentClassificationRunIDCleared() bool {
+	_, ok := m.clearedFields[invoice.FieldCurrentClassificationRunID]
+	return ok
+}
+
+// ResetCurrentClassificationRunID resets all changes to the "current_classification_run_id" field.
+func (m *InvoiceMutation) ResetCurrentClassificationRunID() {
+	m.current_classification_run_id = nil
+	delete(m.clearedFields, invoice.FieldCurrentClassificationRunID)
 }
 
 // SetClientID sets the "client_id" field.
@@ -18941,7 +20325,7 @@ func (m *InvoiceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InvoiceMutation) Fields() []string {
-	fields := make([]string, 0, 27)
+	fields := make([]string, 0, 28)
 	if m.model_version != nil {
 		fields = append(fields, invoice.FieldModelVersion)
 	}
@@ -18953,6 +20337,9 @@ func (m *InvoiceMutation) Fields() []string {
 	}
 	if m.readiness_reason != nil {
 		fields = append(fields, invoice.FieldReadinessReason)
+	}
+	if m.current_classification_run_id != nil {
+		fields = append(fields, invoice.FieldCurrentClassificationRunID)
 	}
 	if m.client != nil {
 		fields = append(fields, invoice.FieldClientID)
@@ -19039,6 +20426,8 @@ func (m *InvoiceMutation) Field(name string) (ent.Value, bool) {
 		return m.AccountingSnapshot()
 	case invoice.FieldReadinessReason:
 		return m.ReadinessReason()
+	case invoice.FieldCurrentClassificationRunID:
+		return m.CurrentClassificationRunID()
 	case invoice.FieldClientID:
 		return m.ClientID()
 	case invoice.FieldSupplierName:
@@ -19102,6 +20491,8 @@ func (m *InvoiceMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldAccountingSnapshot(ctx)
 	case invoice.FieldReadinessReason:
 		return m.OldReadinessReason(ctx)
+	case invoice.FieldCurrentClassificationRunID:
+		return m.OldCurrentClassificationRunID(ctx)
 	case invoice.FieldClientID:
 		return m.OldClientID(ctx)
 	case invoice.FieldSupplierName:
@@ -19184,6 +20575,13 @@ func (m *InvoiceMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetReadinessReason(v)
+		return nil
+	case invoice.FieldCurrentClassificationRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrentClassificationRunID(v)
 		return nil
 	case invoice.FieldClientID:
 		v, ok := value.(string)
@@ -19397,6 +20795,9 @@ func (m *InvoiceMutation) ClearedFields() []string {
 	if m.FieldCleared(invoice.FieldAccountingSnapshot) {
 		fields = append(fields, invoice.FieldAccountingSnapshot)
 	}
+	if m.FieldCleared(invoice.FieldCurrentClassificationRunID) {
+		fields = append(fields, invoice.FieldCurrentClassificationRunID)
+	}
 	if m.FieldCleared(invoice.FieldSupplierCui) {
 		fields = append(fields, invoice.FieldSupplierCui)
 	}
@@ -19435,6 +20836,9 @@ func (m *InvoiceMutation) ClearField(name string) error {
 	case invoice.FieldAccountingSnapshot:
 		m.ClearAccountingSnapshot()
 		return nil
+	case invoice.FieldCurrentClassificationRunID:
+		m.ClearCurrentClassificationRunID()
+		return nil
 	case invoice.FieldSupplierCui:
 		m.ClearSupplierCui()
 		return nil
@@ -19472,6 +20876,9 @@ func (m *InvoiceMutation) ResetField(name string) error {
 		return nil
 	case invoice.FieldReadinessReason:
 		m.ResetReadinessReason()
+		return nil
+	case invoice.FieldCurrentClassificationRunID:
+		m.ResetCurrentClassificationRunID()
 		return nil
 	case invoice.FieldClientID:
 		m.ResetClientID()
@@ -22468,11 +23875,18 @@ type LineClassificationMutation struct {
 	proposed_typed_value       **accounting.Value
 	effective_typed_value      **accounting.Value
 	decision_evidence          **accounting.Evidence
+	legal_citations            *[]accounting.LegalCitation
+	appendlegal_citations      []accounting.LegalCitation
+	validation_results         *[]accounting.ValidationResult
+	appendvalidation_results   []accounting.ValidationResult
+	proposal_provenance        **accounting.ProposalProvenance
 	review_reason              *string
 	invoice_date_used          *time.Time
+	classification_run_id      *string
 	dimension                  *lineclassification.Dimension
 	proposed_value             *string
 	effective_value            *string
+	effective_source           *string
 	confidence_display         *string
 	explanation                *string
 	legal_basis                *string
@@ -22791,6 +24205,185 @@ func (m *LineClassificationMutation) ResetDecisionEvidence() {
 	delete(m.clearedFields, lineclassification.FieldDecisionEvidence)
 }
 
+// SetLegalCitations sets the "legal_citations" field.
+func (m *LineClassificationMutation) SetLegalCitations(ac []accounting.LegalCitation) {
+	m.legal_citations = &ac
+	m.appendlegal_citations = nil
+}
+
+// LegalCitations returns the value of the "legal_citations" field in the mutation.
+func (m *LineClassificationMutation) LegalCitations() (r []accounting.LegalCitation, exists bool) {
+	v := m.legal_citations
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLegalCitations returns the old "legal_citations" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldLegalCitations(ctx context.Context) (v []accounting.LegalCitation, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLegalCitations is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLegalCitations requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLegalCitations: %w", err)
+	}
+	return oldValue.LegalCitations, nil
+}
+
+// AppendLegalCitations adds ac to the "legal_citations" field.
+func (m *LineClassificationMutation) AppendLegalCitations(ac []accounting.LegalCitation) {
+	m.appendlegal_citations = append(m.appendlegal_citations, ac...)
+}
+
+// AppendedLegalCitations returns the list of values that were appended to the "legal_citations" field in this mutation.
+func (m *LineClassificationMutation) AppendedLegalCitations() ([]accounting.LegalCitation, bool) {
+	if len(m.appendlegal_citations) == 0 {
+		return nil, false
+	}
+	return m.appendlegal_citations, true
+}
+
+// ClearLegalCitations clears the value of the "legal_citations" field.
+func (m *LineClassificationMutation) ClearLegalCitations() {
+	m.legal_citations = nil
+	m.appendlegal_citations = nil
+	m.clearedFields[lineclassification.FieldLegalCitations] = struct{}{}
+}
+
+// LegalCitationsCleared returns if the "legal_citations" field was cleared in this mutation.
+func (m *LineClassificationMutation) LegalCitationsCleared() bool {
+	_, ok := m.clearedFields[lineclassification.FieldLegalCitations]
+	return ok
+}
+
+// ResetLegalCitations resets all changes to the "legal_citations" field.
+func (m *LineClassificationMutation) ResetLegalCitations() {
+	m.legal_citations = nil
+	m.appendlegal_citations = nil
+	delete(m.clearedFields, lineclassification.FieldLegalCitations)
+}
+
+// SetValidationResults sets the "validation_results" field.
+func (m *LineClassificationMutation) SetValidationResults(ar []accounting.ValidationResult) {
+	m.validation_results = &ar
+	m.appendvalidation_results = nil
+}
+
+// ValidationResults returns the value of the "validation_results" field in the mutation.
+func (m *LineClassificationMutation) ValidationResults() (r []accounting.ValidationResult, exists bool) {
+	v := m.validation_results
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidationResults returns the old "validation_results" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldValidationResults(ctx context.Context) (v []accounting.ValidationResult, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidationResults is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidationResults requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidationResults: %w", err)
+	}
+	return oldValue.ValidationResults, nil
+}
+
+// AppendValidationResults adds ar to the "validation_results" field.
+func (m *LineClassificationMutation) AppendValidationResults(ar []accounting.ValidationResult) {
+	m.appendvalidation_results = append(m.appendvalidation_results, ar...)
+}
+
+// AppendedValidationResults returns the list of values that were appended to the "validation_results" field in this mutation.
+func (m *LineClassificationMutation) AppendedValidationResults() ([]accounting.ValidationResult, bool) {
+	if len(m.appendvalidation_results) == 0 {
+		return nil, false
+	}
+	return m.appendvalidation_results, true
+}
+
+// ClearValidationResults clears the value of the "validation_results" field.
+func (m *LineClassificationMutation) ClearValidationResults() {
+	m.validation_results = nil
+	m.appendvalidation_results = nil
+	m.clearedFields[lineclassification.FieldValidationResults] = struct{}{}
+}
+
+// ValidationResultsCleared returns if the "validation_results" field was cleared in this mutation.
+func (m *LineClassificationMutation) ValidationResultsCleared() bool {
+	_, ok := m.clearedFields[lineclassification.FieldValidationResults]
+	return ok
+}
+
+// ResetValidationResults resets all changes to the "validation_results" field.
+func (m *LineClassificationMutation) ResetValidationResults() {
+	m.validation_results = nil
+	m.appendvalidation_results = nil
+	delete(m.clearedFields, lineclassification.FieldValidationResults)
+}
+
+// SetProposalProvenance sets the "proposal_provenance" field.
+func (m *LineClassificationMutation) SetProposalProvenance(ap *accounting.ProposalProvenance) {
+	m.proposal_provenance = &ap
+}
+
+// ProposalProvenance returns the value of the "proposal_provenance" field in the mutation.
+func (m *LineClassificationMutation) ProposalProvenance() (r *accounting.ProposalProvenance, exists bool) {
+	v := m.proposal_provenance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProposalProvenance returns the old "proposal_provenance" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldProposalProvenance(ctx context.Context) (v *accounting.ProposalProvenance, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProposalProvenance is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProposalProvenance requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProposalProvenance: %w", err)
+	}
+	return oldValue.ProposalProvenance, nil
+}
+
+// ClearProposalProvenance clears the value of the "proposal_provenance" field.
+func (m *LineClassificationMutation) ClearProposalProvenance() {
+	m.proposal_provenance = nil
+	m.clearedFields[lineclassification.FieldProposalProvenance] = struct{}{}
+}
+
+// ProposalProvenanceCleared returns if the "proposal_provenance" field was cleared in this mutation.
+func (m *LineClassificationMutation) ProposalProvenanceCleared() bool {
+	_, ok := m.clearedFields[lineclassification.FieldProposalProvenance]
+	return ok
+}
+
+// ResetProposalProvenance resets all changes to the "proposal_provenance" field.
+func (m *LineClassificationMutation) ResetProposalProvenance() {
+	m.proposal_provenance = nil
+	delete(m.clearedFields, lineclassification.FieldProposalProvenance)
+}
+
 // SetReviewReason sets the "review_reason" field.
 func (m *LineClassificationMutation) SetReviewReason(s string) {
 	m.review_reason = &s
@@ -22984,6 +24577,42 @@ func (m *LineClassificationMutation) ResetInvoiceLineID() {
 	m.invoice_line = nil
 }
 
+// SetClassificationRunID sets the "classification_run_id" field.
+func (m *LineClassificationMutation) SetClassificationRunID(s string) {
+	m.classification_run_id = &s
+}
+
+// ClassificationRunID returns the value of the "classification_run_id" field in the mutation.
+func (m *LineClassificationMutation) ClassificationRunID() (r string, exists bool) {
+	v := m.classification_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClassificationRunID returns the old "classification_run_id" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldClassificationRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClassificationRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClassificationRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClassificationRunID: %w", err)
+	}
+	return oldValue.ClassificationRunID, nil
+}
+
+// ResetClassificationRunID resets all changes to the "classification_run_id" field.
+func (m *LineClassificationMutation) ResetClassificationRunID() {
+	m.classification_run_id = nil
+}
+
 // SetDimension sets the "dimension" field.
 func (m *LineClassificationMutation) SetDimension(l lineclassification.Dimension) {
 	m.dimension = &l
@@ -23103,6 +24732,55 @@ func (m *LineClassificationMutation) EffectiveValueCleared() bool {
 func (m *LineClassificationMutation) ResetEffectiveValue() {
 	m.effective_value = nil
 	delete(m.clearedFields, lineclassification.FieldEffectiveValue)
+}
+
+// SetEffectiveSource sets the "effective_source" field.
+func (m *LineClassificationMutation) SetEffectiveSource(s string) {
+	m.effective_source = &s
+}
+
+// EffectiveSource returns the value of the "effective_source" field in the mutation.
+func (m *LineClassificationMutation) EffectiveSource() (r string, exists bool) {
+	v := m.effective_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEffectiveSource returns the old "effective_source" field's value of the LineClassification entity.
+// If the LineClassification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LineClassificationMutation) OldEffectiveSource(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEffectiveSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEffectiveSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEffectiveSource: %w", err)
+	}
+	return oldValue.EffectiveSource, nil
+}
+
+// ClearEffectiveSource clears the value of the "effective_source" field.
+func (m *LineClassificationMutation) ClearEffectiveSource() {
+	m.effective_source = nil
+	m.clearedFields[lineclassification.FieldEffectiveSource] = struct{}{}
+}
+
+// EffectiveSourceCleared returns if the "effective_source" field was cleared in this mutation.
+func (m *LineClassificationMutation) EffectiveSourceCleared() bool {
+	_, ok := m.clearedFields[lineclassification.FieldEffectiveSource]
+	return ok
+}
+
+// ResetEffectiveSource resets all changes to the "effective_source" field.
+func (m *LineClassificationMutation) ResetEffectiveSource() {
+	m.effective_source = nil
+	delete(m.clearedFields, lineclassification.FieldEffectiveSource)
 }
 
 // SetConfidenceDisplay sets the "confidence_display" field.
@@ -23942,7 +25620,7 @@ func (m *LineClassificationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LineClassificationMutation) Fields() []string {
-	fields := make([]string, 0, 28)
+	fields := make([]string, 0, 33)
 	if m.model_version != nil {
 		fields = append(fields, lineclassification.FieldModelVersion)
 	}
@@ -23954,6 +25632,15 @@ func (m *LineClassificationMutation) Fields() []string {
 	}
 	if m.decision_evidence != nil {
 		fields = append(fields, lineclassification.FieldDecisionEvidence)
+	}
+	if m.legal_citations != nil {
+		fields = append(fields, lineclassification.FieldLegalCitations)
+	}
+	if m.validation_results != nil {
+		fields = append(fields, lineclassification.FieldValidationResults)
+	}
+	if m.proposal_provenance != nil {
+		fields = append(fields, lineclassification.FieldProposalProvenance)
 	}
 	if m.review_reason != nil {
 		fields = append(fields, lineclassification.FieldReviewReason)
@@ -23970,6 +25657,9 @@ func (m *LineClassificationMutation) Fields() []string {
 	if m.invoice_line != nil {
 		fields = append(fields, lineclassification.FieldInvoiceLineID)
 	}
+	if m.classification_run_id != nil {
+		fields = append(fields, lineclassification.FieldClassificationRunID)
+	}
 	if m.dimension != nil {
 		fields = append(fields, lineclassification.FieldDimension)
 	}
@@ -23978,6 +25668,9 @@ func (m *LineClassificationMutation) Fields() []string {
 	}
 	if m.effective_value != nil {
 		fields = append(fields, lineclassification.FieldEffectiveValue)
+	}
+	if m.effective_source != nil {
+		fields = append(fields, lineclassification.FieldEffectiveSource)
 	}
 	if m.confidence_display != nil {
 		fields = append(fields, lineclassification.FieldConfidenceDisplay)
@@ -24043,6 +25736,12 @@ func (m *LineClassificationMutation) Field(name string) (ent.Value, bool) {
 		return m.EffectiveTypedValue()
 	case lineclassification.FieldDecisionEvidence:
 		return m.DecisionEvidence()
+	case lineclassification.FieldLegalCitations:
+		return m.LegalCitations()
+	case lineclassification.FieldValidationResults:
+		return m.ValidationResults()
+	case lineclassification.FieldProposalProvenance:
+		return m.ProposalProvenance()
 	case lineclassification.FieldReviewReason:
 		return m.ReviewReason()
 	case lineclassification.FieldInvoiceDateUsed:
@@ -24053,12 +25752,16 @@ func (m *LineClassificationMutation) Field(name string) (ent.Value, bool) {
 		return m.InvoiceID()
 	case lineclassification.FieldInvoiceLineID:
 		return m.InvoiceLineID()
+	case lineclassification.FieldClassificationRunID:
+		return m.ClassificationRunID()
 	case lineclassification.FieldDimension:
 		return m.Dimension()
 	case lineclassification.FieldProposedValue:
 		return m.ProposedValue()
 	case lineclassification.FieldEffectiveValue:
 		return m.EffectiveValue()
+	case lineclassification.FieldEffectiveSource:
+		return m.EffectiveSource()
 	case lineclassification.FieldConfidenceDisplay:
 		return m.ConfidenceDisplay()
 	case lineclassification.FieldExplanation:
@@ -24108,6 +25811,12 @@ func (m *LineClassificationMutation) OldField(ctx context.Context, name string) 
 		return m.OldEffectiveTypedValue(ctx)
 	case lineclassification.FieldDecisionEvidence:
 		return m.OldDecisionEvidence(ctx)
+	case lineclassification.FieldLegalCitations:
+		return m.OldLegalCitations(ctx)
+	case lineclassification.FieldValidationResults:
+		return m.OldValidationResults(ctx)
+	case lineclassification.FieldProposalProvenance:
+		return m.OldProposalProvenance(ctx)
 	case lineclassification.FieldReviewReason:
 		return m.OldReviewReason(ctx)
 	case lineclassification.FieldInvoiceDateUsed:
@@ -24118,12 +25827,16 @@ func (m *LineClassificationMutation) OldField(ctx context.Context, name string) 
 		return m.OldInvoiceID(ctx)
 	case lineclassification.FieldInvoiceLineID:
 		return m.OldInvoiceLineID(ctx)
+	case lineclassification.FieldClassificationRunID:
+		return m.OldClassificationRunID(ctx)
 	case lineclassification.FieldDimension:
 		return m.OldDimension(ctx)
 	case lineclassification.FieldProposedValue:
 		return m.OldProposedValue(ctx)
 	case lineclassification.FieldEffectiveValue:
 		return m.OldEffectiveValue(ctx)
+	case lineclassification.FieldEffectiveSource:
+		return m.OldEffectiveSource(ctx)
 	case lineclassification.FieldConfidenceDisplay:
 		return m.OldConfidenceDisplay(ctx)
 	case lineclassification.FieldExplanation:
@@ -24193,6 +25906,27 @@ func (m *LineClassificationMutation) SetField(name string, value ent.Value) erro
 		}
 		m.SetDecisionEvidence(v)
 		return nil
+	case lineclassification.FieldLegalCitations:
+		v, ok := value.([]accounting.LegalCitation)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLegalCitations(v)
+		return nil
+	case lineclassification.FieldValidationResults:
+		v, ok := value.([]accounting.ValidationResult)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidationResults(v)
+		return nil
+	case lineclassification.FieldProposalProvenance:
+		v, ok := value.(*accounting.ProposalProvenance)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProposalProvenance(v)
+		return nil
 	case lineclassification.FieldReviewReason:
 		v, ok := value.(string)
 		if !ok {
@@ -24228,6 +25962,13 @@ func (m *LineClassificationMutation) SetField(name string, value ent.Value) erro
 		}
 		m.SetInvoiceLineID(v)
 		return nil
+	case lineclassification.FieldClassificationRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClassificationRunID(v)
+		return nil
 	case lineclassification.FieldDimension:
 		v, ok := value.(lineclassification.Dimension)
 		if !ok {
@@ -24248,6 +25989,13 @@ func (m *LineClassificationMutation) SetField(name string, value ent.Value) erro
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEffectiveValue(v)
+		return nil
+	case lineclassification.FieldEffectiveSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEffectiveSource(v)
 		return nil
 	case lineclassification.FieldConfidenceDisplay:
 		v, ok := value.(string)
@@ -24427,11 +26175,23 @@ func (m *LineClassificationMutation) ClearedFields() []string {
 	if m.FieldCleared(lineclassification.FieldDecisionEvidence) {
 		fields = append(fields, lineclassification.FieldDecisionEvidence)
 	}
+	if m.FieldCleared(lineclassification.FieldLegalCitations) {
+		fields = append(fields, lineclassification.FieldLegalCitations)
+	}
+	if m.FieldCleared(lineclassification.FieldValidationResults) {
+		fields = append(fields, lineclassification.FieldValidationResults)
+	}
+	if m.FieldCleared(lineclassification.FieldProposalProvenance) {
+		fields = append(fields, lineclassification.FieldProposalProvenance)
+	}
 	if m.FieldCleared(lineclassification.FieldInvoiceDateUsed) {
 		fields = append(fields, lineclassification.FieldInvoiceDateUsed)
 	}
 	if m.FieldCleared(lineclassification.FieldEffectiveValue) {
 		fields = append(fields, lineclassification.FieldEffectiveValue)
+	}
+	if m.FieldCleared(lineclassification.FieldEffectiveSource) {
+		fields = append(fields, lineclassification.FieldEffectiveSource)
 	}
 	if m.FieldCleared(lineclassification.FieldRuleVersionID) {
 		fields = append(fields, lineclassification.FieldRuleVersionID)
@@ -24474,11 +26234,23 @@ func (m *LineClassificationMutation) ClearField(name string) error {
 	case lineclassification.FieldDecisionEvidence:
 		m.ClearDecisionEvidence()
 		return nil
+	case lineclassification.FieldLegalCitations:
+		m.ClearLegalCitations()
+		return nil
+	case lineclassification.FieldValidationResults:
+		m.ClearValidationResults()
+		return nil
+	case lineclassification.FieldProposalProvenance:
+		m.ClearProposalProvenance()
+		return nil
 	case lineclassification.FieldInvoiceDateUsed:
 		m.ClearInvoiceDateUsed()
 		return nil
 	case lineclassification.FieldEffectiveValue:
 		m.ClearEffectiveValue()
+		return nil
+	case lineclassification.FieldEffectiveSource:
+		m.ClearEffectiveSource()
 		return nil
 	case lineclassification.FieldRuleVersionID:
 		m.ClearRuleVersionID()
@@ -24518,6 +26290,15 @@ func (m *LineClassificationMutation) ResetField(name string) error {
 	case lineclassification.FieldDecisionEvidence:
 		m.ResetDecisionEvidence()
 		return nil
+	case lineclassification.FieldLegalCitations:
+		m.ResetLegalCitations()
+		return nil
+	case lineclassification.FieldValidationResults:
+		m.ResetValidationResults()
+		return nil
+	case lineclassification.FieldProposalProvenance:
+		m.ResetProposalProvenance()
+		return nil
 	case lineclassification.FieldReviewReason:
 		m.ResetReviewReason()
 		return nil
@@ -24533,6 +26314,9 @@ func (m *LineClassificationMutation) ResetField(name string) error {
 	case lineclassification.FieldInvoiceLineID:
 		m.ResetInvoiceLineID()
 		return nil
+	case lineclassification.FieldClassificationRunID:
+		m.ResetClassificationRunID()
+		return nil
 	case lineclassification.FieldDimension:
 		m.ResetDimension()
 		return nil
@@ -24541,6 +26325,9 @@ func (m *LineClassificationMutation) ResetField(name string) error {
 		return nil
 	case lineclassification.FieldEffectiveValue:
 		m.ResetEffectiveValue()
+		return nil
+	case lineclassification.FieldEffectiveSource:
+		m.ResetEffectiveSource()
 		return nil
 	case lineclassification.FieldConfidenceDisplay:
 		m.ResetConfidenceDisplay()
@@ -33589,6 +35376,7 @@ type ValidationTaskMutation struct {
 	op                        Op
 	typ                       string
 	id                        *string
+	classification_run_id     *string
 	task_type                 *validationtask.TaskType
 	status                    *validationtask.Status
 	title                     *string
@@ -33844,6 +35632,55 @@ func (m *ValidationTaskMutation) ContractMatchRunIDCleared() bool {
 func (m *ValidationTaskMutation) ResetContractMatchRunID() {
 	m.contract_match_run = nil
 	delete(m.clearedFields, validationtask.FieldContractMatchRunID)
+}
+
+// SetClassificationRunID sets the "classification_run_id" field.
+func (m *ValidationTaskMutation) SetClassificationRunID(s string) {
+	m.classification_run_id = &s
+}
+
+// ClassificationRunID returns the value of the "classification_run_id" field in the mutation.
+func (m *ValidationTaskMutation) ClassificationRunID() (r string, exists bool) {
+	v := m.classification_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClassificationRunID returns the old "classification_run_id" field's value of the ValidationTask entity.
+// If the ValidationTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ValidationTaskMutation) OldClassificationRunID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClassificationRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClassificationRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClassificationRunID: %w", err)
+	}
+	return oldValue.ClassificationRunID, nil
+}
+
+// ClearClassificationRunID clears the value of the "classification_run_id" field.
+func (m *ValidationTaskMutation) ClearClassificationRunID() {
+	m.classification_run_id = nil
+	m.clearedFields[validationtask.FieldClassificationRunID] = struct{}{}
+}
+
+// ClassificationRunIDCleared returns if the "classification_run_id" field was cleared in this mutation.
+func (m *ValidationTaskMutation) ClassificationRunIDCleared() bool {
+	_, ok := m.clearedFields[validationtask.FieldClassificationRunID]
+	return ok
+}
+
+// ResetClassificationRunID resets all changes to the "classification_run_id" field.
+func (m *ValidationTaskMutation) ResetClassificationRunID() {
+	m.classification_run_id = nil
+	delete(m.clearedFields, validationtask.FieldClassificationRunID)
 }
 
 // SetTaskType sets the "task_type" field.
@@ -34669,7 +36506,7 @@ func (m *ValidationTaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ValidationTaskMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 19)
 	if m.client != nil {
 		fields = append(fields, validationtask.FieldClientID)
 	}
@@ -34678,6 +36515,9 @@ func (m *ValidationTaskMutation) Fields() []string {
 	}
 	if m.contract_match_run != nil {
 		fields = append(fields, validationtask.FieldContractMatchRunID)
+	}
+	if m.classification_run_id != nil {
+		fields = append(fields, validationtask.FieldClassificationRunID)
 	}
 	if m.task_type != nil {
 		fields = append(fields, validationtask.FieldTaskType)
@@ -34738,6 +36578,8 @@ func (m *ValidationTaskMutation) Field(name string) (ent.Value, bool) {
 		return m.InvoiceID()
 	case validationtask.FieldContractMatchRunID:
 		return m.ContractMatchRunID()
+	case validationtask.FieldClassificationRunID:
+		return m.ClassificationRunID()
 	case validationtask.FieldTaskType:
 		return m.TaskType()
 	case validationtask.FieldStatus:
@@ -34783,6 +36625,8 @@ func (m *ValidationTaskMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldInvoiceID(ctx)
 	case validationtask.FieldContractMatchRunID:
 		return m.OldContractMatchRunID(ctx)
+	case validationtask.FieldClassificationRunID:
+		return m.OldClassificationRunID(ctx)
 	case validationtask.FieldTaskType:
 		return m.OldTaskType(ctx)
 	case validationtask.FieldStatus:
@@ -34842,6 +36686,13 @@ func (m *ValidationTaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetContractMatchRunID(v)
+		return nil
+	case validationtask.FieldClassificationRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClassificationRunID(v)
 		return nil
 	case validationtask.FieldTaskType:
 		v, ok := value.(validationtask.TaskType)
@@ -34996,6 +36847,9 @@ func (m *ValidationTaskMutation) ClearedFields() []string {
 	if m.FieldCleared(validationtask.FieldContractMatchRunID) {
 		fields = append(fields, validationtask.FieldContractMatchRunID)
 	}
+	if m.FieldCleared(validationtask.FieldClassificationRunID) {
+		fields = append(fields, validationtask.FieldClassificationRunID)
+	}
 	if m.FieldCleared(validationtask.FieldBlockerCode) {
 		fields = append(fields, validationtask.FieldBlockerCode)
 	}
@@ -35031,6 +36885,9 @@ func (m *ValidationTaskMutation) ClearField(name string) error {
 	case validationtask.FieldContractMatchRunID:
 		m.ClearContractMatchRunID()
 		return nil
+	case validationtask.FieldClassificationRunID:
+		m.ClearClassificationRunID()
+		return nil
 	case validationtask.FieldBlockerCode:
 		m.ClearBlockerCode()
 		return nil
@@ -35065,6 +36922,9 @@ func (m *ValidationTaskMutation) ResetField(name string) error {
 		return nil
 	case validationtask.FieldContractMatchRunID:
 		m.ResetContractMatchRunID()
+		return nil
+	case validationtask.FieldClassificationRunID:
+		m.ResetClassificationRunID()
 		return nil
 	case validationtask.FieldTaskType:
 		m.ResetTaskType()

@@ -73,8 +73,8 @@ export function InvoiceDetailPage() {
           <Tabs.Content value="summary" className="outline-none"><SummaryTab invoice={invoice} /></Tabs.Content>
           <Tabs.Content value="contract" className="space-y-4 outline-none"><CommercialValidationCard invoice={invoice} /><ContractTask invoice={invoice} /></Tabs.Content>
           <Tabs.Content value="lines" className="outline-none"><LinesTab invoice={invoice} /></Tabs.Content>
-          <Tabs.Content value="classification" className="space-y-4 outline-none"><ClassificationWorkspace invoice={invoice} />{invoice.authority === 'API' && invoice.modelVersion === 'ACCOUNTING_DOMAIN_V2' && <AccountingAnalysisCard invoice={invoice} />}</Tabs.Content>
-          <Tabs.Content value="history" className="outline-none"><HistoryTab invoice={invoice} /></Tabs.Content>
+          <Tabs.Content value="classification" className="space-y-4 outline-none"><ClassificationWorkspace invoice={invoice} /></Tabs.Content>
+          <Tabs.Content value="history" className="space-y-4 outline-none"><HistoryTab invoice={invoice} />{invoice.authority === 'API' && invoice.modelVersion !== 'ACCOUNTING_DOMAIN_V2' && <div><p className="mb-2 text-xs font-semibold text-[var(--warning)]">Istoric legacy V1 — nu reprezintă clasificarea contabilă V2 curentă.</p><AccountingAnalysisCard invoice={invoice} /></div>}</Tabs.Content>
         </div>
       </Tabs.Root>
     </div>

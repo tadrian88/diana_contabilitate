@@ -92,6 +92,18 @@ func (f ClassificationRuleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ClassificationRuleMutation", m)
 }
 
+// The ClassificationRunFunc type is an adapter to allow the use of ordinary
+// function as ClassificationRun mutator.
+type ClassificationRunFunc func(context.Context, *ent.ClassificationRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ClassificationRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ClassificationRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ClassificationRunMutation", m)
+}
+
 // The ClientAccountingProfileFunc type is an adapter to allow the use of ordinary
 // function as ClientAccountingProfile mutator.
 type ClientAccountingProfileFunc func(context.Context, *ent.ClientAccountingProfileMutation) (ent.Value, error)

@@ -1,5 +1,5 @@
 import {emptyCompany,type ClientDetail,type ClientWrite,type ReadinessSection} from '../domain/client-management'
-import type { ClientScope, Invoice, PipelineStatus } from '../domain/invoice'
+import type { ApprovedKnowledge, ClientScope, Invoice, PipelineStatus, PromotionPreview } from '../domain/invoice'
 import type { ContractDocument, InvoiceRepository, ReviewedContract, SPVConnection } from '../repositories/invoiceRepository'
 import { mockClients, mockContracts, mockInvoices, mockRules } from './scenarios'
 import type { CreateClientOverrideInput, CreateRuleVersionInput } from '../repositories/invoiceRepository'
@@ -21,6 +21,7 @@ export class MockInvoiceRepository implements InvoiceRepository {
   private invoices = new Map(mockInvoices.map((invoice) => [invoice.id, clone(invoice)]))
   private contracts = new Map(mockContracts.map((contract) => [contract.id, clone(contract)]))
   private rules = new Map(mockRules.map((rule) => [rule.id, clone(rule)]))
+  private knowledge = new Map<string,ApprovedKnowledge>()
   private spvConnections = new Map<string, SPVConnection>([
     ['client-alfa', { status: 'NOT_CONNECTED', lastSyncStatus: 'NEVER', importAutomatic: false, configurationReady: true, identityValidation: 'NOT_AVAILABLE' }],
     ['client-beta', { status: 'CONNECTED', environment: 'TEST', connectedAt: '2026-09-14T09:00:00.000Z', lastSyncAt: '2026-09-14T10:00:00.000Z', lastSuccessfulSyncAt: '2026-09-14T10:00:00.000Z', lastSyncStatus: 'SUCCEEDED', importAutomatic: true, configurationReady: true, identityValidation: 'NOT_AVAILABLE' }],
@@ -131,6 +132,11 @@ async uploadContractDocument(clientId:string,file:File){const id=`contract-docum
     const rules = [...this.rules.values()]
     return clone(scope === 'all' ? rules : rules.filter((rule) => rule.scope === 'GLOBAL' || rule.clientId === scope))
   }
+  async listApprovedKnowledge(scope:ClientScope){const items=[...this.knowledge.values()];return clone(scope==='all'?items:items.filter(item=>item.scope.clientId===scope))}
+  async previewApprovedKnowledge(clientId:string,invoiceId:string,classificationId:string):Promise<PromotionPreview>{const invoice=this.invoices.get(invoiceId);const item=invoice?.lines.flatMap(line=>line.classifications).find(value=>value.id===classificationId);if(!invoice||invoice.clientId!==clientId||!item||item.status==='PENDING'||!item.typedValue)throw new Error('Decizia finală nu există.');const line=invoice.lines.find(value=>value.classifications.some(value=>value.id===classificationId))!;return {classificationId,classificationRevision:item.revision??1,classificationRunId:invoice.currentClassificationRunId??invoice.classificationContext?.runId??'mock-run',dimension:item.dimension,value:item.typedValue,scope:{clientId,clientDisplay:clientId,supplierDisplay:invoice.supplierName,normalizedSupplierId:invoice.supplierCui??invoice.supplierName,serviceIdentityKind:'NORMALIZED_DESCRIPTION',serviceIdentityValue:line.description.toLocaleLowerCase('ro-RO'),normalizerVersion:'NORMALIZED_DESCRIPTION_V1',currency:invoice.total.currency,documentType:'INVOICE',vatRate:line.vatLabel.replace('%',''),profileId:invoice.accountingSnapshot?.profile?.id,profileVersion:invoice.accountingSnapshot?.profile?.version}}}
+  async promoteApprovedKnowledge(clientId:string,invoiceId:string,preview:PromotionPreview,_expectedInvoiceRevision:number):Promise<ApprovedKnowledge>{const id=`knowledge-${preview.classificationId}`;if([...this.knowledge.values()].some(item=>item.scope.clientId===clientId&&item.dimension===preview.dimension&&item.scope.serviceIdentityValue===preview.scope.serviceIdentityValue&&JSON.stringify(item.value)===JSON.stringify(preview.value)))throw new Error('KNOWLEDGE_DUPLICATE');const item:ApprovedKnowledge={id,version:1,dimension:preview.dimension,value:preview.value,scope:preview.scope,status:'ACTIVE',sourceInvoiceId:invoiceId,sourceInvoiceLineId:'mock-line',sourceClassificationId:preview.classificationId,sourceClassificationRunId:preview.classificationRunId,originalSource:'MANUAL',promotedBy:'Contabil demo',promotedAt:new Date().toISOString(),revision:1};this.knowledge.set(id,item);return clone(item)}
+  async revokeApprovedKnowledge(clientId:string,item:ApprovedKnowledge):Promise<ApprovedKnowledge>{const current=this.knowledge.get(item.id);if(!current||current.scope.clientId!==clientId||current.revision!==item.revision)throw new Error('CONFLICT');current.status='REVOKED';current.revision++;return clone(current)}
+  async listLegislationSources(){return []}
 
   async searchAccounts(query:string) {
     const items=[{code:'6281',name:'Cheltuieli cu serviciile IT',accountType:'expense',synthetic:false,postable:true,active:true},{code:'6262',name:'Cheltuieli cu telecomunicațiile',accountType:'expense',synthetic:false,postable:true,active:true}]
@@ -225,13 +231,20 @@ async uploadContractDocument(clientId:string,file:File){const id=`contract-docum
     return clone(invoice)
   }
 
-  async reviewClassification(id: string, itemId: string, value?: string) {
+  async reviewClassification(id: string, itemId: string, value?: string, typedValue?: import('../domain/invoice').DomainValue, reason?: string, _mappingAction?:import('../domain/invoice').AccountMappingAction, _expectedMappingRevision?:number, action:import('../domain/invoice').ClassificationReviewAction='APPROVE') {
     const invoice = this.requireInvoice(id)
     const task = invoice.task
     if (!task || task.type !== 'CLASSIFICATION' || !task.classificationItems) throw new Error('Task-ul de clasificare nu există.')
     const item = task.classificationItems.find((candidate) => candidate.id === itemId)
     if (!item) throw new Error('Elementul de revizuire nu există.')
-    item.status = value ? 'CORRECTED' : 'ACCEPTED'
+    if (action === 'REJECT') {
+      if (!reason?.trim()) throw new Error('Motivul respingerii este obligatoriu.')
+      item.status = 'REJECTED'
+      item.reviewReason = reason
+      return clone(invoice)
+    }
+    item.status = value || typedValue ? 'CORRECTED' : 'ACCEPTED'
+    item.typedValue = typedValue ?? item.proposedTypedValue
     item.resolvedValue = value || item.proposedValue
     invoice.activity.push(activityFor(invoice, value ? 'Clasificare corectată' : 'Propunere acceptată', item.lineLabel, item.proposedValue, item.resolvedValue))
     if (task.classificationItems.every((candidate) => candidate.status !== 'PENDING')) {
@@ -240,6 +253,15 @@ async uploadContractDocument(clientId:string,file:File){const id=`contract-docum
       invoice.sagaStatus = 'READY'
       invoice.autoRun = true
     }
+    return clone(invoice)
+  }
+  async approveAllClassifications(id:string){const invoice=await this.getInvoice(id);if(!invoice)throw new Error('Invoice not found');return invoice}
+
+  async reanalyzeClassification(clientId:string,invoiceId:string){
+    const invoice=this.requireInvoice(invoiceId)
+    if(invoice.clientId!==clientId||invoice.pipelineStatus==='EXPORTED')throw new Error('Factura nu poate fi reanalizată.')
+    invoice.revision=(invoice.revision??1)+1
+    invoice.activity.push(activityFor(invoice,'Reanalizare solicitată','Clasificarea a fost recalculată folosind configurația curentă.'))
     return clone(invoice)
   }
 

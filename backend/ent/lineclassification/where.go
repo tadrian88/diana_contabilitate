@@ -95,6 +95,11 @@ func InvoiceLineID(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldEQ(FieldInvoiceLineID, v))
 }
 
+// ClassificationRunID applies equality check predicate on the "classification_run_id" field. It's identical to ClassificationRunIDEQ.
+func ClassificationRunID(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldClassificationRunID, v))
+}
+
 // ProposedValue applies equality check predicate on the "proposed_value" field. It's identical to ProposedValueEQ.
 func ProposedValue(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldEQ(FieldProposedValue, v))
@@ -103,6 +108,11 @@ func ProposedValue(v string) predicate.LineClassification {
 // EffectiveValue applies equality check predicate on the "effective_value" field. It's identical to EffectiveValueEQ.
 func EffectiveValue(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldEQ(FieldEffectiveValue, v))
+}
+
+// EffectiveSource applies equality check predicate on the "effective_source" field. It's identical to EffectiveSourceEQ.
+func EffectiveSource(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldEffectiveSource, v))
 }
 
 // ConfidenceDisplay applies equality check predicate on the "confidence_display" field. It's identical to ConfidenceDisplayEQ.
@@ -268,6 +278,36 @@ func DecisionEvidenceIsNil() predicate.LineClassification {
 // DecisionEvidenceNotNil applies the NotNil predicate on the "decision_evidence" field.
 func DecisionEvidenceNotNil() predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldNotNull(FieldDecisionEvidence))
+}
+
+// LegalCitationsIsNil applies the IsNil predicate on the "legal_citations" field.
+func LegalCitationsIsNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIsNull(FieldLegalCitations))
+}
+
+// LegalCitationsNotNil applies the NotNil predicate on the "legal_citations" field.
+func LegalCitationsNotNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotNull(FieldLegalCitations))
+}
+
+// ValidationResultsIsNil applies the IsNil predicate on the "validation_results" field.
+func ValidationResultsIsNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIsNull(FieldValidationResults))
+}
+
+// ValidationResultsNotNil applies the NotNil predicate on the "validation_results" field.
+func ValidationResultsNotNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotNull(FieldValidationResults))
+}
+
+// ProposalProvenanceIsNil applies the IsNil predicate on the "proposal_provenance" field.
+func ProposalProvenanceIsNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIsNull(FieldProposalProvenance))
+}
+
+// ProposalProvenanceNotNil applies the NotNil predicate on the "proposal_provenance" field.
+func ProposalProvenanceNotNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotNull(FieldProposalProvenance))
 }
 
 // ReviewReasonEQ applies the EQ predicate on the "review_reason" field.
@@ -580,6 +620,71 @@ func InvoiceLineIDContainsFold(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldContainsFold(FieldInvoiceLineID, v))
 }
 
+// ClassificationRunIDEQ applies the EQ predicate on the "classification_run_id" field.
+func ClassificationRunIDEQ(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDNEQ applies the NEQ predicate on the "classification_run_id" field.
+func ClassificationRunIDNEQ(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNEQ(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDIn applies the In predicate on the "classification_run_id" field.
+func ClassificationRunIDIn(vs ...string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIn(FieldClassificationRunID, vs...))
+}
+
+// ClassificationRunIDNotIn applies the NotIn predicate on the "classification_run_id" field.
+func ClassificationRunIDNotIn(vs ...string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotIn(FieldClassificationRunID, vs...))
+}
+
+// ClassificationRunIDGT applies the GT predicate on the "classification_run_id" field.
+func ClassificationRunIDGT(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGT(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDGTE applies the GTE predicate on the "classification_run_id" field.
+func ClassificationRunIDGTE(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGTE(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDLT applies the LT predicate on the "classification_run_id" field.
+func ClassificationRunIDLT(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLT(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDLTE applies the LTE predicate on the "classification_run_id" field.
+func ClassificationRunIDLTE(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLTE(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDContains applies the Contains predicate on the "classification_run_id" field.
+func ClassificationRunIDContains(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldContains(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDHasPrefix applies the HasPrefix predicate on the "classification_run_id" field.
+func ClassificationRunIDHasPrefix(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldHasPrefix(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDHasSuffix applies the HasSuffix predicate on the "classification_run_id" field.
+func ClassificationRunIDHasSuffix(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldHasSuffix(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDEqualFold applies the EqualFold predicate on the "classification_run_id" field.
+func ClassificationRunIDEqualFold(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEqualFold(FieldClassificationRunID, v))
+}
+
+// ClassificationRunIDContainsFold applies the ContainsFold predicate on the "classification_run_id" field.
+func ClassificationRunIDContainsFold(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldContainsFold(FieldClassificationRunID, v))
+}
+
 // DimensionEQ applies the EQ predicate on the "dimension" field.
 func DimensionEQ(v Dimension) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldEQ(FieldDimension, v))
@@ -738,6 +843,81 @@ func EffectiveValueEqualFold(v string) predicate.LineClassification {
 // EffectiveValueContainsFold applies the ContainsFold predicate on the "effective_value" field.
 func EffectiveValueContainsFold(v string) predicate.LineClassification {
 	return predicate.LineClassification(sql.FieldContainsFold(FieldEffectiveValue, v))
+}
+
+// EffectiveSourceEQ applies the EQ predicate on the "effective_source" field.
+func EffectiveSourceEQ(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEQ(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceNEQ applies the NEQ predicate on the "effective_source" field.
+func EffectiveSourceNEQ(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNEQ(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceIn applies the In predicate on the "effective_source" field.
+func EffectiveSourceIn(vs ...string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIn(FieldEffectiveSource, vs...))
+}
+
+// EffectiveSourceNotIn applies the NotIn predicate on the "effective_source" field.
+func EffectiveSourceNotIn(vs ...string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotIn(FieldEffectiveSource, vs...))
+}
+
+// EffectiveSourceGT applies the GT predicate on the "effective_source" field.
+func EffectiveSourceGT(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGT(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceGTE applies the GTE predicate on the "effective_source" field.
+func EffectiveSourceGTE(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldGTE(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceLT applies the LT predicate on the "effective_source" field.
+func EffectiveSourceLT(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLT(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceLTE applies the LTE predicate on the "effective_source" field.
+func EffectiveSourceLTE(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldLTE(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceContains applies the Contains predicate on the "effective_source" field.
+func EffectiveSourceContains(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldContains(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceHasPrefix applies the HasPrefix predicate on the "effective_source" field.
+func EffectiveSourceHasPrefix(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldHasPrefix(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceHasSuffix applies the HasSuffix predicate on the "effective_source" field.
+func EffectiveSourceHasSuffix(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldHasSuffix(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceIsNil applies the IsNil predicate on the "effective_source" field.
+func EffectiveSourceIsNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldIsNull(FieldEffectiveSource))
+}
+
+// EffectiveSourceNotNil applies the NotNil predicate on the "effective_source" field.
+func EffectiveSourceNotNil() predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldNotNull(FieldEffectiveSource))
+}
+
+// EffectiveSourceEqualFold applies the EqualFold predicate on the "effective_source" field.
+func EffectiveSourceEqualFold(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldEqualFold(FieldEffectiveSource, v))
+}
+
+// EffectiveSourceContainsFold applies the ContainsFold predicate on the "effective_source" field.
+func EffectiveSourceContainsFold(v string) predicate.LineClassification {
+	return predicate.LineClassification(sql.FieldContainsFold(FieldEffectiveSource, v))
 }
 
 // ConfidenceDisplayEQ applies the EQ predicate on the "confidence_display" field.

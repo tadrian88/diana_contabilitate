@@ -39,8 +39,12 @@ import (
 
 type Store struct {
 	AccountingReadinessObserver interface{ AccountingReadinessEvaluated(bool) }
-	DB                          *sql.DB
-	Client                      *ent.Client
+	AccountingWorkflowObserver  interface {
+		AccountingReviewTaskCreated()
+		AccountingApproveAllSucceeded()
+	}
+	DB     *sql.DB
+	Client *ent.Client
 }
 
 type PoolConfig struct {
@@ -123,8 +127,12 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 	}
 	for lineIndex := range result.Lines {
 		for decisionIndex := range result.Lines[lineIndex].Classifications {
-			if err := s.hydrateMappingReference(ctx, &result.Lines[lineIndex].Classifications[decisionIndex]); err != nil {
+			decision := &result.Lines[lineIndex].Classifications[decisionIndex]
+			if err := s.hydrateMappingReference(ctx, decision); err != nil {
 				return nil, err
+			}
+			if decision.Dimension == classificationdomain.DimensionAccount {
+				decision.MappingScope = accountMappingScopePreview(result, clientRow.Name, row.Edges.Lines[lineIndex], decision.Mapping)
 			}
 		}
 	}
@@ -145,6 +153,9 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 		if result.ActiveTask.Type == "CLASSIFICATION" {
 			for _, lineRow := range row.Edges.Lines {
 				for _, classificationRow := range lineRow.Edges.Classifications {
+					if row.CurrentClassificationRunID != nil && classificationRow.ClassificationRunID != *row.CurrentClassificationRunID {
+						continue
+					}
 					if classificationRow.RequiredReview || classificationRow.ModelVersion == accounting.ModelVersion {
 						decision := lineClassificationDomain(classificationRow, lineRow)
 						if err := s.hydrateMappingReference(ctx, &decision); err != nil {
@@ -171,7 +182,36 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 			AssociatedByID: association.AssociatedByID, AssociatedByName: association.AssociatedByDisplay,
 		}
 	}
+	if err = s.attachClassificationContext(ctx, result); err != nil {
+		return nil, err
+	}
+	if result.ModelVersion == accounting.ModelVersion {
+		result.AccountingWorkflowStatus = accountingWorkflowStatus(ctx, s.DB, result)
+	}
 	return result, nil
+}
+
+func accountingWorkflowStatus(ctx context.Context, db *sql.DB, item *invoicing.Invoice) string {
+	switch item.PipelineStatus {
+	case invoicing.StatusCommerciallyValidated:
+		return "APPLYING_RULES"
+	case invoicing.StatusAwaitingReview:
+		return "REVIEW_REQUIRED"
+	case invoicing.StatusReadyForSAGA, invoicing.StatusExporting, invoicing.StatusExported:
+		return "COMPLETED"
+	case invoicing.StatusClassified:
+		if item.CurrentClassificationRunID == nil {
+			return "AI_ANALYSIS_PENDING"
+		}
+		var status string
+		err := db.QueryRowContext(ctx, `SELECT status FROM accounting_analysis_runs WHERE client_id=$1 AND invoice_id=$2 AND classification_run_id=$3 ORDER BY started_at DESC LIMIT 1`, item.ClientID, item.ID, *item.CurrentClassificationRunID).Scan(&status)
+		if err == nil && status == "RUNNING" {
+			return "AI_ANALYSIS_RUNNING"
+		}
+		return "AI_ANALYSIS_PENDING"
+	default:
+		return ""
+	}
 }
 
 func accountMappingScopePreview(item *invoicing.Invoice, clientName string, line *ent.InvoiceLine, mapping *classificationdomain.MappingReference) *classificationdomain.MappingScopePreview {
@@ -247,7 +287,7 @@ func invoiceDomain(row *ent.Invoice) (*invoicing.Invoice, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read invoice amount: %w", err)
 	}
-	result := &invoicing.Invoice{ModelVersion: row.ModelVersion, SourceFacts: row.SourceFacts, AccountingSnapshot: row.AccountingSnapshot, ReadinessReason: row.ReadinessReason,
+	result := &invoicing.Invoice{ModelVersion: row.ModelVersion, SourceFacts: row.SourceFacts, AccountingSnapshot: row.AccountingSnapshot, ReadinessReason: row.ReadinessReason, CurrentClassificationRunID: row.CurrentClassificationRunID,
 		ID: row.ID, ClientID: row.ClientID, SupplierName: row.SupplierName,
 		SupplierCUI: row.SupplierCui, NormalizedSupplierCUI: row.NormalizedSupplierCui,
 		DocumentNumber: row.DocumentNumber, NormalizedDocumentNumber: row.NormalizedDocumentNumber,
@@ -271,6 +311,9 @@ func invoiceDomain(row *ent.Invoice) (*invoicing.Invoice, error) {
 		}
 		line := invoicing.Line{SourceFacts: lineRow.SourceFacts, ID: lineRow.ID, Position: lineRow.Position, Description: lineRow.Description, Unit: lineRow.Unit, VATRate: values[0], VATValue: values[1], Quantity: values[2], UnitPrice: values[3], NetValue: values[4], TotalValue: values[5], AdditionalInfo: lineRow.AdditionalInfo}
 		for _, classificationRow := range lineRow.Edges.Classifications {
+			if row.CurrentClassificationRunID != nil && classificationRow.ClassificationRunID != *row.CurrentClassificationRunID {
+				continue
+			}
 			line.Classifications = append(line.Classifications, lineClassificationDomain(classificationRow, lineRow))
 		}
 		result.Lines = append(result.Lines, line)
@@ -279,17 +322,22 @@ func invoiceDomain(row *ent.Invoice) (*invoicing.Invoice, error) {
 }
 
 func lineClassificationDomain(row *ent.LineClassification, line *ent.InvoiceLine) classificationdomain.Decision {
-	result := classificationdomain.Decision{ModelVersion: row.ModelVersion, TypedValue: row.EffectiveTypedValue, ProposedTypedValue: row.ProposedTypedValue, Evidence: row.DecisionEvidence, ReviewReason: row.ReviewReason,
+	result := classificationdomain.Decision{ModelVersion: row.ModelVersion, TypedValue: row.EffectiveTypedValue, ProposedTypedValue: row.ProposedTypedValue, Evidence: row.DecisionEvidence, LegalCitations: row.LegalCitations, ValidationResults: row.ValidationResults, ProposalProvenance: row.ProposalProvenance, ReviewReason: row.ReviewReason,
 		ID: row.ID, ClientID: row.ClientID, InvoiceID: row.InvoiceID, InvoiceLineID: row.InvoiceLineID,
 		LineLabel: fmt.Sprintf("Linia %d · %s", line.Position, line.Description), Dimension: classificationdomain.Dimension(row.Dimension),
 		ProposedValue: row.ProposedValue, EffectiveValue: row.EffectiveValue, Confidence: row.ConfidenceDisplay,
-		Explanation: row.Explanation, LegalBasis: row.LegalBasis, Status: classificationdomain.ReviewStatus(row.ReviewStatus),
+		EffectiveSource: row.EffectiveSource,
+		Explanation:     row.Explanation, LegalBasis: row.LegalBasis, Status: classificationdomain.ReviewStatus(row.ReviewStatus),
 		InvoiceDateUsed: dateFromOptional(row.InvoiceDateUsed), HumanReviewed: row.ReviewedAt != nil && row.ReviewedByDisplay != nil && *row.ReviewedByDisplay != "",
 		Source: classificationdomain.Source(row.Source), PolicyVersion: row.PolicyVersion, Revision: row.Revision,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 	if row.AccountMappingID != nil && row.AccountMappingVersion != nil {
 		result.Mapping = &classificationdomain.MappingReference{MappingID: *row.AccountMappingID, Version: *row.AccountMappingVersion}
+	}
+	if p := row.ProposalProvenance; p != nil && p.KnowledgeID != "" {
+		promotedAt, _ := time.Parse(time.RFC3339, p.PromotedAt)
+		result.Knowledge = &classificationdomain.KnowledgeReference{ID: p.KnowledgeID, Version: p.KnowledgeVersion, SourceInvoiceID: p.SourceInvoiceID, SourceInvoiceLineID: p.SourceLineID, SourceClassificationID: p.SourceDecisionID, PromotedBy: p.PromotedBy, PromotedAt: promotedAt}
 	}
 	if version := row.Edges.RuleVersion; version != nil && version.Edges.Rule != nil {
 		rule := version.Edges.Rule

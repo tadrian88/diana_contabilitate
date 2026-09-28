@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"diana-contabilitate/backend/internal/accountinganalysis"
 	"diana-contabilitate/backend/internal/outbox"
 
 	"github.com/hibiken/asynq"
@@ -53,15 +54,13 @@ func NewAsynqPublisher(client *asynq.Client, queue string, maxRetry int, timeout
 	return &AsynqPublisher{client: client, queue: queue, maxRetry: maxRetry, timeout: timeout}
 }
 
-func (p *AsynqPublisher) PublishAccountingAnalysis(ctx context.Context, runID string) error {
-	payload, err := json.Marshal(struct {
-		RunID string `json:"runId"`
-	}{RunID: runID})
+func (p *AsynqPublisher) PublishAccountingAnalysis(ctx context.Context, job accountinganalysis.AnalysisJob) error {
+	payload, err := json.Marshal(job)
 	if err != nil {
 		return err
 	}
-	_, err = p.client.EnqueueContext(ctx, asynq.NewTask(AccountingAnalysisTask, payload), asynq.Queue(p.queue), asynq.MaxRetry(p.maxRetry), asynq.Timeout(p.timeout), asynq.Unique(time.Minute))
-	if errors.Is(err, asynq.ErrDuplicateTask) {
+	_, err = p.client.EnqueueContext(ctx, asynq.NewTask(AccountingAnalysisTask, payload), asynq.TaskID("accounting-analysis:"+job.AnalysisRunID), asynq.Queue(p.queue), asynq.MaxRetry(p.maxRetry), asynq.Timeout(p.timeout), asynq.Unique(24*time.Hour))
+	if errors.Is(err, asynq.ErrDuplicateTask) || errors.Is(err, asynq.ErrTaskIDConflict) {
 		return nil
 	}
 	return err

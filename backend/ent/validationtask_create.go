@@ -51,6 +51,20 @@ func (_c *ValidationTaskCreate) SetNillableContractMatchRunID(v *string) *Valida
 	return _c
 }
 
+// SetClassificationRunID sets the "classification_run_id" field.
+func (_c *ValidationTaskCreate) SetClassificationRunID(v string) *ValidationTaskCreate {
+	_c.mutation.SetClassificationRunID(v)
+	return _c
+}
+
+// SetNillableClassificationRunID sets the "classification_run_id" field if the given value is not nil.
+func (_c *ValidationTaskCreate) SetNillableClassificationRunID(v *string) *ValidationTaskCreate {
+	if v != nil {
+		_c.SetClassificationRunID(*v)
+	}
+	return _c
+}
+
 // SetTaskType sets the "task_type" field.
 func (_c *ValidationTaskCreate) SetTaskType(v validationtask.TaskType) *ValidationTaskCreate {
 	_c.mutation.SetTaskType(v)
@@ -388,6 +402,10 @@ func (_c *ValidationTaskCreate) createSpec() (*ValidationTask, *sqlgraph.CreateS
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
+	}
+	if value, ok := _c.mutation.ClassificationRunID(); ok {
+		_spec.SetField(validationtask.FieldClassificationRunID, field.TypeString, value)
+		_node.ClassificationRunID = &value
 	}
 	if value, ok := _c.mutation.TaskType(); ok {
 		_spec.SetField(validationtask.FieldTaskType, field.TypeEnum, value)

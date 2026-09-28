@@ -1,5 +1,35 @@
 # Diana — Automatic Accounting Analysis & Learning
 
+## Capitolul B — contractul contabil unificat (2026-09-25)
+
+Pentru analizele noi, `LineClassification` este singura autoritate contabilă. Nu mai există un rezultat AI paralel care să poată afirma o monografie diferită de clasificarea facturii.
+
+Contractul canonic este, pentru fiecare `InvoiceLine`:
+
+```text
+InvoiceLine
+  ├─ ACCOUNT
+  ├─ VAT_TREATMENT
+  ├─ VAT_DEDUCTIBILITY
+  └─ EXPENSE_TAX_TREATMENT
+```
+
+Fiecare clasificare poate păstra independent valoarea propusă și valoarea efectivă, `source` pentru propunere, `effectiveSource` pentru rezultatul final, explicația, citările legale verificate, rezultatele validării, starea review-ului, revizia și provenance-ul provider/model/prompt. `AI_PROPOSAL` este o sursă de propunere, niciodată o aprobare. După corecția contabilului, propunerea rămâne `AI_PROPOSAL`, iar valoarea efectivă are sursa `MANUAL`. O propunere validă tehnic rămâne `PENDING` până la decizia contabilului.
+
+Gemini folosește schema `UNIFIED_ACCOUNTING_PROPOSAL_V2` și returnează valori `accounting.Value` pentru dimensiunile încă nerezolvate. Primește facts, direcția facturii, profilul din snapshotul `classification_run`, dimensiunile deja rezolvate, fragmentele legislative recuperate și numai conturile active, postabile și permise de profil. Catalogul complet rămâne în snapshotul validatorului backend și nu este înlocuit de constrângerile promptului.
+
+Validarea este independentă per `InvoiceLine × Dimension`. De exemplu, `ACCOUNT=628` este păstrat ca propunere AI, dar primește `ACCOUNT_NOT_POSTABLE` și sugestiile analitice disponibile; o propunere validă `VAT_TREATMENT` din același răspuns rămâne validă și reviewable. Statusul aggregate al artefactului poate fi `PROPOSED`, `PARTIAL_VALIDATION` sau `VALIDATION_FAILED`, dar nu este autoritatea deciziilor individuale.
+
+Citările sunt returnate per dimensiune și sunt validate față de fragmentele exacte ale rulării: `fragmentId`, `versionId`, `citationKey` și `contentHash` trebuie să coincidă. Citarea invalidă este păstrată ca evidence neverificată și produce o eroare granulară; Diana nu inventează o citare înlocuitoare. Corpusul legislativ rămâne evidence/retrieval, nu regulă executabilă.
+
+`accounting_analysis_runs.raw_structured_response` rămâne artefactul imuabil al providerului și sursa de audit pentru provider/model/tokeni. Pentru V2, review-ul se face prin infrastructura existentă a clasificărilor; cardul legacy nu mai aprobă întregul JSON V2. Analizele V1 istorice (`ACCOUNTING_ANALYSIS_V1`) nu sunt convertite euristic și rămân artefacte legacy/audit. Monografia V1 nu mai este autoritară pentru analize noi.
+
+Outputul V2 nu conține evenimente de plată sau încasare. Facturile primite și emise sunt diferențiate prin identitățile fiscale existente, iar modelul descrie exclusiv deciziile evenimentului facturii. Payment/collection matching, fallback-ul AI automat prin pipeline și promovarea în knowledge rămân în afara Capitolului B. Capitolul C va orchestra regulile deterministe → dimensiuni nerezolvate → AI → review fără un nou redesign de domain.
+
+Migrarea aferentă este `000028_unified_accounting_contract.sql`. Ea adaugă pe `line_classifications` citările, validările și provenance-ul propunerii, sursa `AI_PROPOSAL`, starea `REJECTED` și statusul aggregate `PARTIAL_VALIDATION`. Nu rescrie analizele istorice.
+
+Secțiunile de mai jos documentează și istoricul vertical slice-ului V1; orice referire la monografie separată sau la aprobarea JSON-ului complet se aplică numai artefactelor legacy.
+
 ## Stare locală confirmată (2026-09-23)
 
 Confirmat de utilizator:
@@ -143,6 +173,32 @@ Conținutul unei versiuni este hash-ul SHA-256 al concatenării, în ordinea `or
 - generarea SAGA din noul model de monografie. Exporterul existent rămâne autoritatea și nu primește output direct de la LLM;
 - invoice ↔ payment/collection matching. Fazele `PAYMENT` și `COLLECTION` sunt reprezentate, dar nu sunt executabile fără evenimente bancare și alocări.
 
+## Capitolul A — consistența contextului
+
+Începând cu migrarea `000027_accounting_context_consistency.sql`, clasificarea nu mai este identificată numai prin snapshotul de pe factură. Fiecare execuție are un `classification_run` imuabil, iar `line_classifications` sunt legate de rularea care le-a produs. Factura indică explicit rularea curentă; rulările și deciziile precedente rămân auditabile.
+
+Garanții introduse:
+
+- un cont final trebuie să existe, să fie activ, postabil și permis de profil; erorile sunt `ACCOUNT_NOT_FOUND`, `ACCOUNT_INACTIVE`, `ACCOUNT_NOT_POSTABLE` și `ACCOUNT_NOT_ALLOWED_BY_PROFILE`;
+- conturile sintetice pot apărea în căutare pentru context, dar nu pot fi selectate sau salvate în profil;
+- copiii postabili sugerați sunt derivați exclusiv din `accounts.parent_code`;
+- lipsa profilului produce blocker-ul `MISSING_FISCAL_PROFILE`, nu `ACCOUNTING RULE SOURCE REQUIRED`;
+- profilurile aprobate sunt corectate prin succesor explicit, fără modificarea profilului istoric;
+- schimbarea profilului sau a stării conturilor marchează contextul curent ca stale;
+- reanalizarea este explicită, idempotentă și permisă numai înainte de exportul SAGA;
+- un analysis run nou consumă profilul și catalogul capturate de rularea clasificării, nu configurația curentă citită ulterior.
+
+`invoice.accounting_snapshot` rămâne pentru compatibilitate. Pentru cod nou, autoritatea este `classification_runs.snapshot` împreună cu `invoices.current_classification_run_id`.
+
+Aplicare locală:
+
+```bash
+cd backend
+DATABASE_URL='postgresql://diana:diana@127.0.0.1:5442/diana?sslmode=disable' atlas migrate apply --env local
+```
+
+Migrarea nu schimbă automat 628 în 6281 și nu rescrie profiluri ori decizii istorice. Profilurile vechi care conțin conturi nepostabile trebuie înlocuite printr-o versiune succesoare corectată.
+
 ### BLOCKED / REQUIRES PRODUCT DECISION
 
 - corpusul oficial/versionat pentru OMFP 1802/2014 și Legea 227/2015 nu există în repository și nu a fost inventat;
@@ -198,3 +254,86 @@ O versiune legislativă existentă este imutabilă. O modificare se importă dre
 4. promovare exactă a review-urilor aprobate în knowledge și invalidare la schimbarea profilului sau legislației;
 5. furnizarea și aprobarea manifestelor oficiale/versionate și eliminarea dependenței de corpusul `TEST_ONLY`;
 6. numai după aceste gate-uri, proiectarea integrării cu SAGA și a evenimentelor bancare pentru plată/încasare.
+
+## Capitolul C — workflow automat Asynq și persistență (2026-09-25)
+
+Fluxul normal nu mai pornește din cardul separat de analiză. Etapa existentă de clasificare rulează în ordinea:
+
+`reguli deterministe / mapări exacte → detectare canonică unresolved → job Asynq → Gemini numai pentru dimensiunile lipsă → validare granulară → LineClassification → un singur task contabil → decizii finale`
+
+`LineClassification` rămâne singura autoritate. Funcțiile din `internal/accounting` disting explicit `NEEDS_AI`, `NEEDS_REVIEW` și `FINAL`; o propunere AI validă tehnic dar neaprobată nu este finală, însă nici nu este retrimisă inutil furnizorului. Valorile finale, mapările deja propuse și propunerile AI existente sunt trimise modelului doar drept context read-only.
+
+### Asynq, idempotency și retry
+
+- payloadul conține doar `tenantId`, `invoiceId`, `classificationRunId` și `analysisRunId`;
+- inputul este reconstruit la execuție din rularea curentă și snapshotul imuabil al `classificationRun`;
+- `command_key`, `TaskID` Asynq stabil și cheia `accounting-review:<classificationRunId>` fac enqueue-ul, persistența și taskul idempotente;
+- worker-ul recalculează dimensiunile lipsă înainte de apelul providerului; un job stale devine no-op auditat (`SUPERSEDED`/`NOT_NEEDED`);
+- timeout/network/429/5xx sunt retryable și folosesc limita globală Asynq; configurația invalidă, identitatea inconsistentă și răspunsul provider nevalid sunt terminale;
+- după epuizarea retry-urilor sau o eroare terminală, factura trece la `REVIEW_REQUIRED`, cu toate dimensiunile nefinale editabile manual. Gemini nu poate lăsa factura blocată în `RUNNING`.
+
+### Concurență și task unic
+
+Persistența AI actualizează numai rândurile `NO_MATCH`/`AMBIGUOUS` fără valoare efectivă din rularea încă activă. CAS-ul și filtrele SQL împiedică suprascrierea unei decizii deterministe sau manuale apărute între enqueue și commit. Validarea parțială nu face rollback logic al dimensiunilor valide; o eroare DB face rollback tranzacțional integral.
+
+Taskul de tip `CLASSIFICATION` este legat de `classification_run_id` și este unic pentru acea rulare. El apare numai după terminarea AI, după failure definitiv sau când intervenția umană este direct necesară. Taskul se închide numai când `IsAccountingClassificationComplete` confirmă toate cele patru dimensiuni obligatorii pentru fiecare linie.
+
+### Approve All și reanalizare
+
+`POST /api/v1/invoices/{id}/classification-decisions/approve-all` aprobă într-o singură tranzacție numai propunerile tipate, valide, `PENDING`, din rularea curentă. Requestul include reviziile facturii, taskului și fiecărei clasificări eligibile; orice diferență produce `409 CONFLICT` fără aprobare parțială. Propunerile invalide, respinse, stale sau nerezolvate sunt excluse. Aprobarea nu creează knowledge reutilizabil.
+
+Reanalizarea păstrează run-ul vechi, marchează taskul vechi drept superseded, creează snapshot/run nou, reaplică regulile/mapările și pornește automat AI numai pentru noul set unresolved.
+
+### API și compatibilitate
+
+Factura expune `accountingWorkflowStatus`: `APPLYING_RULES`, `AI_ANALYSIS_PENDING`, `AI_ANALYSIS_RUNNING`, `REVIEW_REQUIRED` sau `COMPLETED`. Acesta este derivat backend-side. Endpointurile manuale `GET/POST .../accounting-analysis` rămân temporar pentru diagnostic și compatibilitate, dar folosesc același contract V2 și aceeași materializare canonică; ele nu reprezintă fluxul normal de producție.
+
+Learning-ul reutilizabil și exportul SAGA rămân explicit în afara Capitolului C. O aprobare finalizează numai factura/rularea curentă; nu creează automat reguli sau mapări noi și o propunere pending nu este export-ready.
+
+## Capitolul D — review contabil unificat
+
+Pentru `ACCOUNTING_DOMAIN_V2`, fila de clasificare a facturii este unica suprafață autoritativă de review. Ea grupează pe fiecare linie cele patru decizii canonice (`ACCOUNT`, `VAT_TREATMENT`, `VAT_DEDUCTIBILITY`, `EXPENSE_TAX_TREATMENT`) și afișează distinct valorile finale, propunerile valide, propunerile invalide, câmpurile nerezolvate și propunerile respinse. Sursele, validările și citările sunt traduse în limbaj contabil și rămân asociate dimensiunii pe care o susțin.
+
+Stările principale sunt:
+
+- **blocked** — profilul fiscal lipsă sau invalid are o singură acțiune principală către configurarea clientului;
+- **analyzing** — aplicarea regulilor și analiza asistată sunt prezentate drept progres, fără acțiuni de aprobare;
+- **review** — acțiunea principală este aprobarea tuturor propunerilor valide, iar editarea și respingerea rămân acțiuni locale;
+- **stale** — rezultatul vechi este marcat explicit și blocat pentru editare, iar reanalizarea este acțiunea principală;
+- **completed** — deciziile sunt read-only, nu mai există CTA de aprobare, iar monografia derivată poate fi consultată.
+
+`AccountingAnalysisCard` nu mai este randat în fluxul V2 și editorul său JSON nu este accesibil clasificărilor V2. Cardul rămâne numai în istoricul explicit al analizelor `LEGACY_V1`. Monografia V2 este derivată, read-only și secundară; nu poate fi modificată independent de `LineClassification` și nu declară plăți sau încasări fără evenimente reale.
+
+## Capitolul E — reguli, surse și learning controlat
+
+O aprobare individuală, o corecție sau `Approve All` finalizează numai clasificarea curentă. Niciuna nu promovează implicit knowledge. După ce o decizie este finală și human-reviewed, contabilul poate alege acțiunea secundară „Folosește pentru situații similare”, inspectează scope-ul propus de backend și îl confirmă explicit. Comanda verifică prin CAS revizia facturii și a clasificării, run-ul curent și starea finală; o decizie dintr-un run superseded nu poate fi promovată.
+
+Cele trei concepte rămân separate:
+
+- **regulă verificată** — logică deterministă executabilă, cu predicate, rezultat, versiune și perioadă;
+- **decizie reutilizabilă** — rezultat uman final, per client și per dimensiune, cu scope factual exact și provenance către factură/linie/run/clasificare;
+- **sursă legislativă** — document și versiune pentru retrieval/evidence/citare; fragmentele nu sunt reguli executabile.
+
+### Modele reutilizate
+
+`account_mappings` rămâne intenționat modelul restrâns `supplier + service identity → ACCOUNT`; nu a fost extins artificial pentru TVA sau tratamentul fiscal. `approved_accounting_knowledge`, creat inițial lângă auditul analizei legislative, este extins pentru celelalte trei dimensiuni. Rândurile istorice fără câmpurile Chapter E rămân audit-only și nu sunt activate automat. `LineClassification.source=LEARNED_MAPPING` este reutilizat deoarece semantica sa existentă este exact o propunere dintr-o decizie aprobată anterior; nu s-a introdus un enum duplicat. Referința concretă de knowledge și factura sursă sunt păstrate în provenance-ul imuabil al propunerii.
+
+### Matching, prioritate și cost AI
+
+Scope-ul persistat folosește numai fapte verificabile existente: client, supplier identity normalizat, cea mai puternică identitate disponibilă (`SELLER_ITEM_ID`, apoi `STANDARD_ITEM_ID`, altfel descriere normalizată exact), monedă, tip document, cotă TVA și profil contabil fiscal cu versiune. Nu există fuzzy/vector/LLM matching și nu există fallback supplier-only. Astfel Orange „Abonament Smart 15” nu devine `Orange → 626`, iar liniile RCA/CAS/diferență de curs de la BT Leasing rămân identități independente.
+
+Pipeline-ul este:
+
+`regulă deterministă verificată → account mapping / approved knowledge exact → AI numai pentru dimensiunile unresolved → review manual`
+
+Knowledge-ul produce o propunere `LEARNED_MAPPING` care cere review, la aceeași autoritate ca maparea existentă. Un match exact împiedică apelul AI pentru dimensiunea respectivă. Două valori umane diferite pe același scope produc `AMBIGUOUS` cu `KnowledgeConflict`; AI nu alege câștigătorul. Regulile deterministe își păstrează prioritatea.
+
+### Validare, stale și revocare
+
+`ACCOUNT` este revalidat prin catalogul canonic activ/postable și allowlist-ul profilului înainte de reuse. Celelalte dimensiuni cer același `profile_id + profile_version`; schimbarea profilului marchează knowledge-ul fiscal anterior drept `STALE`, iar înlocuirea versiunii legislative citate îl marchează stale cu audit. În ambele cazuri nu mai poate produce propuneri. O nepotrivire de aplicabilitate la data facturii este de asemenea exclusă din matching. Revocarea este CAS-protected, auditată și nu șterge istoricul. Reactivarea automată nu există; se creează o versiune succesoare după o promovare explicită.
+
+Promovarea identică este deduplicată. O valoare diferită pentru același identity hash returnează conflict explicit. Fiecare promovare, utilizare/conflict și revocare produce activity audit cu clientul și agregatul de knowledge.
+
+### Reguli și surse
+
+Pagina `/rules` este „Reguli și surse” și are trei secțiuni independente: numai reguli `productionEligible`, decizii reutilizabile inspectabile/revocabile și versiuni ale corpusului legislativ. Empty state-ul regulilor este „Nu există încă reguli verificate”; textul despre reguli fictive a fost eliminat. Numărul fragmentelor legislative este etichetat drept evidence, nu drept număr de reguli.

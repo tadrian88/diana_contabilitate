@@ -1,4 +1,4 @@
-h1:l8IudVKH98TuMuvXLiJNSOBVJSGz7icR6PI9jxNxq/s=
+h1:T2dFdAxCN//nqmvmfWe7xfm8rwVbvEgSrTM9D9KPesU=
 000001_foundation.sql h1:1LvkBtffbjWi2YVKW0qGZciJYWvAxKI8su7C3IkgNws=
 000002_invoice_pipeline.sql h1:5NTZwA70HYrkGCZPFDbVk/k2ZqpklocyXKsDWtvfTKU=
 000003_duplicate_status_invariant.sql h1:jbmP08VPjY9Ci+3DbpbCM8Bs/EvLxuHXNuh8EWCW45A=
@@ -25,3 +25,9 @@ h1:l8IudVKH98TuMuvXLiJNSOBVJSGz7icR6PI9jxNxq/s=
 000024_accounting_analysis_legislation.sql h1:EXTdMpdHij92OwuElv91NQMwK6x470BqyLEyAjwhszM=
 000025_accounting_analysis_test_only.sql h1:1jZAUBG8F3NA5U3g/s7yTeVI4mzMWFBYLq5ZOd7QoUg=
 000026_omfp_1802_account_catalog.sql h1:x7uclADleHfECztTFoWVZ+uxzvzmfsB9e4eApAejJYA=
+000027_accounting_context_consistency.sql h1:mVwtjegFT05e328AlHOlHB+Ly21VPrv9VuCYgsKn+yk=
+000028_unified_accounting_contract.sql h1:aBqULP0Tgrj/8yUy5rtbeCec1DFnFHohyX3xUAL1iCs=
+000029_automatic_accounting_workflow.sql h1:1GZqV0395GkN2NBHxA1gCAhmF4URJagkvNy6+zEEeLI=
+000030_approved_accounting_knowledge.sql h1:wD86WPL0Qy9j9jASOQj8WRkp+Bgy+w/G05VpPLxhr50=
+000031_approved_knowledge_classification_shape.sql h1:7Or4BmIBDeK2jzh2Kwx9LoynwHZ1SvxXcG8nOGUPM6I=
+000032_ai_proposal_classification_shape.sql h1:Hsij0aG6mXUPObivWgP7UEyccahLr7O+INjpUJsCKig=

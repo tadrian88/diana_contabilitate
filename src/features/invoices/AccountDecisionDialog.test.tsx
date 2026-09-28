@@ -9,7 +9,7 @@ import { AccountDecisionDialog } from './AccountDecisionDialog'
 const base:ClassificationReviewItem={id:'decision',lineId:'line',lineLabel:'Serviciu generic',dimension:'ACCOUNT',proposedValue:'Necesită decizie',confidence:'Necesită revizuire',explanation:'Selectare manuală',legalBasis:'Confirmare contabilă',status:'PENDING',revision:1,modelVersion:'ACCOUNTING_DOMAIN_V2',source:'NO_MATCH',mappingScope:{clientDisplay:'Client generic',supplierDisplay:'Furnizor generic (RO123)',serviceIdentityKind:'SELLER_ITEM_ID',serviceIdentityValue:'SERVICE-1',normalizerVersion:'EXACT_IDENTIFIER_V1'}}
 
 describe('AccountDecisionDialog',()=>{
-  it('searches Diana accounts by code/name and creates reusable knowledge only explicitly',async()=>{
+  it('keeps a new account decision occurrence-only until the final decision is explicitly promoted',async()=>{
     const user=userEvent.setup();const submit=vi.fn()
     render(<RepositoryProvider repository={mockInvoiceRepository}><AccountDecisionDialog item={base} onCancel={()=>undefined} onSubmit={submit}/></RepositoryProvider>)
     expect(screen.queryByText(/Nu există conturi selectabile/)).not.toBeInTheDocument()
@@ -20,11 +20,8 @@ describe('AccountDecisionDialog',()=>{
     await user.click(option)
     expect(screen.getByLabelText('Aplică doar acestei linii')).toBeChecked()
     expect(screen.queryByLabelText('Scope mapare reutilizabilă')).not.toBeInTheDocument()
-    await user.click(screen.getByLabelText('Reutilizează pentru linii viitoare'))
-    expect(screen.getByLabelText('Scope mapare reutilizabilă')).toHaveTextContent('Client generic')
-    expect(screen.getByLabelText('Scope mapare reutilizabilă')).toHaveTextContent('SELLER_ITEM_ID: SERVICE-1')
     await user.click(screen.getByRole('button',{name:'Salvează decizia'}))
-    expect(submit).toHaveBeenCalledWith(expect.objectContaining({code:'6281',name:'Cheltuieli cu serviciile IT'}),'CREATE','Decizie de cont confirmată de contabil.')
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({code:'6281',name:'Cheltuieli cu serviciile IT'}),'OCCURRENCE_ONLY','Decizie de cont confirmată de contabil.')
   })
 
   it('offers occurrence-only, correction and policy change for learned proposals and requires policy reason',async()=>{

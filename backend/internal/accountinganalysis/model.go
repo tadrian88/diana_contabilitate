@@ -11,8 +11,9 @@ import (
 	"diana-contabilitate/backend/internal/money"
 )
 
-const SchemaVersion = "ACCOUNTING_ANALYSIS_V1"
-const PromptVersion = "ACCOUNTING_ANALYSIS_PROMPT_V1"
+const SchemaVersion = "UNIFIED_ACCOUNTING_PROPOSAL_V2"
+const PromptVersion = "UNIFIED_ACCOUNTING_PROMPT_V2"
+const LegacySchemaVersion = "ACCOUNTING_ANALYSIS_V1"
 
 type Direction string
 
@@ -43,27 +44,50 @@ type Source string
 const (
 	SourceApprovedRule      Source = "APPROVED_RULE"
 	SourceDeterministicRule Source = "DETERMINISTIC_RULE"
-	SourceLLMLegislation    Source = "LLM_LEGISLATION_ANALYSIS"
+	SourceLLMLegislation    Source = "LLM_LEGISLATION_ANALYSIS" // legacy artifact only
+	SourceAIProposal        Source = "AI_PROPOSAL"
 	SourceManual            Source = "MANUAL"
 )
 
 type Line struct {
-	ID, Description string
-	Facts           *accounting.LineFacts
-	Net, VAT, Gross money.Amount
+	ID                   string                `json:"id"`
+	Description          string                `json:"description"`
+	Facts                *accounting.LineFacts `json:"facts,omitempty"`
+	Net                  money.Amount          `json:"net"`
+	VAT                  money.Amount          `json:"vat"`
+	Gross                money.Amount          `json:"gross"`
+	UnresolvedDimensions []string              `json:"unresolvedDimensions"`
 }
 
 type Input struct {
-	ClientID, InvoiceID      string
-	SupplierID, SupplierName string
-	InvoiceRevision          uint64
-	IssueDate                accountingdate.Date
-	Direction                Direction
-	Currency                 string
-	Total                    money.Amount
-	SourceFacts              *accounting.SourceFacts
-	Profile                  *accounting.Profile
-	Lines                    []Line
+	ClientID            string                  `json:"clientId"`
+	InvoiceID           string                  `json:"invoiceId"`
+	ClassificationRunID string                  `json:"classificationRunId"`
+	SupplierID          string                  `json:"supplierId"`
+	SupplierName        string                  `json:"supplierName"`
+	InvoiceRevision     uint64                  `json:"invoiceRevision"`
+	IssueDate           accountingdate.Date     `json:"issueDate"`
+	Direction           Direction               `json:"direction"`
+	Currency            string                  `json:"currency"`
+	Total               money.Amount            `json:"total"`
+	SourceFacts         *accounting.SourceFacts `json:"sourceFacts"`
+	Profile             *accounting.Profile     `json:"profile"`
+	AccountCatalog      Catalog                 `json:"accountCatalog,omitempty"`
+	AccountCandidates   []AccountCandidate      `json:"accountCandidates"`
+	ResolvedDimensions  []ResolvedDimension     `json:"resolvedDimensions"`
+	Lines               []Line                  `json:"lines"`
+}
+
+type AccountCandidate struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	AccountType string `json:"accountType"`
+}
+
+type ResolvedDimension struct {
+	InvoiceLineID string           `json:"invoiceLineId"`
+	Dimension     string           `json:"dimension"`
+	Value         accounting.Value `json:"value"`
 }
 
 type Entry struct {
@@ -96,18 +120,40 @@ type Citation struct {
 	ContentHash string `json:"contentHash"`
 }
 
+func (c Citation) Evidence(verified bool) accounting.LegalCitation {
+	return accounting.LegalCitation{FragmentID: c.FragmentID, VersionID: c.VersionID, CitationKey: c.CitationKey, ContentHash: c.ContentHash, Verified: verified}
+}
+
+type DimensionProposal struct {
+	Dimension     string           `json:"dimension"`
+	ProposedValue accounting.Value `json:"proposedValue"`
+	Explanation   string           `json:"explanation"`
+	Citations     []Citation       `json:"citations"`
+	Confidence    Confidence       `json:"confidence"`
+	Insufficient  bool             `json:"insufficient"`
+}
+
+type LineProposal struct {
+	InvoiceLineID string              `json:"invoiceLineId"`
+	Decisions     []DimensionProposal `json:"decisions"`
+}
+
 type Proposal struct {
-	SchemaVersion    string          `json:"schemaVersion"`
-	ClientID         string          `json:"clientId"`
-	InvoiceID        string          `json:"invoiceId"`
-	InvoiceRevision  uint64          `json:"invoiceRevision"`
-	Entries          []Entry         `json:"entries"`
-	LineTreatments   []LineTreatment `json:"lineTreatments"`
-	Citations        []Citation      `json:"citations"`
-	ReasoningSummary string          `json:"reasoningSummary"`
-	Confidence       Confidence      `json:"confidence"`
-	Source           Source          `json:"source"`
-	RequiresReview   bool            `json:"requiresReview"`
+	SchemaVersion string         `json:"schemaVersion"`
+	Lines         []LineProposal `json:"lines,omitempty"`
+	Summary       string         `json:"summary,omitempty"`
+	Source        Source         `json:"source"`
+
+	// V1 fields are retained only so historical immutable runs remain readable.
+	ClientID         string          `json:"clientId,omitempty"`
+	InvoiceID        string          `json:"invoiceId,omitempty"`
+	InvoiceRevision  uint64          `json:"invoiceRevision,omitempty"`
+	Entries          []Entry         `json:"entries,omitempty"`
+	LineTreatments   []LineTreatment `json:"lineTreatments,omitempty"`
+	Citations        []Citation      `json:"citations,omitempty"`
+	ReasoningSummary string          `json:"reasoningSummary,omitempty"`
+	Confidence       Confidence      `json:"confidence,omitempty"`
+	RequiresReview   bool            `json:"requiresReview,omitempty"`
 }
 
 type AnalysisRequest struct {
@@ -133,4 +179,13 @@ type ProviderResult struct {
 
 type Analyzer interface {
 	Analyze(context.Context, AnalysisRequest) (ProviderResult, error)
+}
+
+func HasDimensionsNeedingAI(input Input) bool {
+	for _, line := range input.Lines {
+		if len(line.UnresolvedDimensions) > 0 {
+			return true
+		}
+	}
+	return false
 }

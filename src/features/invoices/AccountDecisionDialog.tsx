@@ -22,11 +22,11 @@ export function AccountDecisionDialog({item,onCancel,onSubmit}:{item:Classificat
   const learned=item.source==='LEARNED_MAPPING'||Boolean(item.mapping)
   const actions:Array<{value:AccountMappingAction;label:string}> = learned
     ? [{value:'OCCURRENCE_ONLY',label:'Doar această apariție'},{value:'CORRECT',label:'Corectează maparea reutilizabilă'},{value:'POLICY_CHANGE',label:'Schimbare de politică'}]
-    : item.source==='AMBIGUOUS' ? [{value:'OCCURRENCE_ONLY',label:'Aplică doar acestei linii'}] : [{value:'OCCURRENCE_ONLY',label:'Aplică doar acestei linii'},{value:'CREATE',label:'Reutilizează pentru linii viitoare'}]
+    : [{value:'OCCURRENCE_ONLY',label:'Aplică doar acestei linii'}]
   const reasonRequired=action==='POLICY_CHANGE'
   const actuallyChanged=!learned||selected?.code!==(item.proposedTypedValue?.account??item.mapping?.accountCode)
   return <Dialog.Root open onOpenChange={open=>!open&&onCancel()}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-40 bg-black/40"/><Dialog.Content className="dialog-content fixed left-1/2 top-1/2 z-50 w-[min(95vw,38rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl">
-    <Dialog.Title className="text-lg font-bold">{learned?'Schimbă decizia de cont':'Selectează contul Diana'}</Dialog.Title>
+    <Dialog.Title className="text-lg font-bold">{learned?'Schimbă decizia de cont':'Selectează contul contabil'}</Dialog.Title>
     <Dialog.Description className="mt-1 text-sm text-[var(--text-secondary)]">Caută după cod sau denumire. Sunt afișate numai conturile active și selectabile; selecția este validată din nou de backend.</Dialog.Description>
     <label className="mt-5 block text-sm font-semibold" id="account-select-label">Cont contabil</label>
     <div className="relative mt-2">

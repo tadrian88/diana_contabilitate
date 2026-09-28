@@ -63,37 +63,49 @@ type Filter struct {
 }
 
 type Invoice struct {
-	ModelVersion             string
-	SourceFacts              *accounting.SourceFacts
-	AccountingSnapshot       *accounting.Snapshot
-	ReadinessReason          string
-	ID                       string
-	ClientID                 string
-	SupplierName             string
-	SupplierCUI              *string
-	NormalizedSupplierCUI    *string
-	DocumentNumber           string
-	NormalizedDocumentNumber string
-	IssueDate                time.Time
-	IssueDay                 time.Time
-	DueDate                  *time.Time
-	Total                    money.Money
-	SPVReference             string
-	IngestionSource          string
-	ExternalDeliveryID       string
-	DuplicateOfInvoiceID     *string
-	DuplicateAmountMatches   *bool
-	DuplicateCurrencyMatches *bool
-	DocumentType             DocumentType
-	PipelineStatus           PipelineStatus
-	SagaStatus               SagaStatus
-	Revision                 uint64
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
-	Activity                 []audit.Event
-	Lines                    []Line
-	ActiveTask               *validationtasks.Task
-	ContractAssociation      *contracts.AssociationSnapshot
+	ModelVersion               string
+	SourceFacts                *accounting.SourceFacts
+	AccountingSnapshot         *accounting.Snapshot
+	ReadinessReason            string
+	CurrentClassificationRunID *string
+	AccountingWorkflowStatus   string
+	ClassificationContext      *ClassificationContext
+	ID                         string
+	ClientID                   string
+	SupplierName               string
+	SupplierCUI                *string
+	NormalizedSupplierCUI      *string
+	DocumentNumber             string
+	NormalizedDocumentNumber   string
+	IssueDate                  time.Time
+	IssueDay                   time.Time
+	DueDate                    *time.Time
+	Total                      money.Money
+	SPVReference               string
+	IngestionSource            string
+	ExternalDeliveryID         string
+	DuplicateOfInvoiceID       *string
+	DuplicateAmountMatches     *bool
+	DuplicateCurrencyMatches   *bool
+	DocumentType               DocumentType
+	PipelineStatus             PipelineStatus
+	SagaStatus                 SagaStatus
+	Revision                   uint64
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
+	Activity                   []audit.Event
+	Lines                      []Line
+	ActiveTask                 *validationtasks.Task
+	ContractAssociation        *contracts.AssociationSnapshot
+}
+
+type ClassificationContext struct {
+	RunID          string
+	ProfileID      string
+	ProfileVersion int
+	ContextStale   bool
+	StaleReasons   []string
+	CreatedAt      time.Time
 }
 
 type Line struct {

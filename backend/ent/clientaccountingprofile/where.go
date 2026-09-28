@@ -74,6 +74,11 @@ func Version(v int) predicate.ClientAccountingProfile {
 	return predicate.ClientAccountingProfile(sql.FieldEQ(FieldVersion, v))
 }
 
+// SupersedesProfileID applies equality check predicate on the "supersedes_profile_id" field. It's identical to SupersedesProfileIDEQ.
+func SupersedesProfileID(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldEQ(FieldSupersedesProfileID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.ClientAccountingProfile {
 	return predicate.ClientAccountingProfile(sql.FieldEQ(FieldCreatedAt, v))
@@ -182,6 +187,81 @@ func VersionLT(v int) predicate.ClientAccountingProfile {
 // VersionLTE applies the LTE predicate on the "version" field.
 func VersionLTE(v int) predicate.ClientAccountingProfile {
 	return predicate.ClientAccountingProfile(sql.FieldLTE(FieldVersion, v))
+}
+
+// SupersedesProfileIDEQ applies the EQ predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDEQ(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldEQ(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDNEQ applies the NEQ predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDNEQ(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldNEQ(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDIn applies the In predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDIn(vs ...string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldIn(FieldSupersedesProfileID, vs...))
+}
+
+// SupersedesProfileIDNotIn applies the NotIn predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDNotIn(vs ...string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldNotIn(FieldSupersedesProfileID, vs...))
+}
+
+// SupersedesProfileIDGT applies the GT predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDGT(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldGT(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDGTE applies the GTE predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDGTE(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldGTE(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDLT applies the LT predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDLT(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldLT(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDLTE applies the LTE predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDLTE(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldLTE(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDContains applies the Contains predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDContains(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldContains(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDHasPrefix applies the HasPrefix predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDHasPrefix(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldHasPrefix(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDHasSuffix applies the HasSuffix predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDHasSuffix(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldHasSuffix(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDIsNil applies the IsNil predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDIsNil() predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldIsNull(FieldSupersedesProfileID))
+}
+
+// SupersedesProfileIDNotNil applies the NotNil predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDNotNil() predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldNotNull(FieldSupersedesProfileID))
+}
+
+// SupersedesProfileIDEqualFold applies the EqualFold predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDEqualFold(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldEqualFold(FieldSupersedesProfileID, v))
+}
+
+// SupersedesProfileIDContainsFold applies the ContainsFold predicate on the "supersedes_profile_id" field.
+func SupersedesProfileIDContainsFold(v string) predicate.ClientAccountingProfile {
+	return predicate.ClientAccountingProfile(sql.FieldContainsFold(FieldSupersedesProfileID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

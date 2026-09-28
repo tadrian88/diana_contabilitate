@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"diana-contabilitate/backend/internal/accountinganalysis"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/platform/requestactor"
 )
 
@@ -85,6 +86,14 @@ func (s *Server) reviewAccountingAnalysis(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) writeAccountingAnalysisError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, accountinganalysis.ErrMissingFiscalProfile) {
+		writeError(w, r, http.StatusConflict, "MISSING_FISCAL_PROFILE", "Configurează profilul fiscal și reanalizează factura înainte de analiza asistată.")
+		return
+	}
+	if issue, ok := accounts.AsValidationIssue(err); ok {
+		writeErrorDetails(w, r, http.StatusBadRequest, string(issue.Code), issue.Message, issue)
+		return
+	}
 	if errors.Is(err, accountinganalysis.ErrAnalysisNotFound) {
 		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Analiza contabilă nu a fost găsită.")
 		return

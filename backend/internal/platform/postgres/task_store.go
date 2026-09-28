@@ -10,6 +10,7 @@ import (
 	"diana-contabilitate/backend/ent/contractmatchcandidate"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/lineclassification"
+	"diana-contabilitate/backend/ent/predicate"
 	entvalidationtask "diana-contabilitate/backend/ent/validationtask"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/audit"
@@ -47,8 +48,12 @@ func (s *Store) ListValidationTasks(ctx context.Context, filter validationtasks.
 		}
 		task := *validationTaskDomain(row)
 		if task.Type == validationtasks.TypeClassification {
+			predicates := []predicate.LineClassification{lineclassification.InvoiceIDEQ(row.InvoiceID), lineclassification.RequiredReviewEQ(true)}
+			if invoiceRow.CurrentClassificationRunID != nil {
+				predicates = append(predicates, lineclassification.ClassificationRunIDEQ(*invoiceRow.CurrentClassificationRunID))
+			}
 			classificationRows, classificationErr := s.Client.LineClassification.Query().
-				Where(lineclassification.InvoiceIDEQ(row.InvoiceID), lineclassification.RequiredReviewEQ(true)).
+				Where(predicates...).
 				WithInvoiceLine().WithRuleVersion(func(query *ent.RuleVersionQuery) { query.WithRule() }).
 				Order(ent.Asc(lineclassification.FieldInvoiceLineID), ent.Asc(lineclassification.FieldDimension)).All(ctx)
 			if classificationErr != nil {
@@ -268,7 +273,8 @@ func validationTaskDomain(row *ent.ValidationTask) *validationtasks.Task {
 		CreatedByID: row.CreatedByID, CreatedByDisplay: row.CreatedByDisplay,
 		Revision: row.Revision, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		WaitingSince: row.WaitingSince, ResolvedAt: row.ResolvedAt,
-		ContractMatchRunID: row.ContractMatchRunID,
+		ContractMatchRunID:  row.ContractMatchRunID,
+		ClassificationRunID: row.ClassificationRunID,
 	}
 	if run := row.Edges.ContractMatchRun; run != nil {
 		for _, candidate := range run.Edges.Candidates {

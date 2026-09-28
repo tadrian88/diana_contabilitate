@@ -1,6 +1,6 @@
 import type { AxiosInstance } from 'axios'
 import { apiClient } from '../../features/auth/auth-api'
-import type { ActivityEvent, ClassificationRule, Client, ClientScope, Contract, InvoiceLine, Invoice, LineClassification, PipelineStatus, SagaExport, SagaStatus, ValidationTask, ValidationTaskInboxItem } from '../../domain/invoice'
+import type { ActivityEvent, ApprovedKnowledge, ClassificationRule, Client, ClientScope, Contract, InvoiceLine, Invoice, LegislationSourceView, LineClassification, PipelineStatus, PromotionPreview, SagaExport, SagaStatus, ValidationTask, ValidationTaskInboxItem } from '../../domain/invoice'
 import type { AccountCatalogEntry, CommercialRule, CommercialValidationRun, ContractDocument, ReviewedContract, CreateClientOverrideInput, CreateRuleVersionInput, InvoiceRepository, SPVConnection } from '../invoiceRepository'
 
 interface InvoiceReadDto {
@@ -8,6 +8,9 @@ interface InvoiceReadDto {
  sourceFacts?: Invoice['sourceFacts']
  accountingSnapshot?: Invoice['accountingSnapshot']
  readinessReason?: string
+ currentClassificationRunId?:string
+ classificationContext?:Invoice['classificationContext']
+ accountingWorkflowStatus?:Invoice['accountingWorkflowStatus']
   id: string
   clientId: string
   supplierName: string
@@ -181,6 +184,12 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
     return response.data
   }
 
+  async listApprovedKnowledge(scope:ClientScope):Promise<ApprovedKnowledge[]>{const response=await this.http.get<ApprovedKnowledge[]>('/approved-knowledge',{params:scope==='all'?undefined:{clientId:scope}});return response.data}
+  async previewApprovedKnowledge(clientId:string,invoiceId:string,classificationId:string):Promise<PromotionPreview>{const response=await this.http.get<PromotionPreview>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/classifications/${encodeURIComponent(classificationId)}/reuse-preview`);return response.data}
+  async promoteApprovedKnowledge(clientId:string,invoiceId:string,preview:PromotionPreview,expectedInvoiceRevision:number,key=crypto.randomUUID()):Promise<ApprovedKnowledge>{const response=await this.http.post<ApprovedKnowledge>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/classifications/${encodeURIComponent(preview.classificationId)}/promote`,{expectedClassificationRevision:preview.classificationRevision,expectedInvoiceRevision,expectedClassificationRunId:preview.classificationRunId},{headers:{'Idempotency-Key':key}});return response.data}
+  async revokeApprovedKnowledge(clientId:string,item:ApprovedKnowledge,key=crypto.randomUUID()):Promise<ApprovedKnowledge>{const response=await this.http.post<ApprovedKnowledge>(`/clients/${encodeURIComponent(clientId)}/approved-knowledge/${encodeURIComponent(item.id)}/revoke`,{expectedRevision:item.revision},{headers:{'Idempotency-Key':key}});return response.data}
+  async listLegislationSources():Promise<LegislationSourceView[]>{return (await this.http.get<LegislationSourceView[]>('/legislation-sources')).data}
+
   async searchAccounts(query:string):Promise<AccountCatalogEntry[]> {
     const response=await this.http.get<AccountCatalogEntry[]>('/accounts',{params:{q:query}})
     return response.data
@@ -203,7 +212,7 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
     return response.data
   }
 
-  async reviewClassification(id: string, itemId: string, correctedValue?: string, typedValue?: import('../../domain/invoice').DomainValue, reason?: string, mappingAction?:import('../../domain/invoice').AccountMappingAction, expectedMappingRevision?:number): Promise<Invoice> {
+  async reviewClassification(id: string, itemId: string, correctedValue?: string, typedValue?: import('../../domain/invoice').DomainValue, reason?: string, mappingAction?:import('../../domain/invoice').AccountMappingAction, expectedMappingRevision?:number, action:import('../../domain/invoice').ClassificationReviewAction='APPROVE'): Promise<Invoice> {
     const invoice = await this.requireInvoice(id)
     const task = invoice.task
     const item = task?.classificationItems?.find((candidate) => candidate.id === itemId)
@@ -214,12 +223,27 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
       expectedInvoiceRevision: invoice.revision,
       expectedTaskRevision: task.revision,
       expectedClassificationRevision: item.revision,
+      action,
       ...(correctedValue === undefined ? {} : { correctedValue }),
  ...(typedValue === undefined ? {} : { typedValue }),
  ...(reason === undefined ? {} : { reason }),
  ...(mappingAction === undefined ? {} : { mappingAction }),
  ...(expectedMappingRevision === undefined ? {} : { expectedMappingRevision }),
     }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    return mapInvoice(response.data)
+  }
+
+  async approveAllClassifications(id:string):Promise<Invoice>{
+	const invoice=await this.requireInvoice(id);const task=invoice.task
+	if(!invoice.revision||!task?.revision)throw new Error('Invoice and task revisions are required for approve all.')
+	const expected=(task.classificationItems??[]).filter(item=>item.status==='PENDING'&&item.proposedTypedValue&&!item.validationResults?.length&&item.revision).map(item=>({id:item.id,revision:item.revision!}))
+	if(!expected.length)throw new Error('No valid pending proposals are available.')
+	const response=await this.http.post<InvoiceReadDto>(`/invoices/${encodeURIComponent(id)}/classification-decisions/approve-all`,{taskId:task.id,expectedInvoiceRevision:invoice.revision,expectedTaskRevision:task.revision,expected},{headers:{'Idempotency-Key':crypto.randomUUID()}})
+	return mapInvoice(response.data)
+  }
+
+  async reanalyzeClassification(clientId:string,invoiceId:string,expectedInvoiceRevision:number,key=crypto.randomUUID()):Promise<Invoice>{
+    const response=await this.http.post<InvoiceReadDto>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/classification/reanalyze`,{expectedInvoiceRevision},{headers:{'Idempotency-Key':key}})
     return mapInvoice(response.data)
   }
 
@@ -269,7 +293,7 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
 function mapInvoice(value: InvoiceReadDto): Invoice {
   return {
     id: value.id,
-    modelVersion: value.modelVersion, sourceFacts: value.sourceFacts, accountingSnapshot: value.accountingSnapshot, readinessReason: value.readinessReason,
+    modelVersion: value.modelVersion, sourceFacts: value.sourceFacts, accountingSnapshot: value.accountingSnapshot, readinessReason: value.readinessReason, currentClassificationRunId:value.currentClassificationRunId, classificationContext:value.classificationContext, accountingWorkflowStatus:value.accountingWorkflowStatus,
     scenario: 'PROCESSING',
     primaryDemo: false,
     clientId: value.clientId,

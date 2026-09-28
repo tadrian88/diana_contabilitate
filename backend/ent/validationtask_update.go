@@ -239,6 +239,9 @@ func (_u *ValidationTaskUpdate) sqlSave(ctx context.Context) (_node int, err err
 			}
 		}
 	}
+	if _u.mutation.ClassificationRunIDCleared() {
+		_spec.ClearField(validationtask.FieldClassificationRunID, field.TypeString)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(validationtask.FieldStatus, field.TypeEnum, value)
 	}
@@ -585,6 +588,9 @@ func (_u *ValidationTaskUpdateOne) sqlSave(ctx context.Context) (_node *Validati
 				ps[i](selector)
 			}
 		}
+	}
+	if _u.mutation.ClassificationRunIDCleared() {
+		_spec.ClearField(validationtask.FieldClassificationRunID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(validationtask.FieldStatus, field.TypeEnum, value)

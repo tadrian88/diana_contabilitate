@@ -20,6 +20,8 @@ const (
 	FieldInvoiceID = "invoice_id"
 	// FieldContractMatchRunID holds the string denoting the contract_match_run_id field in the database.
 	FieldContractMatchRunID = "contract_match_run_id"
+	// FieldClassificationRunID holds the string denoting the classification_run_id field in the database.
+	FieldClassificationRunID = "classification_run_id"
 	// FieldTaskType holds the string denoting the task_type field in the database.
 	FieldTaskType = "task_type"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -96,6 +98,7 @@ var Columns = []string{
 	FieldClientID,
 	FieldInvoiceID,
 	FieldContractMatchRunID,
+	FieldClassificationRunID,
 	FieldTaskType,
 	FieldStatus,
 	FieldTitle,
@@ -233,6 +236,11 @@ func ByInvoiceID(opts ...sql.OrderTermOption) OrderOption {
 // ByContractMatchRunID orders the results by the contract_match_run_id field.
 func ByContractMatchRunID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldContractMatchRunID, opts...).ToFunc()
+}
+
+// ByClassificationRunID orders the results by the classification_run_id field.
+func ByClassificationRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClassificationRunID, opts...).ToFunc()
 }
 
 // ByTaskType orders the results by the task_type field.

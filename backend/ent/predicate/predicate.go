@@ -27,6 +27,9 @@ type ActivityEvent func(*sql.Selector)
 // ClassificationRule is the predicate function for classificationrule builders.
 type ClassificationRule func(*sql.Selector)
 
+// ClassificationRun is the predicate function for classificationrun builders.
+type ClassificationRun func(*sql.Selector)
+
 // ClientAccountingProfile is the predicate function for clientaccountingprofile builders.
 type ClientAccountingProfile func(*sql.Selector)
 

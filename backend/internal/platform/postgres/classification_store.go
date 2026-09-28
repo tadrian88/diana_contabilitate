@@ -10,6 +10,7 @@ import (
 	"diana-contabilitate/backend/ent/clientaccountingprofile"
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountingdate"
+	accountdomain "diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/money"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 
 	"diana-contabilitate/backend/ent"
 	"diana-contabilitate/backend/ent/classificationrule"
+	"diana-contabilitate/backend/ent/classificationrun"
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/ent/invoicecontractassociation"
 	"diana-contabilitate/backend/ent/invoiceline"
@@ -32,7 +34,11 @@ import (
 )
 
 func (s *Store) ProcessCommandCommitted(ctx context.Context, commandID string) (bool, error) {
-	return s.auditExists(ctx, "classification:"+commandID+":executed")
+	committed, err := s.auditExists(ctx, "classification:"+commandID+":executed")
+	if err != nil || committed {
+		return committed, err
+	}
+	return s.auditExists(ctx, "classification:"+commandID+":blocked")
 }
 
 func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (classificationdomain.InvoiceContext, error) {
@@ -66,12 +72,11 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 		if err != nil {
 			return input, err
 		}
-		var selected []*accounting.Profile
+		allProfiles := make([]*accounting.Profile, 0, len(profiles))
 		for _, p := range profiles {
-			if p.Payload.Valid(row.ClientID, input.IssueDate) {
-				selected = append(selected, p.Payload)
-			}
+			allProfiles = append(allProfiles, p.Payload)
 		}
+		selected := accounting.ApplicableProfiles(allProfiles, row.ClientID, input.IssueDate)
 		if len(selected) == 1 {
 			input.Snapshot.Profile = selected[0]
 		}
@@ -133,6 +138,33 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 	for _, code := range selectableAccountCodes {
 		input.SelectableAccounts[code] = true
 	}
+	if input.Snapshot != nil && input.Snapshot.Profile != nil && len(input.Snapshot.Profile.AccountCodes) > 0 {
+		catalogRows, catalogErr := tx.Account.Query().Where(account.CodeIn(input.Snapshot.Profile.AccountCodes...)).Order(ent.Asc(account.FieldCode)).All(ctx)
+		if catalogErr != nil {
+			return classificationdomain.InvoiceContext{}, catalogErr
+		}
+		catalogByCode := make(map[string]*ent.Account, len(catalogRows))
+		for _, catalogRow := range catalogRows {
+			catalogByCode[catalogRow.Code] = catalogRow
+			parent := ""
+			if catalogRow.ParentCode != nil {
+				parent = *catalogRow.ParentCode
+			}
+			input.Snapshot.AccountCatalog = append(input.Snapshot.AccountCatalog, accounting.AccountSnapshot{Code: catalogRow.Code, ParentCode: parent, Active: catalogRow.IsActive, Postable: catalogRow.Postable})
+		}
+		for _, code := range input.Snapshot.Profile.AccountCodes {
+			catalogRow := catalogByCode[code]
+			var item *accountdomain.Account
+			if catalogRow != nil {
+				item = &accountdomain.Account{Code: catalogRow.Code, Name: catalogRow.Name, AccountType: catalogRow.AccountType, Synthetic: catalogRow.IsSynthetic, Postable: catalogRow.Postable, Active: catalogRow.IsActive}
+			}
+			if validationErr := accountdomain.ValidatePostingAccount(item, code, nil); validationErr != nil {
+				input.ContextBlocker = "INVALID_ACCOUNTING_PROFILE"
+				input.ContextBlockerMessage = validationErr.Error()
+				break
+			}
+		}
+	}
 	ruleRows, err := tx.ClassificationRule.Query().Where(classificationrule.Or(
 		classificationrule.ScopeEQ(classificationrule.ScopeGLOBAL),
 		classificationrule.And(classificationrule.ScopeEQ(classificationrule.ScopeCLIENT_OVERRIDE), classificationrule.ClientIDEQ(row.ClientID)),
@@ -158,6 +190,9 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 	if err = tx.Commit(); err != nil {
 		return classificationdomain.InvoiceContext{}, err
 	}
+	if err = s.loadApprovedKnowledgeCandidates(ctx, &input); err != nil {
+		return classificationdomain.InvoiceContext{}, err
+	}
 	return input, nil
 }
 
@@ -173,12 +208,45 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 		return false, err
 	}
 	rollback := func(cause error) (bool, error) { _ = tx.Rollback(); return false, cause }
+	invoiceBefore, err := tx.Invoice.Query().Where(invoice.IDEQ(command.InvoiceID)).Only(ctx)
+	if err != nil {
+		return rollback(err)
+	}
+	runSnapshot := result.Snapshot
+	if runSnapshot == nil {
+		runSnapshot = &accounting.Snapshot{}
+	}
+	runID := stableID("classification-run", command.CommandID)
+	runCreate := tx.ClassificationRun.Create().SetID(runID).SetClientID(invoiceBefore.ClientID).SetInvoiceID(command.InvoiceID).
+		SetInvoiceRevision(command.ExpectedRevision).SetSnapshot(runSnapshot).SetContextFingerprint(runSnapshot.Fingerprint()).
+		SetPolicyVersion(result.PolicyVersion).SetStatus(classificationrun.StatusCOMPLETED).SetCommandKey(command.CommandID).
+		SetActorDisplay("Sistem clasificare").SetCreatedAt(now)
+	if result.Snapshot != nil && result.Snapshot.Profile != nil {
+		runCreate.SetProfileID(result.Snapshot.Profile.ID).SetProfileVersion(result.Snapshot.Profile.Version)
+	}
+	if invoiceBefore.CurrentClassificationRunID != nil {
+		runCreate.SetSupersedesRunID(*invoiceBefore.CurrentClassificationRunID)
+	}
+	if _, err = runCreate.Save(ctx); err != nil {
+		_ = tx.Rollback()
+		if ent.IsConstraintError(err) {
+			committed, checkErr := s.ProcessCommandCommitted(ctx, command.CommandID)
+			if checkErr != nil {
+				return false, checkErr
+			}
+			if committed {
+				return false, nil
+			}
+			return false, apperrors.ErrConflict
+		}
+		return false, err
+	}
 	invoiceUpdate := tx.Invoice.UpdateOneID(command.InvoiceID)
-	if result.ModelVersion == accounting.ModelVersion {
+	if result.ModelVersion == accounting.ModelVersion && invoiceBefore.AccountingSnapshot == nil {
 		invoiceUpdate.SetAccountingSnapshot(result.Snapshot)
 	}
 	classified, err := invoiceUpdate.
-		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), invoice.RevisionEQ(command.ExpectedRevision)).
+		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), invoice.RevisionEQ(command.ExpectedRevision)).SetCurrentClassificationRunID(runID).
 		SetPipelineStatus(invoice.PipelineStatusCLASSIFIED).AddRevision(1).SetUpdatedAt(now).Save(ctx)
 	if ent.IsNotFound(err) {
 		_ = tx.Rollback()
@@ -195,12 +263,13 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 	}
 	pending := 0
 	for _, proposal := range result.Proposals {
-		decisionKey := classified.ID + ":" + proposal.InvoiceLineID + ":" + string(proposal.Dimension)
+		decisionKey := runID + ":" + proposal.InvoiceLineID + ":" + string(proposal.Dimension)
 		if classified.ModelVersion == accounting.ModelVersion {
 			decisionKey += ":" + classified.ModelVersion
 		}
 		create := tx.LineClassification.Create().SetID(stableID("lc", decisionKey)).
 			SetClientID(classified.ClientID).SetInvoiceID(classified.ID).SetInvoiceLineID(proposal.InvoiceLineID).
+			SetClassificationRunID(runID).
 			SetDimension(lineclassification.Dimension(proposal.Dimension)).SetProposedValue(proposal.ProposedValue).
 			SetConfidenceDisplay(proposal.Confidence).SetExplanation(proposal.Explanation).SetLegalBasis(proposal.LegalBasis).
 			SetRequiredReview(proposal.RequiresReview).
@@ -208,6 +277,9 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 			SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now)
 		if result.ModelVersion == accounting.ModelVersion {
 			create.SetModelVersion(accounting.ModelVersion).SetProposedTypedValue(proposal.TypedValue).SetDecisionEvidence(proposal.Evidence)
+			if proposal.Knowledge != nil {
+				create.SetProposalProvenance(&accounting.ProposalProvenance{KnowledgeID: proposal.Knowledge.ID, KnowledgeVersion: proposal.Knowledge.Version, SourceInvoiceID: proposal.Knowledge.SourceInvoiceID, SourceLineID: proposal.Knowledge.SourceInvoiceLineID, SourceDecisionID: proposal.Knowledge.SourceClassificationID, PromotedBy: proposal.Knowledge.PromotedBy, PromotedAt: proposal.Knowledge.PromotedAt.UTC().Format(time.RFC3339)})
+			}
 			if !proposal.RequiresReview {
 				create.SetEffectiveTypedValue(proposal.TypedValue)
 			}
@@ -223,7 +295,7 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 			pending++
 			create.SetReviewStatus(lineclassification.ReviewStatusPENDING)
 		} else {
-			create.SetReviewStatus(lineclassification.ReviewStatusACCEPTED).SetEffectiveValue(proposal.ProposedValue)
+			create.SetReviewStatus(lineclassification.ReviewStatusACCEPTED).SetEffectiveValue(proposal.ProposedValue).SetEffectiveSource(string(proposal.Source))
 		}
 		if proposal.Rule != nil {
 			create.SetRuleVersionID(proposal.Rule.RuleVersionID)
@@ -242,6 +314,22 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 				detail = "Conflicting ACCOUNT evidence was detected; no account was selected automatically."
 			}
 			if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":account-mapping:" + proposal.InvoiceLineID, invoiceID: classified.ID, clientID: classified.ClientID, eventType: auditType, trigger: "CLASSIFICATION_DECISION", detail: detail, actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
+				return rollback(err)
+			}
+		}
+		if proposal.Knowledge != nil || proposal.KnowledgeConflict {
+			auditType, detail := "APPROVED_KNOWLEDGE_PROPOSAL_PRODUCED", "Exact approved knowledge produced a reviewable proposal before AI."
+			if proposal.KnowledgeConflict {
+				auditType, detail = "APPROVED_KNOWLEDGE_CONFLICT_DETECTED", "Conflicting approved knowledge was preserved for review; AI was not allowed to choose a winner."
+			} else {
+				detail += " Knowledge: " + proposal.Knowledge.ID
+			}
+			if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":approved-knowledge:" + proposal.InvoiceLineID + ":" + string(proposal.Dimension), invoiceID: classified.ID, clientID: classified.ClientID, aggregateType: "APPROVED_KNOWLEDGE", aggregateID: func() string {
+				if proposal.Knowledge != nil {
+					return proposal.Knowledge.ID
+				}
+				return classified.ID
+			}(), eventType: auditType, trigger: "CLASSIFICATION_DECISION", detail: detail, actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
 				return rollback(err)
 			}
 		}
@@ -271,6 +359,12 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 	if pending > 0 || readinessReason != "" {
 		target = invoice.PipelineStatusAWAITING_REVIEW
 	}
+	if result.DeferReviewForAI && pending > 0 {
+		// CLASSIFIED is the existing pipeline stage used while the internal AI
+		// fallback is pending/running. No human task is exposed until the worker
+		// has finished or permanently failed.
+		target = invoice.PipelineStatusCLASSIFIED
+	}
 	update := tx.Invoice.UpdateOneID(classified.ID).Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCLASSIFIED), invoice.RevisionEQ(classified.Revision)).SetPipelineStatus(target).SetReadinessReason(readinessReason).AddRevision(1).SetUpdatedAt(now)
 	if target == invoice.PipelineStatusREADY_FOR_SAGA {
 		update.SetSagaStatus(invoice.SagaStatusREADY)
@@ -282,9 +376,10 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 	if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":routed", invoiceID: classified.ID, clientID: classified.ClientID, eventType: "CLASSIFICATION_ROUTED", from: string(invoice.PipelineStatusCLASSIFIED), to: string(target), trigger: "CLASSIFICATION_DECISION", detail: fmt.Sprintf("Classification completed with %d pending review items.", pending), actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
 		return rollback(err)
 	}
-	if pending > 0 || readinessReason != "" {
+	if (pending > 0 || readinessReason != "") && !result.DeferReviewForAI {
 		taskID := stableID("task", eventKey+":review")
 		_, err = tx.ValidationTask.Create().SetID(taskID).SetClientID(classified.ClientID).SetInvoiceID(classified.ID).
+			SetClassificationRunID(runID).
 			SetTaskType(validationtask.TaskTypeCLASSIFICATION).SetStatus(validationtask.StatusOPEN).
 			SetTitle("Revizuiește clasificările incerte").SetReason(fmt.Sprintf("%d dimensiuni necesită decizia contabilului.", pending)).
 			SetCreatedByKind(validationtask.CreatedByKindSYSTEM).SetCreatedByDisplay("Sistem clasificare").
@@ -296,6 +391,73 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 			return rollback(err)
 		}
 	} else if err = createOutbox(tx, ctx, finalInvoice.ID, eventKey+":continue", command.CorrelationID, now); err != nil {
+		return rollback(err)
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Store) ApplyClassificationBlock(ctx context.Context, command classificationdomain.ProcessCommand, snapshot *accounting.Snapshot, blockerCode, message string, now time.Time) (bool, error) {
+	eventKey := "classification:" + command.CommandID
+	if exists, err := s.auditExists(ctx, eventKey+":blocked"); err != nil || exists {
+		return false, err
+	}
+	if snapshot == nil {
+		snapshot = &accounting.Snapshot{}
+	}
+	tx, err := s.Client.Tx(ctx)
+	if err != nil {
+		return false, err
+	}
+	rollback := func(cause error) (bool, error) { _ = tx.Rollback(); return false, cause }
+	before, err := tx.Invoice.Query().Where(invoice.IDEQ(command.InvoiceID)).Only(ctx)
+	if err != nil {
+		return rollback(err)
+	}
+	runID := stableID("classification-run", command.CommandID)
+	createRun := tx.ClassificationRun.Create().SetID(runID).SetClientID(before.ClientID).SetInvoiceID(before.ID).
+		SetInvoiceRevision(command.ExpectedRevision).SetSnapshot(snapshot).SetContextFingerprint(snapshot.Fingerprint()).
+		SetPolicyVersion(classificationdomain.DomainPolicyVersion).SetStatus(classificationrun.StatusBLOCKED).
+		SetBlockerCode(blockerCode).SetCommandKey(command.CommandID).SetActorDisplay("Sistem clasificare").SetCreatedAt(now)
+	if snapshot.Profile != nil {
+		createRun.SetProfileID(snapshot.Profile.ID).SetProfileVersion(snapshot.Profile.Version)
+	}
+	if before.CurrentClassificationRunID != nil {
+		createRun.SetSupersedesRunID(*before.CurrentClassificationRunID)
+	}
+	if _, err = createRun.Save(ctx); err != nil {
+		return rollback(err)
+	}
+	update := tx.Invoice.UpdateOneID(before.ID).
+		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), invoice.RevisionEQ(command.ExpectedRevision)).
+		SetPipelineStatus(invoice.PipelineStatusAWAITING_REVIEW).SetReadinessReason(blockerCode).
+		SetCurrentClassificationRunID(runID).AddRevision(1).SetUpdatedAt(now)
+	if before.AccountingSnapshot == nil {
+		update.SetAccountingSnapshot(snapshot)
+	}
+	blocked, err := update.Save(ctx)
+	if ent.IsNotFound(err) {
+		return rollback(apperrors.ErrConflict)
+	}
+	if err != nil {
+		return rollback(err)
+	}
+	taskID := stableID("task", eventKey+":review")
+	title := "Configurează profilul fiscal"
+	if blockerCode == "INVALID_ACCOUNTING_PROFILE" {
+		title = "Remediază profilul contabil și fiscal"
+	}
+	if _, err = tx.ValidationTask.Create().SetID(taskID).SetClientID(blocked.ClientID).SetInvoiceID(blocked.ID).
+		SetClassificationRunID(runID).
+		SetTaskType(validationtask.TaskTypeCLASSIFICATION).SetStatus(validationtask.StatusOPEN).
+		SetTitle(title).SetReason(message).SetBlockerCode(blockerCode).
+		SetCreatedByKind(validationtask.CreatedByKindSYSTEM).SetCreatedByDisplay("Sistem clasificare").
+		SetCreationKey(eventKey + ":review").SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+		return rollback(err)
+	}
+	if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":blocked", invoiceID: blocked.ID, taskID: taskID, clientID: blocked.ClientID, eventType: "CLASSIFICATION_BLOCKED", from: string(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), to: string(invoice.PipelineStatusAWAITING_REVIEW), trigger: blockerCode, detail: message, actor: audit.ActorSystem, actorDisplay: "Sistem clasificare", correlationID: command.CorrelationID, at: now}); err != nil {
 		return rollback(err)
 	}
 	if err = tx.Commit(); err != nil {
@@ -349,7 +511,7 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 	if err != nil {
 		return rollback(err)
 	}
-	if classificationRow.InvoiceID != invoiceRow.ID || classificationRow.ClientID != invoiceRow.ClientID {
+	if classificationRow.InvoiceID != invoiceRow.ID || classificationRow.ClientID != invoiceRow.ClientID || invoiceRow.CurrentClassificationRunID == nil || classificationRow.ClassificationRunID != *invoiceRow.CurrentClassificationRunID {
 		return rollback(apperrors.ErrValidation)
 	}
 	if (classificationRow.ReviewStatus != lineclassification.ReviewStatusPENDING && classificationRow.ModelVersion != accounting.ModelVersion) || classificationRow.Revision != command.ExpectedClassificationRevision {
@@ -358,13 +520,23 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 	status := lineclassification.ReviewStatusACCEPTED
 	finalValue := classificationRow.ProposedValue
 	eventType := "CLASSIFICATION_PROPOSAL_ACCEPTED"
+	rejected := command.Action == "REJECT"
+	if rejected {
+		status = lineclassification.ReviewStatusREJECTED
+		finalValue = ""
+		eventType = "CLASSIFICATION_PROPOSAL_REJECTED"
+	}
 	if command.CorrectedValue != nil {
 		status = lineclassification.ReviewStatusCORRECTED
 		finalValue = *command.CorrectedValue
 		eventType = "CLASSIFICATION_CORRECTED"
 	}
 	typed := classificationRow.ProposedTypedValue
-	if classificationRow.ModelVersion == accounting.ModelVersion {
+	if classificationRow.ModelVersion == accounting.ModelVersion && !rejected {
+		approvesStoredProposal := command.TypedValue == nil || classificationRow.ProposedTypedValue != nil && command.TypedValue.Text() == classificationRow.ProposedTypedValue.Text()
+		if command.Action == "APPROVE" && approvesStoredProposal && len(classificationRow.ValidationResults) > 0 {
+			return rollback(fmt.Errorf("%w: propunerea invalidă trebuie corectată manual", apperrors.ErrValidation))
+		}
 		if command.CorrectedValue != nil {
 			return rollback(apperrors.ErrValidation)
 		}
@@ -382,14 +554,45 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 			return rollback(apperrors.ErrValidation)
 		}
 		finalValue = typed.Text()
+		if classificationRow.Dimension == lineclassification.DimensionACCOUNT {
+			accountRow, lookupErr := tx.Account.Query().Where(account.CodeEQ(typed.Account)).Only(ctx)
+			var item *accountdomain.Account
+			if lookupErr == nil {
+				item = &accountdomain.Account{Code: accountRow.Code, Name: accountRow.Name, AccountType: accountRow.AccountType, Synthetic: accountRow.IsSynthetic, Postable: accountRow.Postable, Active: accountRow.IsActive}
+			} else if !ent.IsNotFound(lookupErr) {
+				return rollback(lookupErr)
+			}
+			run, runErr := tx.ClassificationRun.Get(ctx, classificationRow.ClassificationRunID)
+			if runErr != nil {
+				return rollback(runErr)
+			}
+			var allowed func(string) bool
+			if run.Snapshot != nil && run.Snapshot.Profile != nil {
+				allowed = run.Snapshot.Profile.AccountAllowed
+			}
+			if validationErr := accountdomain.ValidatePostingAccount(item, typed.Account, allowed); validationErr != nil {
+				return rollback(validationErr)
+			}
+		}
 	}
-	if err := applyAccountMappingAction(ctx, tx, command, invoiceRow, classificationRow, typed, now); err != nil {
-		return rollback(err)
+	if !rejected {
+		if err := applyAccountMappingAction(ctx, tx, command, invoiceRow, classificationRow, typed, now); err != nil {
+			return rollback(err)
+		}
 	}
 	classificationUpdate := tx.LineClassification.UpdateOneID(classificationRow.ID).
 		Where(lineclassification.ReviewStatusEQ(classificationRow.ReviewStatus), lineclassification.RevisionEQ(command.ExpectedClassificationRevision)).
-		SetReviewStatus(status).SetEffectiveValue(finalValue).SetReviewedAt(now).SetReviewedByDisplay(command.ActorDisplay).AddRevision(1).SetUpdatedAt(now)
-	if classificationRow.ModelVersion == accounting.ModelVersion {
+		SetReviewStatus(status).SetReviewedAt(now).SetReviewedByDisplay(command.ActorDisplay).AddRevision(1).SetUpdatedAt(now)
+	if rejected {
+		classificationUpdate.ClearEffectiveValue().ClearEffectiveTypedValue().ClearEffectiveSource().SetReviewReason(command.Reason)
+	} else {
+		effectiveSource := "MANUAL"
+		if status == lineclassification.ReviewStatusACCEPTED && classificationRow.Source == lineclassification.SourceLEARNED_MAPPING {
+			effectiveSource = string(classificationdomain.SourceLearnedMapping)
+		}
+		classificationUpdate.SetEffectiveValue(finalValue).SetEffectiveSource(effectiveSource)
+	}
+	if classificationRow.ModelVersion == accounting.ModelVersion && !rejected {
 		classificationUpdate.SetEffectiveTypedValue(typed).SetReviewReason(command.Reason)
 	}
 	if command.ActorID != "" {
@@ -429,11 +632,30 @@ func (s *Store) ReviewClassification(ctx context.Context, command classification
 			return rollback(err)
 		}
 	}
-	remaining, err := tx.LineClassification.Query().Where(lineclassification.InvoiceIDEQ(invoiceRow.ID), lineclassification.ReviewStatusEQ(lineclassification.ReviewStatusPENDING)).Count(ctx)
+	remaining, err := tx.LineClassification.Query().Where(lineclassification.InvoiceIDEQ(invoiceRow.ID), lineclassification.ClassificationRunIDEQ(classificationRow.ClassificationRunID), lineclassification.ReviewStatusIn(lineclassification.ReviewStatusPENDING, lineclassification.ReviewStatusREJECTED)).Count(ctx)
 	if err != nil {
 		return rollback(err)
 	}
 	readyToComplete := remaining == 0
+	if classificationRow.ModelVersion == accounting.ModelVersion {
+		currentRows, queryErr := tx.LineClassification.Query().Where(lineclassification.InvoiceIDEQ(invoiceRow.ID), lineclassification.ClassificationRunIDEQ(classificationRow.ClassificationRunID), lineclassification.ModelVersionEQ(accounting.ModelVersion)).All(ctx)
+		if queryErr != nil {
+			return rollback(queryErr)
+		}
+		resolution := make([]accounting.ClassificationResolutionItem, 0, len(currentRows))
+		remaining = 0
+		for _, row := range currentRows {
+			resolution = append(resolution, accounting.ClassificationResolutionItem{Dimension: string(row.Dimension), Effective: row.EffectiveTypedValue, Proposed: row.ProposedTypedValue, Source: string(row.Source), ReviewStatus: string(row.ReviewStatus)})
+			if accounting.ResolveClassification(string(row.Dimension), row.EffectiveTypedValue, row.ProposedTypedValue, string(row.Source), string(row.ReviewStatus)) != accounting.ResolutionFinal {
+				remaining++
+			}
+		}
+		lineCount, countErr := tx.InvoiceLine.Query().Where(invoiceline.InvoiceIDEQ(invoiceRow.ID)).Count(ctx)
+		if countErr != nil {
+			return rollback(countErr)
+		}
+		readyToComplete = accounting.IsAccountingClassificationComplete(resolution, lineCount*len(accounting.Dimensions))
+	}
 	reason := ""
 	if classificationRow.ModelVersion == accounting.ModelVersion && readyToComplete {
 		ready, err := evaluateAccountingReadiness(ctx, tx, invoiceRow.ID, invoiceRow.AccountingSnapshot != nil && invoiceRow.AccountingSnapshot.TestOnly)
@@ -541,7 +763,7 @@ func applyAccountMappingAction(ctx context.Context, tx *ent.Tx, command classifi
 	source := classificationdomain.Source(classificationRow.Source)
 	switch source {
 	case classificationdomain.SourceNoMatch:
-		if command.MappingAction != "CREATE" && command.MappingAction != "OCCURRENCE_ONLY" {
+		if command.MappingAction != "OCCURRENCE_ONLY" {
 			return apperrors.ErrValidation
 		}
 	case classificationdomain.SourceLearnedMapping:
@@ -571,32 +793,6 @@ func applyAccountMappingAction(ctx context.Context, tx *ent.Tx, command classifi
 	if invoiceRow.NormalizedSupplierCui == nil || strings.TrimSpace(*invoiceRow.NormalizedSupplierCui) == "" {
 		return apperrors.ErrValidation
 	}
-	if command.MappingAction == "CREATE" {
-		identity, ok := classificationdomain.PreferredServiceIdentity(classificationdomain.LineContext{SourceFacts: lineRow.SourceFacts, ID: lineRow.ID, Position: lineRow.Position, Description: lineRow.Description})
-		if !ok {
-			return apperrors.ErrValidation
-		}
-		mappingID := stableID("account-mapping", invoiceRow.ClientID+"\x00"+*invoiceRow.NormalizedSupplierCui+"\x00"+string(identity.Kind)+"\x00"+identity.Value+"\x00"+identity.NormalizerVersion)
-		_, err = tx.AccountMapping.Create().SetID(mappingID).SetClientID(invoiceRow.ClientID).SetNormalizedSupplierID(*invoiceRow.NormalizedSupplierCui).
-			SetServiceIdentityKind(accountmapping.ServiceIdentityKind(identity.Kind)).SetServiceIdentityValue(identity.Value).SetNormalizerVersion(identity.NormalizerVersion).
-			SetCurrentVersion(1).SetStatus(accountmapping.StatusACTIVE).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
-		if err != nil {
-			if ent.IsConstraintError(err) {
-				return apperrors.ErrConflict
-			}
-			return err
-		}
-		create := tx.AccountMappingVersion.Create().SetID(stableID("account-mapping-version", mappingID+":1")).SetMappingID(mappingID).SetVersion(1).
-			SetAccountCode(typed.Account).SetChangeKind(accountmappingversion.ChangeKindCREATION).SetSourceClassificationID(classificationRow.ID).
-			SetSourceInvoiceLineID(lineRow.ID).SetRawDescriptionSnapshot(lineRow.Description).SetActorDisplay(command.ActorDisplay).
-			SetReason(command.Reason).SetCreatedAt(now).SetCommandKey("account-mapping:" + command.CommandID)
-		if command.ActorID != "" {
-			create.SetActorID(command.ActorID)
-		}
-		_, err = create.Save(ctx)
-		return err
-	}
-
 	if classificationRow.AccountMappingID == nil || classificationRow.AccountMappingVersion == nil || command.ExpectedMappingRevision == 0 {
 		return apperrors.ErrValidation
 	}

@@ -39,6 +39,20 @@ func (_c *ClientAccountingProfileCreate) SetPayload(v *accounting.Profile) *Clie
 	return _c
 }
 
+// SetSupersedesProfileID sets the "supersedes_profile_id" field.
+func (_c *ClientAccountingProfileCreate) SetSupersedesProfileID(v string) *ClientAccountingProfileCreate {
+	_c.mutation.SetSupersedesProfileID(v)
+	return _c
+}
+
+// SetNillableSupersedesProfileID sets the "supersedes_profile_id" field if the given value is not nil.
+func (_c *ClientAccountingProfileCreate) SetNillableSupersedesProfileID(v *string) *ClientAccountingProfileCreate {
+	if v != nil {
+		_c.SetSupersedesProfileID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *ClientAccountingProfileCreate) SetCreatedAt(v time.Time) *ClientAccountingProfileCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -148,6 +162,10 @@ func (_c *ClientAccountingProfileCreate) createSpec() (*ClientAccountingProfile,
 	if value, ok := _c.mutation.Payload(); ok {
 		_spec.SetField(clientaccountingprofile.FieldPayload, field.TypeJSON, value)
 		_node.Payload = value
+	}
+	if value, ok := _c.mutation.SupersedesProfileID(); ok {
+		_spec.SetField(clientaccountingprofile.FieldSupersedesProfileID, field.TypeString, value)
+		_node.SupersedesProfileID = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(clientaccountingprofile.FieldCreatedAt, field.TypeTime, value)

@@ -48,6 +48,7 @@ type Task struct {
 	WaitingSince        *time.Time
 	ResolvedAt          *time.Time
 	ContractMatchRunID  *string
+	ClassificationRunID *string
 	ContractCandidates  []ContractCandidate
 	ClassificationItems []classification.Decision
 }

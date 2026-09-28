@@ -18,6 +18,7 @@ import (
 
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountinganalysis"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/classification"
 	"diana-contabilitate/backend/internal/clients"
@@ -113,6 +114,14 @@ func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *i
 	mux.HandleFunc("GET /api/v1/contracts/{id}/invoices", s.listContractInvoices)
 	mux.HandleFunc("POST /api/v1/invoices/{id}/contract-confirmations", s.confirmContractMatch)
 	mux.HandleFunc("POST /api/v1/invoices/{id}/classification-decisions", s.reviewClassification)
+	mux.HandleFunc("POST /api/v1/invoices/{id}/classification-decisions/approve-all", s.approveAllClassifications)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/classification/reanalyze", s.reanalyzeClassification)
+	mux.HandleFunc("GET /api/v1/approved-knowledge", s.listApprovedKnowledge)
+	mux.HandleFunc("GET /api/v1/legislation-sources", s.listLegislationSources)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/approved-knowledge/{knowledgeId}", s.getApprovedKnowledge)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/invoices/{invoiceId}/classifications/{classificationId}/reuse-preview", s.previewApprovedKnowledge)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/classifications/{classificationId}/promote", s.promoteApprovedKnowledge)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/approved-knowledge/{knowledgeId}/revoke", s.revokeApprovedKnowledge)
 	mux.HandleFunc("GET /api/v1/rules", s.listRules)
 	mux.HandleFunc("GET /api/v1/rules/{id}", s.getRule)
 	mux.HandleFunc("POST /api/v1/rules/{id}/versions", s.createRuleVersion)
@@ -148,6 +157,150 @@ func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *i
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/commercial-service-aliases", s.confirmCommercialAlias)
 	mux.HandleFunc("GET /api/v1/clients/{clientId}/commercial-snapshots/{snapshotId}/revalidation-preview", s.previewCommercialRevalidation)
 	return s.middleware(mux)
+}
+
+func (s *Server) listApprovedKnowledge(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.URL.Query().Get("clientId"))
+	if clientID != "" && !s.allowClient(w, r, clientID) {
+		return
+	}
+	actor, _ := requestactor.FromContext(r.Context())
+	if clientID == "" && !actor.AllClients {
+		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Selectează un client autorizat.")
+		return
+	}
+	items, err := s.classifications.ListKnowledge(r.Context(), clientID)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) listLegislationSources(w http.ResponseWriter, r *http.Request) {
+	items, err := s.classifications.ListLegislationSources(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) getApprovedKnowledge(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if !s.allowClient(w, r, clientID) {
+		return
+	}
+	item, err := s.classifications.GetKnowledge(r.Context(), clientID, strings.TrimSpace(r.PathValue("knowledgeId")))
+	if errors.Is(err, apperrors.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Decizia reutilizabilă nu există în acest client.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) previewApprovedKnowledge(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if !s.allowClient(w, r, clientID) {
+		return
+	}
+	item, err := s.classifications.PreviewKnowledge(r.Context(), clientID, strings.TrimSpace(r.PathValue("invoiceId")), strings.TrimSpace(r.PathValue("classificationId")))
+	if errors.Is(err, apperrors.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Decizia finală curentă nu a fost găsită.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "STALE_CLASSIFICATION", "Decizia nu mai aparține run-ului curent.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) promoteApprovedKnowledge(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if !s.allowClient(w, r, clientID) {
+		return
+	}
+	actor, ok := requestactor.FromContext(r.Context())
+	if !ok || actor.Persona != "CONTABIL" {
+		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Doar contabilul poate activa reutilizarea.")
+		return
+	}
+	var body struct {
+		ExpectedClassificationRevision uint64 `json:"expectedClassificationRevision"`
+		ExpectedInvoiceRevision        uint64 `json:"expectedInvoiceRevision"`
+		ExpectedClassificationRunID    string `json:"expectedClassificationRunId"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&body) != nil {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Reviziile sursă sunt obligatorii.")
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	item, created, err := s.classifications.PromoteKnowledge(r.Context(), classification.PromoteKnowledgeCommand{ClientID: clientID, InvoiceID: strings.TrimSpace(r.PathValue("invoiceId")), ClassificationID: strings.TrimSpace(r.PathValue("classificationId")), ExpectedClassificationRevision: body.ExpectedClassificationRevision, ExpectedInvoiceRevision: body.ExpectedInvoiceRevision, ExpectedClassificationRunID: body.ExpectedClassificationRunID, CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context())})
+	if errors.Is(err, classification.ErrKnowledgeDuplicate) {
+		writeError(w, r, http.StatusConflict, "KNOWLEDGE_DUPLICATE", "Există deja o decizie reutilizabilă identică.")
+		return
+	}
+	if errors.Is(err, classification.ErrKnowledgeConflict) {
+		writeError(w, r, http.StatusConflict, "KNOWLEDGE_CONFLICT", "Același scope are deja o valoare diferită și necesită rezolvare explicită.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "STALE_CLASSIFICATION", "Factura sau decizia s-a modificat. Reîncarcă înainte de promovare.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrValidation) {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Numai o decizie finală curentă, cu scope exact, poate fi reutilizată.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, item)
+}
+
+func (s *Server) revokeApprovedKnowledge(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if !s.allowClient(w, r, clientID) {
+		return
+	}
+	actor, ok := requestactor.FromContext(r.Context())
+	if !ok || actor.Persona != "CONTABIL" {
+		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Doar contabilul poate revoca reutilizarea.")
+		return
+	}
+	var body struct {
+		ExpectedRevision uint64 `json:"expectedRevision"`
+	}
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&body) != nil {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Revizia este obligatorie.")
+		return
+	}
+	item, _, err := s.classifications.RevokeKnowledge(r.Context(), classification.RevokeKnowledgeCommand{ClientID: clientID, KnowledgeID: strings.TrimSpace(r.PathValue("knowledgeId")), ExpectedRevision: body.ExpectedRevision, CommandID: strings.TrimSpace(r.Header.Get("Idempotency-Key")), ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context())})
+	if errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "CONFLICT", "Decizia reutilizabilă s-a modificat între timp.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (s *Server) searchAccounts(w http.ResponseWriter, r *http.Request) {
@@ -767,6 +920,7 @@ func (s *Server) writeRuleMutation(w http.ResponseWriter, r *http.Request, item 
 }
 
 type classificationDecisionDTO struct {
+	Action                         string            `json:"action"`
 	TaskID                         string            `json:"taskId"`
 	ClassificationID               string            `json:"classificationId"`
 	ExpectedInvoiceRevision        uint64            `json:"expectedInvoiceRevision"`
@@ -777,6 +931,62 @@ type classificationDecisionDTO struct {
 	CorrectedValue                 *string           `json:"correctedValue"`
 	MappingAction                  string            `json:"mappingAction"`
 	ExpectedMappingRevision        uint64            `json:"expectedMappingRevision"`
+}
+
+func (s *Server) reanalyzeClassification(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	invoiceID := strings.TrimSpace(r.PathValue("invoiceId"))
+	if !s.allowClient(w, r, clientID) {
+		return
+	}
+	actor, ok := requestactor.FromContext(r.Context())
+	if !ok || actor.Persona != "CONTABIL" {
+		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Doar un contabil poate cere reanalizarea.")
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	var body struct {
+		ExpectedInvoiceRevision uint64 `json:"expectedInvoiceRevision"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if key == "" || decoder.Decode(&body) != nil || decoder.Decode(new(any)) != io.EOF || body.ExpectedInvoiceRevision == 0 {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Comanda de reanalizare este invalidă.")
+		return
+	}
+	item, err := s.invoices.Get(r.Context(), invoiceID)
+	if errors.Is(err, apperrors.ErrNotFound) || item != nil && item.ClientID != clientID {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Factura nu a fost găsită.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	_, err = s.classifications.Reanalyze(r.Context(), classification.ReanalysisCommand{InvoiceID: invoiceID, ClientID: clientID, CommandID: key, CorrelationID: correlationID(r.Context()), ActorID: actor.ID, ActorDisplay: actor.Display, ExpectedRevision: body.ExpectedInvoiceRevision})
+	if errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "CONFLICT", strings.TrimPrefix(err.Error(), "conflict: "))
+		return
+	}
+	if errors.Is(err, apperrors.ErrValidation) {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Reanalizarea nu poate fi pornită.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	item, err = s.invoices.Get(r.Context(), invoiceID)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	dto, err := invoiceResponse(item)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto)
 }
 
 func (s *Server) reviewClassification(w http.ResponseWriter, r *http.Request) {
@@ -795,7 +1005,11 @@ func (s *Server) reviewClassification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor, _ := requestactor.FromContext(r.Context())
-	_, err := s.classifications.Review(r.Context(), classification.ReviewCommand{InvoiceID: invoiceID, TaskID: request.TaskID, ClassificationID: request.ClassificationID, ExpectedInvoiceRevision: request.ExpectedInvoiceRevision, ExpectedTaskRevision: request.ExpectedTaskRevision, ExpectedClassificationRevision: request.ExpectedClassificationRevision, TypedValue: request.TypedValue, Reason: request.Reason, CorrectedValue: request.CorrectedValue, CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context()), MappingAction: request.MappingAction, ExpectedMappingRevision: request.ExpectedMappingRevision})
+	_, err := s.classifications.Review(r.Context(), classification.ReviewCommand{Action: request.Action, InvoiceID: invoiceID, TaskID: request.TaskID, ClassificationID: request.ClassificationID, ExpectedInvoiceRevision: request.ExpectedInvoiceRevision, ExpectedTaskRevision: request.ExpectedTaskRevision, ExpectedClassificationRevision: request.ExpectedClassificationRevision, TypedValue: request.TypedValue, Reason: request.Reason, CorrectedValue: request.CorrectedValue, CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context()), MappingAction: request.MappingAction, ExpectedMappingRevision: request.ExpectedMappingRevision})
+	if issue, ok := accounts.AsValidationIssue(err); ok {
+		writeErrorDetails(w, r, http.StatusBadRequest, string(issue.Code), issue.Message, issue)
+		return
+	}
 	if errors.Is(err, apperrors.ErrNotFound) {
 		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Classification review context was not found.")
 		return
@@ -806,6 +1020,55 @@ func (s *Server) reviewClassification(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, apperrors.ErrValidation) {
 		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid classification decision.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	item, err := s.invoices.Get(r.Context(), invoiceID)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	response, err := invoiceResponse(item)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) approveAllClassifications(w http.ResponseWriter, r *http.Request) {
+	if !s.allowInvoice(w, r, r.PathValue("id")) {
+		return
+	}
+	var request struct {
+		TaskID                  string                                  `json:"taskId"`
+		ExpectedInvoiceRevision uint64                                  `json:"expectedInvoiceRevision"`
+		ExpectedTaskRevision    uint64                                  `json:"expectedTaskRevision"`
+		Expected                []classification.ExpectedClassification `json:"expected"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	invoiceID := strings.TrimSpace(r.PathValue("id"))
+	if key == "" || decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Contextul pentru aprobarea în grup este invalid.")
+		return
+	}
+	actor, _ := requestactor.FromContext(r.Context())
+	_, err := s.classifications.ApproveAll(r.Context(), classification.ApproveAllCommand{InvoiceID: invoiceID, TaskID: request.TaskID, ExpectedInvoiceRevision: request.ExpectedInvoiceRevision, ExpectedTaskRevision: request.ExpectedTaskRevision, Expected: request.Expected, CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context())})
+	if errors.Is(err, classification.ErrStaleReview) || errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "CONFLICT", "Propunerile s-au modificat; reîncarcă factura.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrValidation) {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Aprobarea în grup este invalidă.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Factura sau taskul nu a fost găsit.")
 		return
 	}
 	if err != nil {
@@ -1208,10 +1471,15 @@ type errorDTO struct {
 	Code          string `json:"code"`
 	Message       string `json:"message"`
 	CorrelationID string `json:"correlation_id"`
+	Details       any    `json:"details,omitempty"`
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	writeJSON(w, status, errorDTO{Code: code, Message: message, CorrelationID: correlationID(r.Context())})
+}
+
+func writeErrorDetails(w http.ResponseWriter, r *http.Request, status int, code, message string, details any) {
+	writeJSON(w, status, errorDTO{Code: code, Message: message, CorrelationID: correlationID(r.Context()), Details: details})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

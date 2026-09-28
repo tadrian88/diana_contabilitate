@@ -4,9 +4,14 @@ import type { ClassificationRule, ClientScope } from '../../domain/invoice'
 import { MockInvoiceRepository } from '../../mocks/MockInvoiceRepository'
 import { renderApp } from '../../test/render-app'
 
+class VerifiedRulesRepository extends MockInvoiceRepository {override async listRules(scope:ClientScope){return (await super.listRules(scope)).map(rule=>({...rule,versions:rule.versions.map(version=>({...version,productionEligible:true}))}))}override async createClientOverride(id:string,input:import('../../repositories/invoiceRepository').CreateClientOverrideInput){const rule=await super.createClientOverride(id,input);return {...rule,versions:rule.versions.map(version=>({...version,productionEligible:true}))}}}
+
 describe('Rules List', () => {
   it('renders approved fields, three categories and explicit global/override scope', async () => {
-    renderApp(new MockInvoiceRepository(), '/rules')
+    renderApp(new VerifiedRulesRepository(), '/rules')
+    expect(await screen.findByRole('heading',{name:'Reguli și surse',level:2})).toBeInTheDocument()
+    for(const heading of ['Reguli verificate','Decizii reutilizabile','Surse legislative'])expect(screen.getByRole('heading',{name:heading})).toBeInTheDocument()
+    expect(screen.getByText(/Fragmentele nu sunt reguli contabile executabile/)).toBeInTheDocument()
     for (const heading of ['Nume regulă', 'Categorie', 'Scope', 'Client', 'Versiune', 'Efectiv de la', 'Efectiv până la', 'Rezultat', 'Bază legală', 'Ultima actualizare']) expect(await screen.findByRole('columnheader', { name: heading })).toBeInTheDocument()
     expect(screen.getAllByText('Cont contabil').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Confirmare istorică a cotei TVA').length).toBeGreaterThan(0)
@@ -19,7 +24,7 @@ describe('Rules List', () => {
 
   it('shows global baseline plus only the selected client overrides', async () => {
     const user = userEvent.setup()
-    renderApp(new MockInvoiceRepository(), '/rules')
+    renderApp(new VerifiedRulesRepository(), '/rules')
     await user.click(await screen.findByLabelText('Selectează clientul'))
     await user.click(screen.getByRole('option', { name: 'Client Demo Alfa SRL' }))
     await waitFor(() => expect(screen.queryByText('REG-DEMO-TVA-01-OVR-BETA')).not.toBeInTheDocument())
@@ -32,7 +37,7 @@ describe('Rules List', () => {
 
   it('supports category, scope, client, version and text filtering', async () => {
     const user = userEvent.setup()
-    renderApp(new MockInvoiceRepository(), '/rules')
+    renderApp(new VerifiedRulesRepository(), '/rules')
     await user.selectOptions(await screen.findByLabelText('Categorie'), 'VAT')
     expect(screen.getByText('REG-DEMO-TVA-01')).toBeInTheDocument()
     expect(screen.queryByText('REG-DEMO-CONT-01')).not.toBeInTheDocument()
@@ -44,7 +49,7 @@ describe('Rules List', () => {
 
   it('searches criteria and exposes historical versions', async () => {
     const user = userEvent.setup()
-    renderApp(new MockInvoiceRepository(), '/rules?version=HISTORICAL')
+    renderApp(new VerifiedRulesRepository(), '/rules?version=HISTORICAL')
     expect(await screen.findByText('Versiunea 1 · Istorică')).toBeInTheDocument()
     const search = screen.getByLabelText('Caută reguli')
     await user.type(search, 'servicii generale')
@@ -91,7 +96,7 @@ describe('Rule Detail and mutations', () => {
 
   it('creates an Alfa override and leaves its global parent unchanged', async () => {
     const user = userEvent.setup()
-    const repository = new MockInvoiceRepository()
+    const repository = new VerifiedRulesRepository()
     const globalBefore = await repository.getRule('rule-vat-global')
     renderApp(repository, '/rules/rule-vat-global')
     await user.click(await screen.findByRole('button', { name: 'Creează override pentru client' }))
@@ -137,7 +142,7 @@ describe('Rule Detail and mutations', () => {
   it('renders no-rules and repository-error states', async () => {
     class EmptyRepository extends MockInvoiceRepository { override async listRules(_scope: ClientScope): Promise<ClassificationRule[]> { return [] } }
     const { unmount } = renderApp(new EmptyRepository(), '/rules')
-    expect(await screen.findByText('Nu există reguli în acest context')).toBeInTheDocument()
+    expect(await screen.findByText('Nu există încă reguli verificate.')).toBeInTheDocument()
     unmount()
     class ErrorRepository extends MockInvoiceRepository { override async listRules(_scope: ClientScope): Promise<ClassificationRule[]> { throw new Error('demo') } }
     renderApp(new ErrorRepository(), '/rules')

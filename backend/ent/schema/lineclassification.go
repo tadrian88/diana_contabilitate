@@ -17,21 +17,26 @@ func (LineClassification) Fields() []ent.Field {
 		field.JSON("proposed_typed_value", &accounting.Value{}).Optional().Immutable(),
 		field.JSON("effective_typed_value", &accounting.Value{}).Optional(),
 		field.JSON("decision_evidence", &accounting.Evidence{}).Optional().Immutable(),
+		field.JSON("legal_citations", []accounting.LegalCitation{}).Optional(),
+		field.JSON("validation_results", []accounting.ValidationResult{}).Optional(),
+		field.JSON("proposal_provenance", &accounting.ProposalProvenance{}).Optional(),
 		field.String("review_reason").Default(""),
 		field.String("id").Immutable(),
 		field.Time("invoice_date_used").SchemaType(map[string]string{dialect.Postgres: "date"}).Optional().Nillable().Immutable(),
 		field.String("client_id").Immutable(),
 		field.String("invoice_id").Immutable(),
 		field.String("invoice_line_id").Immutable(),
+		field.String("classification_run_id").Immutable(),
 		field.Enum("dimension").Values("ACCOUNT", "VAT", "DEDUCTIBILITY", "VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT").Immutable(),
 		field.String("proposed_value").NotEmpty().Immutable(),
 		field.String("effective_value").Optional().Nillable(),
+		field.String("effective_source").Optional().Nillable(),
 		field.String("confidence_display").NotEmpty().Immutable(),
 		field.String("explanation").NotEmpty().Immutable(),
 		field.String("legal_basis").NotEmpty().Immutable(),
 		field.Bool("required_review").Immutable(),
-		field.Enum("review_status").Values("PENDING", "ACCEPTED", "CORRECTED"),
-		field.Enum("source").Values("RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING").Immutable(),
+		field.Enum("review_status").Values("PENDING", "ACCEPTED", "CORRECTED", "REJECTED"),
+		field.Enum("source").Values("RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL"),
 		field.String("rule_version_id").Optional().Nillable().Immutable(),
 		field.String("account_mapping_id").Optional().Nillable().Immutable(),
 		field.Int("account_mapping_version").Optional().Nillable().Immutable(),
@@ -56,7 +61,7 @@ func (LineClassification) Edges() []ent.Edge {
 
 func (LineClassification) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("invoice_line_id", "dimension", "model_version").Unique(),
+		index.Fields("classification_run_id", "invoice_line_id", "dimension", "model_version").Unique(),
 		index.Fields("invoice_id", "review_status"),
 	}
 }

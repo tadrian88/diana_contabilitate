@@ -12,7 +12,7 @@ import { DomainCorrectionDialog } from './DomainCorrectionDialog'
 import { AccountDecisionDialog } from './AccountDecisionDialog'
 import { useInvoiceRepository } from '../../app/repository-context'
 import { displayDomainValue } from './domain-decision-view'
-import { useReviewClassification } from './invoice-mutations'
+import { useApproveAllClassifications, useReviewClassification } from './invoice-mutations'
 
 const correctionSchema = z.object({ value: z.string().trim().min(2, 'Completează valoarea corectată.') })
 type CorrectionForm = z.infer<typeof correctionSchema>
@@ -20,12 +20,14 @@ type CorrectionForm = z.infer<typeof correctionSchema>
 export function ClassificationTask({ invoice }: { invoice: Invoice }) {
   const task = invoice.task
   const review = useReviewClassification(invoice.id)
+  const approveAll=useApproveAllClassifications(invoice.id)
   const [acceptanceItem, setAcceptanceItem] = useState<ClassificationReviewItem | null>(null)
   const [correctionItem, setCorrectionItem] = useState<ClassificationReviewItem | null>(null)
 	const [accountItem,setAccountItem]=useState<ClassificationReviewItem|null>(null)
   const items = task?.type === 'CLASSIFICATION' ? task.classificationItems ?? [] : []
   const domain = invoice.modelVersion === 'ACCOUNTING_DOMAIN_V2'
-  const pending = items.filter((item) => item.status === 'PENDING')
+  const pending = items.filter((item) => item.status === 'PENDING' || item.status === 'REJECTED')
+  const validPending=items.filter(item=>item.status==='PENDING'&&item.proposedTypedValue&&!item.validationResults?.length)
 
   if (!task || task.type !== 'CLASSIFICATION') {
     return <div className="card p-8 text-center"><Check className="mx-auto size-7 text-[var(--success)]" /><h3 className="mt-3 font-bold">Clasificări procesate</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Nu există elemente care necesită intervenție.</p></div>
@@ -39,7 +41,7 @@ export function ClassificationTask({ invoice }: { invoice: Invoice }) {
           <h3 className="mt-3 text-lg font-bold">{task.title}</h3>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">Un singur task grupează toate clasificările incerte ale facturii.</p>
         </div>
-        <div className="rounded-xl bg-[var(--surface-subtle)] px-4 py-3 text-right"><div className="text-2xl font-bold tabular-nums">{pending.length}</div><div className="text-xs text-[var(--text-muted)]">probleme rămase</div></div>
+        <div className="flex items-center gap-3">{domain&&validPending.length>0&&<Button onClick={()=>approveAll.mutate()} disabled={approveAll.isPending}>Aprobă toate propunerile valide</Button>}<div className="rounded-xl bg-[var(--surface-subtle)] px-4 py-3 text-right"><div className="text-2xl font-bold tabular-nums">{pending.length}</div><div className="text-xs text-[var(--text-muted)]">probleme rămase</div></div></div>
       </div>
 
       {review.isError && <p role="alert" className="text-sm text-[var(--danger)]">La salvare a apărut o eroare. Reîncarcă factura și verifică decizia.</p>}
@@ -48,16 +50,16 @@ export function ClassificationTask({ invoice }: { invoice: Invoice }) {
           <div className="px-5 pt-3 text-xs text-[var(--text-secondary)]">Valoare netă: {invoice.lines.find((line) => line.id === item.lineId)?.netValue.amount.toLocaleString('ro-RO') ?? "indisponibil"} {invoice.lines.find((line) => line.id === item.lineId)?.netValue.currency ?? ''} · TVA declarat în sursă: {invoice.lines.find((line) => line.id === item.lineId)?.vatLabel ?? "indisponibil"}{item.invoiceDateUsed && ` · Data evaluată: ${item.invoiceDateUsed}`}{item.rule && ` · ${item.rule.reference} v${item.rule.version} · ${item.rule.effectiveFrom ?? ""} — ${item.rule.effectiveTo ?? "fără dată finală"}`}</div>
           <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
             <div><div className="text-xs font-semibold text-[var(--text-muted)]">{item.lineLabel}</div><h4 className="mt-1 font-bold">{CLASSIFICATION_DIMENSION_LABELS[item.dimension]}</h4></div>
-            <Badge tone={item.status === 'PENDING' ? 'warning' : 'success'}>{item.status === 'PENDING' ? 'De revizuit' : item.status === 'ACCEPTED' ? 'Acceptat' : 'Corectat'}</Badge>
+            <Badge tone={item.status === 'PENDING' || item.status === 'REJECTED' ? 'warning' : 'success'}>{item.status === 'PENDING' ? 'De revizuit' : item.status === 'REJECTED' ? 'Respins — nerezolvat' : item.status === 'ACCEPTED' ? 'Acceptat' : 'Corectat'}</Badge>
           </div>
           <div className="grid grid-cols-[0.9fr_1.2fr_1.2fr] gap-0 divide-x divide-[var(--border)]">
-            <div className="p-5"><div className="eyebrow">Propunere</div><div className="mt-3 font-semibold">{item.dimension==='ACCOUNT'&&(item.typedValue?.account??item.proposedTypedValue?.account)?<AccountDisplay code={(item.typedValue?.account??item.proposedTypedValue?.account)!}/>:displayDomainValue(item.typedValue ?? item.proposedTypedValue, item.resolvedValue ?? item.proposedValue)}</div>{item.source==='LEARNED_MAPPING'&&<><p className="mt-2 text-xs text-[var(--text-secondary)]">Sursă: mapare confirmată anterior</p><Badge tone="warning" className="mt-2">Necesită validare</Badge></>}<Badge tone="info" className="mt-3">Încredere: {item.confidence}</Badge></div>
+            <div className="p-5"><div className="eyebrow">Propunere</div><div className="mt-3 font-semibold">{item.dimension==='ACCOUNT'&&(item.typedValue?.account??item.proposedTypedValue?.account)?<AccountDisplay code={(item.typedValue?.account??item.proposedTypedValue?.account)!}/>:displayDomainValue(item.typedValue ?? item.proposedTypedValue, item.resolvedValue ?? item.proposedValue)}</div>{item.source==='LEARNED_MAPPING'&&<><p className="mt-2 text-xs text-[var(--text-secondary)]">Sursă: mapare confirmată anterior</p><Badge tone="warning" className="mt-2">Necesită validare</Badge></>}{item.source==='AI_PROPOSAL'&&<p className="mt-2 text-xs text-[var(--text-secondary)]">Sursă: propunere AI · necesită aprobarea contabilului</p>}<Badge tone="info" className="mt-3">Încredere: {item.confidence}</Badge>{item.validationResults?.map(issue=><div role="alert" className="mt-2 text-xs text-[var(--danger)]" key={issue.code}>{issue.code}: {issue.message}{issue.suggestedAccounts?.length?` Sugestii: ${issue.suggestedAccounts.join(', ')}.`:''}</div>)}</div>
             <div className="p-5"><div className="eyebrow">Explicație</div><p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{item.explanation}</p></div>
-            <div className="p-5"><div className="eyebrow">Bază legală</div><div className="mt-3 flex gap-2 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-soft)] p-3 text-xs leading-5 text-[var(--warning)]"><Scale className="mt-0.5 size-4 shrink-0" />{item.legalBasis}</div></div>
+            <div className="p-5"><div className="eyebrow">Bază legală</div><div className="mt-3 flex gap-2 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-soft)] p-3 text-xs leading-5 text-[var(--warning)]"><Scale className="mt-0.5 size-4 shrink-0" />{item.legalBasis}</div>{item.legalCitations?.map(citation=><p className="mt-2 text-xs" key={`${citation.fragmentId}:${citation.citationKey}`}>{citation.verified?'Verificată':'Neverificată'} · {citation.citationKey}</p>)}</div>
           </div>
-          {(item.status === 'PENDING' || domain && invoice.readinessReason) && (
+          {(item.status === 'PENDING' || item.status === 'REJECTED' || domain && invoice.readinessReason) && (
             <div className="flex gap-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-5 py-4">
-              {domain&&item.dimension==='ACCOUNT' ? <>{item.source==='LEARNED_MAPPING'&&item.proposedTypedValue?<Button onClick={()=>review.mutate({itemId:item.id,typedValue:item.proposedTypedValue,reason:'Mapare verificată pentru această apariție.',mappingAction:'VALIDATE'})} disabled={review.isPending}><Check className="size-4"/>Validează</Button>:<Button onClick={()=>setAccountItem(item)}><Edit3 className="size-4"/>Selectează cont</Button>}{item.source==='LEARNED_MAPPING'&&<Button variant="secondary" onClick={()=>setAccountItem(item)}><Edit3 className="size-4"/>Schimbă</Button>}</> : <><Button onClick={() => domain ? setAcceptanceItem(item) : review.mutate({ itemId: item.id })} disabled={review.isPending || domain && !item.proposedTypedValue}><Check className="size-4" />Acceptă propunerea</Button><Button variant="secondary" onClick={() => setCorrectionItem(item)}><Edit3 className="size-4" />Corectează</Button></>}
+              {domain&&item.dimension==='ACCOUNT' ? <>{item.source==='LEARNED_MAPPING'&&item.proposedTypedValue?<Button onClick={()=>review.mutate({itemId:item.id,typedValue:item.proposedTypedValue,reason:'Mapare verificată pentru această apariție.',mappingAction:'VALIDATE'})} disabled={review.isPending}><Check className="size-4"/>Validează</Button>:<Button onClick={()=>setAccountItem(item)}><Edit3 className="size-4"/>Selectează cont</Button>}{item.source==='LEARNED_MAPPING'&&<Button variant="secondary" onClick={()=>setAccountItem(item)}><Edit3 className="size-4"/>Schimbă</Button>}</> : <><Button onClick={() => domain ? setAcceptanceItem(item) : review.mutate({ itemId: item.id })} disabled={review.isPending || domain && (!item.proposedTypedValue || !!item.validationResults?.length)}><Check className="size-4" />Acceptă propunerea</Button><Button variant="secondary" onClick={() => setCorrectionItem(item)}><Edit3 className="size-4" />Corectează</Button></>}
             </div>
           )}
         </article>

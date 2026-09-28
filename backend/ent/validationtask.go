@@ -27,6 +27,8 @@ type ValidationTask struct {
 	InvoiceID string `json:"invoice_id,omitempty"`
 	// ContractMatchRunID holds the value of the "contract_match_run_id" field.
 	ContractMatchRunID *string `json:"contract_match_run_id,omitempty"`
+	// ClassificationRunID holds the value of the "classification_run_id" field.
+	ClassificationRunID *string `json:"classification_run_id,omitempty"`
 	// TaskType holds the value of the "task_type" field.
 	TaskType validationtask.TaskType `json:"task_type,omitempty"`
 	// Status holds the value of the "status" field.
@@ -129,7 +131,7 @@ func (*ValidationTask) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case validationtask.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case validationtask.FieldID, validationtask.FieldClientID, validationtask.FieldInvoiceID, validationtask.FieldContractMatchRunID, validationtask.FieldTaskType, validationtask.FieldStatus, validationtask.FieldTitle, validationtask.FieldReason, validationtask.FieldBlockerCode, validationtask.FieldCreatedByKind, validationtask.FieldCreatedByID, validationtask.FieldCreatedByDisplay, validationtask.FieldCreationKey:
+		case validationtask.FieldID, validationtask.FieldClientID, validationtask.FieldInvoiceID, validationtask.FieldContractMatchRunID, validationtask.FieldClassificationRunID, validationtask.FieldTaskType, validationtask.FieldStatus, validationtask.FieldTitle, validationtask.FieldReason, validationtask.FieldBlockerCode, validationtask.FieldCreatedByKind, validationtask.FieldCreatedByID, validationtask.FieldCreatedByDisplay, validationtask.FieldCreationKey:
 			values[i] = new(sql.NullString)
 		case validationtask.FieldCreatedAt, validationtask.FieldUpdatedAt, validationtask.FieldWaitingSince, validationtask.FieldResolvedAt:
 			values[i] = new(sql.NullTime)
@@ -172,6 +174,13 @@ func (_m *ValidationTask) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ContractMatchRunID = new(string)
 				*_m.ContractMatchRunID = value.String
+			}
+		case validationtask.FieldClassificationRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field classification_run_id", values[i])
+			} else if value.Valid {
+				_m.ClassificationRunID = new(string)
+				*_m.ClassificationRunID = value.String
 			}
 		case validationtask.FieldTaskType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -334,6 +343,11 @@ func (_m *ValidationTask) String() string {
 	builder.WriteString(", ")
 	if v := _m.ContractMatchRunID; v != nil {
 		builder.WriteString("contract_match_run_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ClassificationRunID; v != nil {
+		builder.WriteString("classification_run_id=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

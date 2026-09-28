@@ -70,6 +70,20 @@ func (_c *InvoiceCreate) SetNillableReadinessReason(v *string) *InvoiceCreate {
 	return _c
 }
 
+// SetCurrentClassificationRunID sets the "current_classification_run_id" field.
+func (_c *InvoiceCreate) SetCurrentClassificationRunID(v string) *InvoiceCreate {
+	_c.mutation.SetCurrentClassificationRunID(v)
+	return _c
+}
+
+// SetNillableCurrentClassificationRunID sets the "current_classification_run_id" field if the given value is not nil.
+func (_c *InvoiceCreate) SetNillableCurrentClassificationRunID(v *string) *InvoiceCreate {
+	if v != nil {
+		_c.SetCurrentClassificationRunID(*v)
+	}
+	return _c
+}
+
 // SetClientID sets the "client_id" field.
 func (_c *InvoiceCreate) SetClientID(v string) *InvoiceCreate {
 	_c.mutation.SetClientID(v)
@@ -631,6 +645,10 @@ func (_c *InvoiceCreate) createSpec() (*Invoice, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ReadinessReason(); ok {
 		_spec.SetField(invoice.FieldReadinessReason, field.TypeString, value)
 		_node.ReadinessReason = value
+	}
+	if value, ok := _c.mutation.CurrentClassificationRunID(); ok {
+		_spec.SetField(invoice.FieldCurrentClassificationRunID, field.TypeString, value)
+		_node.CurrentClassificationRunID = &value
 	}
 	if value, ok := _c.mutation.SupplierName(); ok {
 		_spec.SetField(invoice.FieldSupplierName, field.TypeString, value)

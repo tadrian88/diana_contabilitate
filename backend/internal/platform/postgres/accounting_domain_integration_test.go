@@ -29,6 +29,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +40,14 @@ import (
 func domainReleaseFixture(t *testing.T, tc *module5TestContext, edit func(*accounting.Pack)) (*accounting.SourceFacts, *accounting.LineFacts, *accounting.Profile, *accounting.Pack) {
 	t.Helper()
 	f, l, p, pack := accountingtest.Fixture(tc.clientID)
+	// Database-backed tests exercise the canonical OMFP catalog, therefore the
+	// persisted profile and rule must use postable leaf accounts.
+	p.AccountCodes = []string{"6262", "6281", "6282"}
+	for index := range pack.Rules {
+		if pack.Rules[index].Dimension == "ACCOUNT" {
+			pack.Rules[index].Result.Account = "6281"
+		}
+	}
 	client, err := tc.store.Client.AccountingClient.Get(tc.ctx, tc.clientID)
 	if err != nil {
 		t.Fatal(err)
@@ -251,11 +260,13 @@ func TestDomainPersistedMissingVersusZero(t *testing.T) {
 func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing.T) {
 	tc := newModule5TestContext(t)
 	domainReleaseFixture(t, tc, nil)
-	if _, err := tc.store.Client.AccountingClient.UpdateOneID(tc.clientID).SetCui(accountingtest.BuyerCUI).SetNormalizedIdentifier(accountingtest.BuyerNormalizedCUI).Save(tc.ctx); err != nil {
+	buyerNormalizedCUI := strconv.FormatInt(time.Now().UnixNano()%100000000, 10)
+	buyerCUI := "RO" + buyerNormalizedCUI
+	if _, err := tc.store.Client.AccountingClient.UpdateOneID(tc.clientID).SetCui(buyerCUI).SetNormalizedIdentifier(buyerNormalizedCUI).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	cid := "TEST_ONLY-connection-" + tc.clientID
-	if _, err := tc.store.Client.SPVConnection.Create().SetID(cid).SetClientID(tc.clientID).SetCif(accountingtest.BuyerCUI).SetEnvironment(spvconnection.EnvironmentTEST).SetAccessTokenCiphertext("TEST_ONLY token").SetRefreshTokenCiphertext("TEST_ONLY refresh").SetAccessTokenExpiresAt(time.Now().Add(time.Hour)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
+	if _, err := tc.store.Client.SPVConnection.Create().SetID(cid).SetClientID(tc.clientID).SetCif(buyerCUI).SetEnvironment(spvconnection.EnvironmentTEST).SetAccessTokenCiphertext("TEST_ONLY token").SetRefreshTokenCiphertext("TEST_ONLY refresh").SetAccessTokenExpiresAt(time.Now().Add(time.Hour)).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tc.store.Client.Contract.Create().SetID("TEST_ONLY-contract-" + tc.clientID).SetClientID(tc.clientID).SetSupplierName("TEST_ONLY supplier").SetSupplierCui(accountingtest.SupplierCUI).SetNormalizedSupplierCui(accountingtest.SupplierNormalizedCUI).SetReference("TEST_ONLY_CONTRACT").SetEffectiveFrom(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)).SetEffectiveTo(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)).SetTotalValue("121").SetCurrency("RON").SetUnitType("H87").SetPaymentTerms("TEST_ONLY").SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
@@ -267,7 +278,8 @@ func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = w.Write([]byte(accountingtest.XML("<Percent>21</Percent>", "")))
+	xml := strings.ReplaceAll(accountingtest.XML("<Percent>21</Percent>", ""), accountingtest.BuyerCUI, buyerCUI)
+	_, _ = w.Write([]byte(xml))
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +321,9 @@ func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing
 	}
 	item, err := tc.store.GetInvoice(tc.ctx, id)
 	if err != nil || item.PipelineStatus != invoicing.StatusExporting || item.AccountingSnapshot.ContractID == "" || len(item.Lines[0].Classifications) != 4 {
-		t.Fatalf("full pipeline: %+v %v", item, err)
+		var outboxState string
+		queryErr := tc.store.DB.QueryRowContext(tc.ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object('event',event_type,'status',status,'availableAt',available_at,'key',idempotency_key) ORDER BY created_at), '[]'::jsonb)::text FROM outbox_entries WHERE aggregate_id=$1`, id).Scan(&outboxState)
+		t.Fatalf("full pipeline: invoice=%+v err=%v outbox=%s outboxErr=%v", item, err, outboxState, queryErr)
 	}
 	source, err := tc.store.Client.SPVSourceDocument.Get(tc.ctx, result.Documents[0].ID)
 	if err != nil || !bytes.Equal(source.RawDocument, raw.Bytes()) || source.ContentSha256 == nil || item.SourceFacts.SourceHash != *source.ContentSha256 {
@@ -319,7 +333,7 @@ func TestDomainFullDeterministicSPVContractClassificationSAGAPipeline(t *testing
 	if err != nil || artifact.ClassificationSnapshot["model_version"] != accounting.ModelVersion {
 		t.Fatal("final domain artifact", err)
 	}
-	if _, err := saga.Generate(item, saga.ClientIdentity{ID: tc.clientID, Name: "TEST_ONLY", CUI: accountingtest.BuyerCUI}); err == nil {
+	if _, err := saga.Generate(item, saga.ClientIdentity{ID: tc.clientID, Name: "TEST_ONLY", CUI: buyerCUI}); err == nil {
 		t.Fatal("production adapter accepted TEST_ONLY pipeline")
 	}
 }

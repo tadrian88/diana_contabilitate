@@ -3,6 +3,8 @@
 package accounting
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +21,50 @@ const LegacyVersion = "LEGACY_V1"
 const IssueDateBasis = "INVOICE_ISSUE_DATE"
 
 var Dimensions = []string{"ACCOUNT", "VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT"}
+
+// ClassificationResolution is the single domain vocabulary used by the
+// classifier, AI workflow and completion checks. A reviewable proposal is not
+// a final accounting decision, but it must not be sent to the provider again.
+type ClassificationResolution string
+
+const (
+	ResolutionNeedsAI     ClassificationResolution = "NEEDS_AI"
+	ResolutionNeedsReview ClassificationResolution = "NEEDS_REVIEW"
+	ResolutionFinal       ClassificationResolution = "FINAL"
+)
+
+func ResolveClassification(dimension string, effective, proposed *Value, source, reviewStatus string) ClassificationResolution {
+	if effective != nil && effective.Validate(dimension) == nil && (reviewStatus == "ACCEPTED" || reviewStatus == "CORRECTED") {
+		return ResolutionFinal
+	}
+	if source == "AI_PROPOSAL" || source == "LEARNED_MAPPING" || reviewStatus == "REJECTED" {
+		return ResolutionNeedsReview
+	}
+	if proposed != nil && proposed.Validate(dimension) == nil && source != "NO_MATCH" && source != "AMBIGUOUS" {
+		return ResolutionNeedsReview
+	}
+	return ResolutionNeedsAI
+}
+
+type ClassificationResolutionItem struct {
+	Dimension    string
+	Effective    *Value
+	Proposed     *Value
+	Source       string
+	ReviewStatus string
+}
+
+func IsAccountingClassificationComplete(items []ClassificationResolutionItem, expected int) bool {
+	if expected <= 0 || len(items) != expected {
+		return false
+	}
+	for _, item := range items {
+		if ResolveClassification(item.Dimension, item.Effective, item.Proposed, item.Source, item.ReviewStatus) != ResolutionFinal {
+			return false
+		}
+	}
+	return true
+}
 
 type Origin string
 
@@ -209,21 +255,48 @@ func allNonempty(values []string) bool {
 }
 
 type Profile struct {
-	TestOnly          bool                 `json:"testOnly"`
-	ID                string               `json:"id"`
-	ClientID          string               `json:"clientId"`
-	Version           int                  `json:"version"`
-	EffectiveFrom     accountingdate.Date  `json:"effectiveFrom"`
-	EffectiveTo       *accountingdate.Date `json:"effectiveTo,omitempty"`
-	Framework         string               `json:"framework"`
-	AccountCodes      []string             `json:"accountCodes,omitempty"`
-	ChartPolicy       string               `json:"chartPolicy"`
-	TaxRegime         string               `json:"taxRegime"`
-	VATRegistration   string               `json:"vatRegistration"`
-	DeductionActivity string               `json:"deductionActivity"`
-	CashAccounting    string               `json:"cashAccounting"`
-	ProRata           string               `json:"proRata"`
-	Approval          Approval             `json:"approval"`
+	TestOnly            bool                 `json:"testOnly"`
+	ID                  string               `json:"id"`
+	ClientID            string               `json:"clientId"`
+	Version             int                  `json:"version"`
+	SupersedesProfileID string               `json:"supersedesProfileId,omitempty"`
+	EffectiveFrom       accountingdate.Date  `json:"effectiveFrom"`
+	EffectiveTo         *accountingdate.Date `json:"effectiveTo,omitempty"`
+	Framework           string               `json:"framework"`
+	AccountCodes        []string             `json:"accountCodes,omitempty"`
+	ChartPolicy         string               `json:"chartPolicy"`
+	TaxRegime           string               `json:"taxRegime"`
+	VATRegistration     string               `json:"vatRegistration"`
+	DeductionActivity   string               `json:"deductionActivity"`
+	CashAccounting      string               `json:"cashAccounting"`
+	ProRata             string               `json:"proRata"`
+	Approval            Approval             `json:"approval"`
+	ConfigurationIssues []ProfileIssue       `json:"configurationIssues,omitempty"`
+}
+
+type ProfileIssue struct {
+	Code        string `json:"code"`
+	AccountCode string `json:"accountCode"`
+	Message     string `json:"message"`
+}
+
+// ApplicableProfiles applies immutable profile succession before selecting by
+// date. A successor never mutates its predecessor; it only removes it from the
+// set used by future runs.
+func ApplicableProfiles(profiles []*Profile, client string, date accountingdate.Date) []*Profile {
+	superseded := map[string]bool{}
+	for _, profile := range profiles {
+		if profile != nil && profile.SupersedesProfileID != "" && profile.Valid(client, date) {
+			superseded[profile.SupersedesProfileID] = true
+		}
+	}
+	result := []*Profile{}
+	for _, profile := range profiles {
+		if profile != nil && !superseded[profile.ID] && profile.Valid(client, date) {
+			result = append(result, profile)
+		}
+	}
+	return result
 }
 
 func (p *Profile) Valid(client string, date accountingdate.Date) bool {
@@ -326,13 +399,65 @@ type Evidence struct {
 	DateBasis        string              `json:"dateBasis"`
 	Date             accountingdate.Date `json:"date"`
 }
+
+// LegalCitation is verified application evidence attached to one
+// InvoiceLine × accounting dimension proposal. Provider output never controls
+// Verified; the deterministic corpus validator sets it before persistence.
+type LegalCitation struct {
+	FragmentID  string `json:"fragmentId"`
+	VersionID   string `json:"versionId"`
+	CitationKey string `json:"citationKey"`
+	ContentHash string `json:"contentHash"`
+	Verified    bool   `json:"verified"`
+}
+
+// ValidationResult preserves granular trust-boundary results on the canonical
+// classification. Invalid AI output remains auditable and reviewable.
+type ValidationResult struct {
+	Code              string   `json:"code"`
+	Message           string   `json:"message"`
+	SuggestedAccounts []string `json:"suggestedAccounts,omitempty"`
+}
+
+type ProposalProvenance struct {
+	AnalysisRunID string `json:"analysisRunId"`
+	Provider      string `json:"provider"`
+	Model         string `json:"model"`
+	SchemaVersion string `json:"schemaVersion"`
+	PromptVersion string `json:"promptVersion"`
+	// Knowledge fields are populated only when an exact, explicitly promoted
+	// accountant decision produced the proposal.  Keeping them on the immutable
+	// proposal provenance preserves the original AI/rule provenance on the
+	// source classification while linking every later use to the promoted item.
+	KnowledgeID      string `json:"knowledgeId,omitempty"`
+	KnowledgeVersion int    `json:"knowledgeVersion,omitempty"`
+	SourceInvoiceID  string `json:"sourceInvoiceId,omitempty"`
+	SourceLineID     string `json:"sourceLineId,omitempty"`
+	SourceDecisionID string `json:"sourceDecisionId,omitempty"`
+	PromotedBy       string `json:"promotedBy,omitempty"`
+	PromotedAt       string `json:"promotedAt,omitempty"`
+}
 type Snapshot struct {
-	Profile           *Profile `json:"profile,omitempty"`
-	Pack              *Pack    `json:"pack,omitempty"`
-	ContractReference string   `json:"contractReference,omitempty"`
-	ContractID        string   `json:"contractId,omitempty"`
-	ContractRevision  uint64   `json:"contractRevision,omitempty"`
-	TestOnly          bool     `json:"testOnly"`
+	Profile           *Profile          `json:"profile,omitempty"`
+	Pack              *Pack             `json:"pack,omitempty"`
+	ContractReference string            `json:"contractReference,omitempty"`
+	ContractID        string            `json:"contractId,omitempty"`
+	ContractRevision  uint64            `json:"contractRevision,omitempty"`
+	TestOnly          bool              `json:"testOnly"`
+	AccountCatalog    []AccountSnapshot `json:"accountCatalog,omitempty"`
+}
+
+type AccountSnapshot struct {
+	Code       string `json:"code"`
+	ParentCode string `json:"parentCode,omitempty"`
+	Active     bool   `json:"active"`
+	Postable   bool   `json:"postable"`
+}
+
+func (s *Snapshot) Fingerprint() string {
+	raw, _ := json.Marshal(s)
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
 }
 
 func (p *Profile) validAccounts() bool {

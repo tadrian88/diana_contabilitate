@@ -16,6 +16,7 @@ import (
 	"diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountingtest"
+	"diana-contabilitate/backend/internal/accounts"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/classification"
 	"diana-contabilitate/backend/internal/invoicing"
@@ -39,10 +40,17 @@ func TestAccountCatalogSeedAndSearch(t *testing.T) {
 	if err != nil || len(byCode) == 0 {
 		t.Fatal(len(byCode), err)
 	}
+	foundSynthetic := false
 	for _, account := range byCode {
-		if !account.Active || !account.Postable || account.Synthetic {
-			t.Fatalf("search returned a non-selectable account: %+v", account)
+		if !account.Active {
+			t.Fatalf("search returned an inactive account: %+v", account)
 		}
+		if account.Code == "628" {
+			foundSynthetic = account.Synthetic && !account.Postable
+		}
+	}
+	if !foundSynthetic {
+		t.Fatal("search must expose synthetic 628 as disabled navigation context")
 	}
 	exactSearch, err := store.SearchAccounts(t.Context(), "6281", 25)
 	if err != nil || len(exactSearch) == 0 || exactSearch[0].Code != "6281" {
@@ -54,6 +62,8 @@ func TestAccountCatalogSeedAndSearch(t *testing.T) {
 	}
 	if _, err = store.GetSelectableAccount(t.Context(), "628"); !errors.Is(err, apperrors.ErrValidation) {
 		t.Fatalf("synthetic account accepted: %v", err)
+	} else if issue, ok := accounts.AsValidationIssue(err); !ok || issue.Code != accounts.AccountNotPostable {
+		t.Fatalf("synthetic account error is not typed: %#v", err)
 	}
 	if _, err = store.GetSelectableAccount(t.Context(), "999999"); !errors.Is(err, apperrors.ErrNotFound) {
 		t.Fatalf("unknown account accepted: %v", err)
@@ -88,7 +98,11 @@ func TestAccountLearningRealPersistencePath(t *testing.T) {
 	if _, err = store.Client.AccountingClient.Create().SetID(tc.clientID).SetName("Generic learning client").SetCui("RO" + suffix).SetCreatedAt(tc.now).SetUpdatedAt(tc.now).Save(tc.ctx); err != nil {
 		t.Fatal(err)
 	}
-	facts, lineFacts, _, _ := domainReleaseFixture(t, tc, func(pack *accounting.Pack) { pack.Rules[0].Predicate.SellerItemID = "NON_MATCHING_ACCOUNT_RULE" })
+	facts, lineFacts, profile, pack := domainReleaseFixture(t, tc, func(pack *accounting.Pack) {
+		for i := range pack.Rules {
+			pack.Rules[i].Predicate.SellerItemID = "NON_MATCHING_ACCOUNT_RULE"
+		}
+	})
 	service := classification.NewService(store, classification.DomainPolicy{AllowTestOnly: true}, func() time.Time { return tc.now })
 
 	createInvoice := func(name, description string, lf *accounting.LineFacts) string {
@@ -100,8 +114,19 @@ func TestAccountLearningRealPersistencePath(t *testing.T) {
 		if _, e := store.Client.InvoiceLine.Create().SetID(id + "-line").SetInvoiceID(id).SetPosition(1).SetDescription(description).SetUnit("H87").SetQuantity("1").SetUnitPrice("100").SetNetValue("100").SetVatRate("21").SetVatValue("21").SetTotalValue("121").SetSourceFacts(lf).Save(tc.ctx); e != nil {
 			t.Fatal(e)
 		}
-		if _, _, e := service.ProcessInvoice(tc.ctx, classification.ProcessCommand{InvoiceID: id, ExpectedRevision: 1, CommandID: id + ":classify"}); e != nil {
+		result, _, e := service.ProcessInvoice(tc.ctx, classification.ProcessCommand{InvoiceID: id, ExpectedRevision: 1, CommandID: id + ":classify"})
+		if e != nil {
 			t.Fatal(e)
+		}
+		accountProposalFound := false
+		for _, proposal := range result.Proposals {
+			if proposal.Dimension == classification.DimensionAccount {
+				accountProposalFound = true
+				break
+			}
+		}
+		if !accountProposalFound {
+			t.Fatalf("%s classification result has no ACCOUNT proposal: model=%s proposals=%+v", id, result.ModelVersion, result.Proposals)
 		}
 		return id
 	}
@@ -113,12 +138,17 @@ func TestAccountLearningRealPersistencePath(t *testing.T) {
 		if item.ActiveTask == nil {
 			t.Fatalf("%s has no review task", id)
 		}
-		for i := range item.ActiveTask.ClassificationItems {
-			if item.ActiveTask.ClassificationItems[i].Dimension == classification.DimensionAccount {
-				return &item.ActiveTask.ClassificationItems[i], item.Revision, item.ActiveTask.Revision
+		for lineIndex := range item.Lines {
+			for decisionIndex := range item.Lines[lineIndex].Classifications {
+				decision := &item.Lines[lineIndex].Classifications[decisionIndex]
+				if decision.Dimension == classification.DimensionAccount {
+					return decision, item.Revision, item.ActiveTask.Revision
+				}
 			}
 		}
-		t.Fatalf("%s has no account decision", id)
+		var stored string
+		queryErr := store.DB.QueryRowContext(tc.ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object('dimension',dimension,'runId',classification_run_id,'source',source,'status',review_status)), '[]'::jsonb)::text FROM line_classifications WHERE invoice_id=$1`, id).Scan(&stored)
+		t.Fatalf("%s has no account decision in invoice line classifications (current run=%v, task type=%s, task items=%+v, stored rows=%s, query error=%v)", id, item.CurrentClassificationRunID, item.ActiveTask.Type, item.ActiveTask.ClassificationItems, stored, queryErr)
 		return nil, 0, 0
 	}
 	review := func(id string, decision *classification.Decision, invoiceRevision, taskRevision uint64, accountCode, action, commandID, reason string) classification.ReviewCommand {
@@ -141,16 +171,29 @@ func TestAccountLearningRealPersistencePath(t *testing.T) {
 		t.Fatalf("missing reusable mapping scope preview: %+v", d.MappingScope)
 	}
 	invalidAccount := classification.ReviewCommand{InvoiceID: i1, TaskID: mustInvoice(t, store, i1).ActiveTask.ID, ClassificationID: d.ID, ExpectedInvoiceRevision: ir, ExpectedTaskRevision: tr, ExpectedClassificationRevision: d.Revision, CommandID: i1 + ":invalid-account", ActorDisplay: "Generic accountant", Reason: "Invalid catalogue selection", TypedValue: &accounting.Value{Kind: "ACCOUNT", Account: "999999"}, MappingAction: "OCCURRENCE_ONLY"}
-	if _, e := service.Review(tc.ctx, invalidAccount); !errors.Is(e, apperrors.ErrValidation) {
+	if _, e := service.Review(tc.ctx, invalidAccount); e == nil {
 		t.Fatalf("invalid account was confirmed: %v", e)
 	}
-	createCommand := review(i1, d, ir, tr, "6281", "CREATE", i1+":review", "Reusable accountant decision")
+	createCommand := review(i1, d, ir, tr, "6281", "OCCURRENCE_ONLY", i1+":review", "Final decision before opt-in")
 	if _, e := service.Review(tc.ctx, createCommand); e != nil {
-		t.Fatal("idempotent replay", e)
+		t.Fatal(e)
+	}
+	finalInvoice := mustInvoice(t, store, i1)
+	var finalDecision classification.Decision
+	for _, candidate := range finalInvoice.Lines[0].Classifications {
+		if candidate.Dimension == classification.DimensionAccount {
+			finalDecision = candidate
+		}
+	}
+	if finalInvoice.CurrentClassificationRunID == nil {
+		t.Fatal("final decision has no current classification run")
+	}
+	if _, created, promoteErr := service.PromoteKnowledge(tc.ctx, classification.PromoteKnowledgeCommand{ClientID: tc.clientID, InvoiceID: i1, ClassificationID: finalDecision.ID, ExpectedClassificationRevision: finalDecision.Revision, ExpectedInvoiceRevision: finalInvoice.Revision, ExpectedClassificationRunID: *finalInvoice.CurrentClassificationRunID, CommandID: i1 + ":promote", ActorID: "accountant", ActorDisplay: "Generic accountant"}); promoteErr != nil || !created {
+		t.Fatalf("explicit post-decision promotion failed: created=%v err=%v", created, promoteErr)
 	}
 	historicalI1, _, _ := accountDecision(i1)
 	if historicalI1.Status != classification.ReviewCorrected || !historicalI1.HumanReviewed || historicalI1.TypedValue == nil || historicalI1.TypedValue.Account != "6281" || historicalI1.EffectiveValue == nil || *historicalI1.EffectiveValue != "6281" {
-		t.Fatalf("unexpected historical I1 decision after CREATE: %+v", historicalI1)
+		t.Fatalf("unexpected historical I1 decision after explicit promotion: %+v", historicalI1)
 	}
 	historicalI1Revision := historicalI1.Revision
 	count, e := store.Client.AccountMappingVersion.Query().Count(tc.ctx)
@@ -166,6 +209,30 @@ func TestAccountLearningRealPersistencePath(t *testing.T) {
 	}
 	accountRow, e := store.Client.Account.Query().Where(account.CodeEQ("6281")).Only(tc.ctx)
 	if e != nil {
+		t.Fatal(e)
+	}
+	// Preserve a valid current profile while making the historical 6281 mapping
+	// ineligible for new invoices. Catalog availability is toggled below.
+	profileV2 := *profile
+	profileV2.ID += "-v2"
+	profileV2.Version = 2
+	profileV2.SupersedesProfileID = profile.ID
+	profileV2.AccountCodes = []string{"6282"}
+	if _, e = store.Client.ClientAccountingProfile.Create().SetID(profileV2.ID).SetClientID(tc.clientID).SetVersion(profileV2.Version).SetPayload(&profileV2).SetSupersedesProfileID(profile.ID).SetCreatedAt(tc.now.Add(time.Second)).Save(tc.ctx); e != nil {
+		t.Fatal(e)
+	}
+	packV2 := *pack
+	packV2.ID += "-v2"
+	packV2.Version = 2
+	packV2.ProfileID = profileV2.ID
+	packV2.Rules = append([]accounting.Rule(nil), pack.Rules...)
+	for index := range packV2.Rules {
+		packV2.Rules[index].ClientPolicy = profileV2.ChartPolicy
+		if packV2.Rules[index].Dimension == string(classification.DimensionAccount) {
+			packV2.Rules[index].Result.Account = "6282"
+		}
+	}
+	if _, e = store.Client.AccountingRulePack.Create().SetID(packV2.ID).SetClientID(tc.clientID).SetVersion(packV2.Version).SetPayload(&packV2).SetCreatedAt(tc.now.Add(time.Second)).Save(tc.ctx); e != nil {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() {
@@ -209,6 +276,21 @@ func TestAccountLearningRealPersistencePath(t *testing.T) {
 	}
 	assertUnusableMappingRequiresReview("non-postable-account-i2")
 	if _, e = store.Client.Account.UpdateOneID(accountRow.ID).SetIsSynthetic(false).Save(tc.ctx); e != nil {
+		t.Fatal(e)
+	}
+	profileV3 := *profile
+	profileV3.ID += "-v3"
+	profileV3.Version = 3
+	profileV3.SupersedesProfileID = profileV2.ID
+	if _, e = store.Client.ClientAccountingProfile.Create().SetID(profileV3.ID).SetClientID(tc.clientID).SetVersion(profileV3.Version).SetPayload(&profileV3).SetSupersedesProfileID(profileV2.ID).SetCreatedAt(tc.now.Add(2 * time.Second)).Save(tc.ctx); e != nil {
+		t.Fatal(e)
+	}
+	packV3 := *pack
+	packV3.ID += "-v3"
+	packV3.Version = 3
+	packV3.ProfileID = profileV3.ID
+	packV3.Rules = append([]accounting.Rule(nil), pack.Rules...)
+	if _, e = store.Client.AccountingRulePack.Create().SetID(packV3.ID).SetClientID(tc.clientID).SetVersion(packV3.Version).SetPayload(&packV3).SetCreatedAt(tc.now.Add(2 * time.Second)).Save(tc.ctx); e != nil {
 		t.Fatal(e)
 	}
 

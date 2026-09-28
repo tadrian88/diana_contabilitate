@@ -30,6 +30,8 @@ type Invoice struct {
 	AccountingSnapshot *accounting.Snapshot `json:"accounting_snapshot,omitempty"`
 	// ReadinessReason holds the value of the "readiness_reason" field.
 	ReadinessReason string `json:"readiness_reason,omitempty"`
+	// CurrentClassificationRunID holds the value of the "current_classification_run_id" field.
+	CurrentClassificationRunID *string `json:"current_classification_run_id,omitempty"`
 	// ClientID holds the value of the "client_id" field.
 	ClientID string `json:"client_id,omitempty"`
 	// SupplierName holds the value of the "supplier_name" field.
@@ -205,7 +207,7 @@ func (*Invoice) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case invoice.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case invoice.FieldID, invoice.FieldModelVersion, invoice.FieldReadinessReason, invoice.FieldClientID, invoice.FieldSupplierName, invoice.FieldSupplierCui, invoice.FieldNormalizedSupplierCui, invoice.FieldDocumentNumber, invoice.FieldNormalizedDocumentNumber, invoice.FieldTotalAmount, invoice.FieldCurrency, invoice.FieldSpvReference, invoice.FieldIngestionSource, invoice.FieldExternalDeliveryID, invoice.FieldDuplicateOfInvoiceID, invoice.FieldDocumentType, invoice.FieldPipelineStatus, invoice.FieldSagaStatus:
+		case invoice.FieldID, invoice.FieldModelVersion, invoice.FieldReadinessReason, invoice.FieldCurrentClassificationRunID, invoice.FieldClientID, invoice.FieldSupplierName, invoice.FieldSupplierCui, invoice.FieldNormalizedSupplierCui, invoice.FieldDocumentNumber, invoice.FieldNormalizedDocumentNumber, invoice.FieldTotalAmount, invoice.FieldCurrency, invoice.FieldSpvReference, invoice.FieldIngestionSource, invoice.FieldExternalDeliveryID, invoice.FieldDuplicateOfInvoiceID, invoice.FieldDocumentType, invoice.FieldPipelineStatus, invoice.FieldSagaStatus:
 			values[i] = new(sql.NullString)
 		case invoice.FieldIssueDate, invoice.FieldIssueDay, invoice.FieldDueDate, invoice.FieldCreatedAt, invoice.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -257,6 +259,13 @@ func (_m *Invoice) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field readiness_reason", values[i])
 			} else if value.Valid {
 				_m.ReadinessReason = value.String
+			}
+		case invoice.FieldCurrentClassificationRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field current_classification_run_id", values[i])
+			} else if value.Valid {
+				_m.CurrentClassificationRunID = new(string)
+				*_m.CurrentClassificationRunID = value.String
 			}
 		case invoice.FieldClientID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -494,6 +503,11 @@ func (_m *Invoice) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("readiness_reason=")
 	builder.WriteString(_m.ReadinessReason)
+	builder.WriteString(", ")
+	if v := _m.CurrentClassificationRunID; v != nil {
+		builder.WriteString("current_classification_run_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("client_id=")
 	builder.WriteString(_m.ClientID)

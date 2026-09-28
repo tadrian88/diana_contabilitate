@@ -54,6 +54,12 @@ type Metrics struct {
 	accountingAnalysisInput    atomic.Uint64
 	accountingAnalysisOutput   atomic.Uint64
 	accountingAnalysisInvalid  atomic.Uint64
+	accountingAIQueued         atomic.Uint64
+	accountingAISucceeded      atomic.Uint64
+	accountingAIExhausted      atomic.Uint64
+	accountingAIPartial        atomic.Uint64
+	accountingReviewCreated    atomic.Uint64
+	accountingApproveAll       atomic.Uint64
 	mu                         sync.Mutex
 	jobResults                 map[string]uint64
 }
@@ -122,6 +128,16 @@ func (m *Metrics) AccountingAnalysisCompleted(duration time.Duration, inputToken
 		m.accountingAnalysisInvalid.Add(1)
 	}
 }
+func (m *Metrics) AccountingAIJobQueued() { m.accountingAIQueued.Add(1) }
+func (m *Metrics) AccountingAIJobSucceeded(partial bool) {
+	m.accountingAISucceeded.Add(1)
+	if partial {
+		m.accountingAIPartial.Add(1)
+	}
+}
+func (m *Metrics) AccountingAIJobExhausted()      { m.accountingAIExhausted.Add(1) }
+func (m *Metrics) AccountingReviewTaskCreated()   { m.accountingReviewCreated.Add(1) }
+func (m *Metrics) AccountingApproveAllSucceeded() { m.accountingApproveAll.Add(1) }
 func (m *Metrics) JobCompleted(result string, duration time.Duration) {
 	m.jobs.Add(1)
 	m.jobDuration.Add(uint64(max(duration.Milliseconds(), 0)))
@@ -178,6 +194,12 @@ func (m *Metrics) Handler(stats OutboxStats) http.Handler {
 		writeCounter(&builder, "accounting_analysis_input_tokens_total", m.accountingAnalysisInput.Load())
 		writeCounter(&builder, "accounting_analysis_output_tokens_total", m.accountingAnalysisOutput.Load())
 		writeCounter(&builder, "accounting_analysis_validation_failures_total", m.accountingAnalysisInvalid.Load())
+		writeCounter(&builder, "accounting_ai_jobs_queued_total", m.accountingAIQueued.Load())
+		writeCounter(&builder, "accounting_ai_jobs_succeeded_total", m.accountingAISucceeded.Load())
+		writeCounter(&builder, "accounting_ai_jobs_exhausted_total", m.accountingAIExhausted.Load())
+		writeCounter(&builder, "accounting_ai_partial_validation_total", m.accountingAIPartial.Load())
+		writeCounter(&builder, "accounting_review_tasks_created_total", m.accountingReviewCreated.Load())
+		writeCounter(&builder, "accounting_approve_all_succeeded_total", m.accountingApproveAll.Load())
 		m.mu.Lock()
 		for result, value := range m.jobResults {
 			builder.WriteString("diana_worker_job_results_total{result=\"")
