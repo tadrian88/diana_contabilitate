@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	ExtractionSchemaVersion = "CONTRACT_EXTRACTION_V4"
-	ExtractionPromptVersion = "CONTRACT_EXTRACTION_PROMPT_V4_2"
+	ExtractionSchemaVersion = "CONTRACT_EXTRACTION_V4_1"
+	ExtractionPromptVersion = "CONTRACT_EXTRACTION_PROMPT_V4_3"
 	ProviderGemini          = "GEMINI"
 )
 
@@ -51,16 +51,20 @@ type Field struct {
 // Proposal carries legacy matching fields and V4 commercial clauses. Provider
 // output remains a proposal until a human activates an immutable snapshot.
 type Proposal struct {
-	SupplierName      Field                      `json:"supplierName"`
-	SupplierCUI       Field                      `json:"supplierCui"`
-	Reference         Field                      `json:"reference"`
-	EffectiveFrom     Field                      `json:"effectiveFrom"`
-	EffectiveTo       Field                      `json:"effectiveTo"`
-	TotalValue        Field                      `json:"totalValue"`
-	Currency          Field                      `json:"currency"`
-	UnitType          Field                      `json:"unitType"`
-	PaymentTerms      Field                      `json:"paymentTerms"`
-	BuyerCUI          Field                      `json:"buyerCui"`
+	SupplierName  Field `json:"supplierName"`
+	SupplierCUI   Field `json:"supplierCui"`
+	Reference     Field `json:"reference"`
+	EffectiveFrom Field `json:"effectiveFrom"`
+	EffectiveTo   Field `json:"effectiveTo"`
+	TotalValue    Field `json:"totalValue"`
+	Currency      Field `json:"currency"`
+	UnitType      Field `json:"unitType"`
+	PaymentTerms  Field `json:"paymentTerms"`
+	BuyerCUI      Field `json:"buyerCui"`
+	// BuyerName names the buyer (Locatar, Beneficiar); it is the counterparty
+	// when the accounting client is the supplier (D-126). Attempts before
+	// CONTRACT_EXTRACTION_V4_1 have no value.
+	BuyerName         Field                      `json:"buyerName"`
 	PeriodType        Field                      `json:"periodType"`
 	ServiceTerms      []ProposedServiceTerm      `json:"serviceTerms"`
 	DocumentRole      Field                      `json:"documentRole"`
@@ -149,6 +153,7 @@ type ReviewedContract struct {
 	UnitType                 string                        `json:"unitType"`
 	PaymentTerms             string                        `json:"paymentTerms"`
 	BuyerCUI                 string                        `json:"buyerCui"`
+	BuyerName                string                        `json:"buyerName"`
 	PeriodType               string                        `json:"periodType"`
 	ServiceTerms             []ReviewedServiceTerm         `json:"serviceTerms"`
 	DocumentRole             string                        `json:"documentRole"`
@@ -178,6 +183,8 @@ type ConfirmationBlocker struct {
 type ConfirmationReadiness struct {
 	CanConfirm bool                  `json:"canConfirm"`
 	Blockers   []ConfirmationBlocker `json:"blockers"`
+	// ClientRole is BUYER or SUPPLIER once one party is the accounting client.
+	ClientRole string `json:"clientRole,omitempty"`
 }
 
 type ConfirmCommand struct {

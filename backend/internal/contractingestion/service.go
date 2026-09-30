@@ -198,6 +198,10 @@ func ValidateProposal(p Proposal) error {
 	if p.RelatedReference.Status != "" || p.RelatedReference.Value != nil {
 		allFields = append(allFields, namedField{"relatedReference", p.RelatedReference})
 	}
+	// buyerName exists from CONTRACT_EXTRACTION_V4_1; older attempts omit it.
+	if p.BuyerName.Status != "" || p.BuyerName.Value != nil {
+		allFields = append(allFields, namedField{"buyerName", p.BuyerName})
+	}
 	for index, term := range p.ServiceTerms {
 		prefix := fmt.Sprintf("serviceTerms[%d].", index)
 		allFields = append(allFields,
@@ -466,6 +470,7 @@ func (s *Service) Confirm(ctx context.Context, command ConfirmCommand) (string, 
 	if err != nil {
 		return "", false, err
 	}
+	applyClientRole(&value, command.Contract, readiness.ClientRole)
 	id, changed, err := s.store.ConfirmDocument(ctx, command, value, s.clock())
 	if err != nil {
 		return "", false, err
@@ -495,11 +500,37 @@ func (s *Service) Discard(ctx context.Context, clientID, documentID string, revi
 	return s.store.DiscardDocument(ctx, clientID, documentID, revision, actor, s.clock())
 }
 
+// ClientRoleFor finds the accounting client among the contract parties
+// (D-126): the buyer of a purchase contract (BUYER, checked first) or the
+// supplier of a sale contract such as a lease where it is the Locator.
+func ClientRoleFor(v ReviewedContract, clientCUI string) (string, bool) {
+	if strings.TrimSpace(clientCUI) == "" {
+		return "", false
+	}
+	if strings.TrimSpace(v.BuyerCUI) != "" && fiscalidentity.Same(v.BuyerCUI, clientCUI) {
+		return contracts.ClientRoleBuyer, true
+	}
+	if strings.TrimSpace(v.SupplierCUI) != "" && fiscalidentity.Same(v.SupplierCUI, clientCUI) {
+		return contracts.ClientRoleSupplier, true
+	}
+	return "", false
+}
+
+// saleBuyerIdentity validates the buyer of a sale contract: a Romanian CUI
+// (with or without RO) or the CNP of a natural person.
+func saleBuyerIdentity(raw string) (fiscalidentity.Kind, string, bool) {
+	kind, normalized := fiscalidentity.Classify(raw, "RO")
+	return kind, normalized, (kind == fiscalidentity.KindCUI || kind == fiscalidentity.KindCNP) && normalized != ""
+}
+
 func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) ConfirmationReadiness {
 	result := ConfirmationReadiness{Blockers: []ConfirmationBlocker{}}
 	add := func(code, message string) {
 		result.Blockers = append(result.Blockers, ConfirmationBlocker{Code: code, Message: message})
 	}
+	clientRole, clientFound := ClientRoleFor(v, clientCUI)
+	result.ClientRole = clientRole
+	sale := clientRole == contracts.ClientRoleSupplier
 	role := strings.TrimSpace(v.DocumentRole)
 	if role == "" {
 		role = "BASE_CONTRACT"
@@ -518,7 +549,7 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 		if strings.TrimSpace(v.RelatedReference) == "" {
 			add("RELATED_REFERENCE_REQUIRED", "Documentul suplimentar trebuie legat explicit de contractul de bază.")
 		}
-		if clientCUI != "" && (strings.TrimSpace(v.BuyerCUI) == "" || !fiscalidentity.Same(v.BuyerCUI, clientCUI)) {
+		if clientCUI != "" && !clientFound {
 			add("BUYER_MISMATCH", "CUI-ul cumpărătorului nu corespunde clientului selectat.")
 		}
 		if len(v.CommercialRules) == 0 && v.PendingCommercialClauses == 0 {
@@ -529,7 +560,7 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 			if err := commercialvalidation.ValidateRule(rule); err != nil {
 				add("COMMERCIAL_RULE_INVALID", fmt.Sprintf("Regula comercială %d nu este validă sau nu are dovadă completă.", index+1))
 			}
-			if rule.Kind == commercialvalidation.RuleIdentity && strings.TrimSpace(v.SupplierCUI) != "" && !commercialvalidation.IdentityRuleNamesSupplier(rule, v.SupplierCUI) {
+			if !sale && rule.Kind == commercialvalidation.RuleIdentity && strings.TrimSpace(v.SupplierCUI) != "" && !commercialvalidation.IdentityRuleNamesSupplier(rule, v.SupplierCUI) {
 				add("IDENTITY_RULE_NOT_SUPPLIER", fmt.Sprintf("Regula comercială %d verifică alt CUI decât al furnizorului; pe factură se compară doar furnizorul.", index+1))
 			}
 			if ruleIDs[rule.ID] {
@@ -570,12 +601,22 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 	} else if strings.TrimSpace(v.EffectiveTo) != "" {
 		add("INDEFINITE_END_DATE", "Un contract pe durată nedeterminată nu poate avea dată de sfârșit.")
 	}
-	if clientCUI != "" {
-		if strings.TrimSpace(v.BuyerCUI) == "" {
-			add("BUYER_CUI_REQUIRED", "CUI-ul cumpărătorului trebuie verificat.")
-		} else if !fiscalidentity.Same(v.BuyerCUI, clientCUI) {
-			add("BUYER_MISMATCH", "CUI-ul cumpărătorului nu corespunde clientului selectat.")
+	switch {
+	case clientCUI == "":
+	case sale:
+		// The client supplies or rents out; the buyer is the counterparty the
+		// issued invoices are linked by (D-126).
+		if strings.TrimSpace(v.BuyerName) == "" {
+			add("BUYER_NAME_REQUIRED", "Denumirea cumpărătorului (locatarului) este obligatorie când clientul este furnizor.")
 		}
+		if _, _, ok := saleBuyerIdentity(v.BuyerCUI); !ok {
+			add("BUYER_ID_INVALID", "CUI-ul sau CNP-ul cumpărătorului (locatarului) nu este valid.")
+		}
+	case clientFound:
+	case strings.TrimSpace(v.BuyerCUI) == "":
+		add("BUYER_CUI_REQUIRED", "CUI-ul cumpărătorului trebuie verificat.")
+	default:
+		add("BUYER_MISMATCH", "CUI-ul cumpărătorului nu corespunde clientului selectat.")
 	}
 	if !validCurrency(v.Currency) {
 		add("CURRENCY_INVALID", "Moneda contractului trebuie să fie un cod ISO valid.")
@@ -633,7 +674,7 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 		if err := commercialvalidation.ValidateRule(rule); err != nil {
 			add("COMMERCIAL_RULE_INVALID", fmt.Sprintf("Regula comercială %d nu este validă sau nu are dovadă completă.", index+1))
 		}
-		if rule.Kind == commercialvalidation.RuleIdentity && !commercialvalidation.IdentityRuleNamesSupplier(rule, v.SupplierCUI) {
+		if !sale && rule.Kind == commercialvalidation.RuleIdentity && !commercialvalidation.IdentityRuleNamesSupplier(rule, v.SupplierCUI) {
 			add("IDENTITY_RULE_NOT_SUPPLIER", fmt.Sprintf("Regula comercială %d verifică alt CUI decât al furnizorului; pe factură se compară doar furnizorul.", index+1))
 		}
 		if confirmedRuleIDs[rule.ID] {
@@ -712,6 +753,20 @@ func validatedContract(c ConfirmCommand) (contracts.Contract, error) {
 		result.ServiceTerms = append(result.ServiceTerms, contracts.ServiceTerm{ID: newID("contractterm"), Position: index + 1, ServiceDescription: strings.TrimSpace(term.ServiceDescription), PricingModel: term.PricingModel, UnitPrice: &priceCopy, Currency: strings.ToUpper(strings.TrimSpace(term.Currency)), Unit: strings.TrimSpace(term.Unit), QuantitySource: term.QuantitySource, QuantityValue: quantity, QuantityDriver: strings.TrimSpace(term.QuantityDriver), BillingFrequency: term.BillingFrequency, EvidenceJSON: evidence})
 	}
 	return result, nil
+}
+
+// applyClientRole records which side the client is on; for a sale contract
+// the buyer becomes the counterparty used for matching (D-126).
+func applyClientRole(value *contracts.Contract, v ReviewedContract, role string) {
+	value.ClientRole = contracts.ClientRoleBuyer
+	if role != contracts.ClientRoleSupplier {
+		return
+	}
+	value.ClientRole = contracts.ClientRoleSupplier
+	name, raw := strings.TrimSpace(v.BuyerName), strings.TrimSpace(v.BuyerCUI)
+	if _, normalized, ok := saleBuyerIdentity(raw); ok {
+		value.BuyerName, value.BuyerCUI, value.NormalizedBuyerCUI = &name, &raw, &normalized
+	}
 }
 
 func validCUI(value string) bool {

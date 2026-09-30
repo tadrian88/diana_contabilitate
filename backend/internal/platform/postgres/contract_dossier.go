@@ -37,10 +37,12 @@ func (s *Store) ActivateConfirmedContract(ctx context.Context, command contracti
 		return err
 	}
 	pendingClauses := contractingestion.UnconfirmedCommercialClauses(proposal, command.Contract.CommercialRules)
+	// clientCUI is the dossier buyer: the client itself, or the tenant/customer
+	// when the client is the supplier of a sale contract (D-126).
 	var clientCUI, supplierCUI, reference string
 	var effectiveFrom time.Time
 	var effectiveTo sql.NullTime
-	if err = tx.QueryRowContext(ctx, `SELECT cl.cui,c.supplier_cui,c.reference,c.effective_from,c.effective_to FROM contracts c JOIN clients cl ON cl.id=c.client_id WHERE c.id=$1 AND c.client_id=$2`, contractID, command.ClientID).Scan(&clientCUI, &supplierCUI, &reference, &effectiveFrom, &effectiveTo); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT CASE WHEN c.client_role='SUPPLIER' THEN c.buyer_cui ELSE cl.cui END,c.supplier_cui,c.reference,c.effective_from,c.effective_to FROM contracts c JOIN clients cl ON cl.id=c.client_id WHERE c.id=$1 AND c.client_id=$2`, contractID, command.ClientID).Scan(&clientCUI, &supplierCUI, &reference, &effectiveFrom, &effectiveTo); err != nil {
 		return err
 	}
 	dossierID := stableID("dossier", contractID)

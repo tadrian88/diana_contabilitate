@@ -257,8 +257,13 @@ type contractSummaryDTO struct {
 
 type contractDTO struct {
 	contractSummaryDTO
-	ClientID            string                   `json:"clientId"`
-	SupplierCUI         string                   `json:"supplierCui"`
+	ClientID    string `json:"clientId"`
+	SupplierCUI string `json:"supplierCui"`
+	// ClientRole is BUYER or SUPPLIER (D-126); for SUPPLIER the buyer is the
+	// counterparty. A CNP buyer is masked.
+	ClientRole          string                   `json:"clientRole"`
+	BuyerName           *string                  `json:"buyerName,omitempty"`
+	BuyerCUI            *string                  `json:"buyerCui,omitempty"`
 	SourceReference     *string                  `json:"sourceReference,omitempty"`
 	SourceMetadata      *string                  `json:"sourceMetadata,omitempty"`
 	SourceDocumentID    *string                  `json:"sourceDocumentId,omitempty"`
@@ -620,6 +625,21 @@ func ruleResponse(item *rules.Rule) ruleDTO {
 	return result
 }
 
+func contractClientRole(item *contracts.Contract) string {
+	if item.ClientRole == "" {
+		return contracts.ClientRoleBuyer
+	}
+	return item.ClientRole
+}
+
+func maskedOptional(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	masked := fiscalidentity.MaskIfCNP(*value)
+	return &masked
+}
+
 func contractResponse(item *contracts.Contract) contractDTO {
 	result := contractDTO{
 		contractSummaryDTO: contractSummaryDTO{
@@ -628,7 +648,7 @@ func contractResponse(item *contracts.Contract) contractDTO {
 			Value:    moneyDTO{Amount: json.RawMessage(item.Value.Amount.String()), Currency: item.Value.Currency},
 			Currency: item.Value.Currency, UnitType: item.UnitType, PaymentTerms: item.PaymentTerms, HasLegacyTotalValue: item.HasLegacyTotalValue,
 		},
-		ClientID: item.ClientID, SupplierCUI: item.SupplierCUI, SourceReference: item.SourceReference,
+		ClientID: item.ClientID, SupplierCUI: item.SupplierCUI, ClientRole: contractClientRole(item), BuyerName: item.BuyerName, BuyerCUI: maskedOptional(item.BuyerCUI), SourceReference: item.SourceReference,
 		SourceDocumentID: item.SourceDocumentID, ExtractionAttemptID: item.ExtractionAttemptID,
 		SourceMetadata: item.SourceMetadata, Revision: item.Revision, LifecycleState: item.LifecycleState, PeriodType: item.PeriodType, ServiceTerms: []contractServiceTermDTO{},
 	}

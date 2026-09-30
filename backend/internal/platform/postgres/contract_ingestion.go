@@ -266,7 +266,8 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 	if json.Unmarshal(attempt.Proposal, &proposal) != nil {
 		return "", false, apperrors.ErrConflict
 	}
-	if !fiscalidentity.Same(command.Contract.BuyerCUI, client.Cui) {
+	clientRole, clientFound := contractingestion.ClientRoleFor(command.Contract, client.Cui)
+	if !clientFound {
 		return "", false, contractingestion.ErrBuyerMismatch
 	}
 	if _, err = tx.ContractSourceDocument.UpdateOne(doc).Where(contractsourcedocument.RevisionEQ(command.ExpectedDocumentRevision), contractsourcedocument.StatusEQ(contractsourcedocument.StatusREADY_FOR_REVIEW)).AddRevision(1).SetUpdatedAt(now).Save(ctx); err != nil {
@@ -291,8 +292,18 @@ func (s *Store) ConfirmDocument(ctx context.Context, command contractingestion.C
 		if err != nil {
 			return "", false, err
 		}
+		if string(created.ClientRole) != clientRole {
+			// An annex is read on the same side as its base contract.
+			return "", false, apperrors.ErrValidation
+		}
 	} else {
 		contractCreate := tx.Contract.Create().SetID(value.ID).SetClientID(value.ClientID).SetSupplierName(value.SupplierName).SetSupplierCui(value.SupplierCUI).SetNormalizedSupplierCui(value.NormalizedSupplierCUI).SetReference(value.Reference).SetEffectiveFrom(value.EffectiveFrom).SetNillableEffectiveTo(value.EffectiveTo).SetPeriodType(contract.PeriodType(value.PeriodType)).SetTotalValue(value.Value.Amount.String()).SetHasLegacyTotalValue(value.HasLegacyTotalValue).SetCurrency(value.Value.Currency).SetUnitType(value.UnitType).SetPaymentTerms(value.PaymentTerms).SetSourceReference(sourceRef).SetSourceMetadata(sourceMeta).SetSourceDocumentID(doc.ID).SetExtractionAttemptID(attempt.ID).SetRevision(1).SetCreatedAt(now).SetUpdatedAt(now)
+		if clientRole == contracts.ClientRoleSupplier {
+			if value.ClientRole != contracts.ClientRoleSupplier || value.BuyerName == nil || value.BuyerCUI == nil || value.NormalizedBuyerCUI == nil {
+				return "", false, apperrors.ErrValidation
+			}
+			contractCreate.SetClientRole(contract.ClientRoleSUPPLIER).SetBuyerName(*value.BuyerName).SetBuyerCui(*value.BuyerCUI).SetNormalizedBuyerCui(*value.NormalizedBuyerCUI)
+		}
 		created, err = contractCreate.Save(ctx)
 		if ent.IsConstraintError(err) {
 			return "", false, apperrors.ErrConflict

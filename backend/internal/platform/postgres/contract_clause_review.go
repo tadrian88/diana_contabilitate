@@ -118,7 +118,7 @@ func closeCoveredClauses(ctx context.Context, tx *sql.Tx, coverage coverageConte
 			}
 			reason := supplierIdentityReason(coverage.SupplierCUI)
 			if code == commercialvalidation.ClauseCoveredByPartyIdentity {
-				reason = partyIdentityReason(coverage.SupplierCUI, coverage.BuyerCUI)
+				reason = partyIdentityReason(coverage.SupplierCUI, coverage.BuyerCUI, saleDossier(ctx, tx, coverage.DossierID))
 			}
 			covered = append(covered, closing{id, code, reason})
 			continue
@@ -175,7 +175,10 @@ func supplierIdentityReason(supplierCUI string) string {
 	return "Furnizorul este identificat prin CUI-ul confirmat al contractului (" + supplierCUI + "); facturile se asociază contractului după acest CUI."
 }
 
-func partyIdentityReason(supplierCUI, buyerCUI string) string {
+func partyIdentityReason(supplierCUI, buyerCUI string, sale bool) string {
+	if sale {
+		return "Clauza numește părțile contractului: clientul, furnizor (locator) prin CUI-ul " + supplierCUI + ", care emite facturile, și cumpărătorul (locatarul) prin CUI-ul " + buyerCUI + ", după care facturile emise se asociază contractului."
+	}
 	return "Clauza numește părțile contractului, deja verificate pe fiecare factură: clientul prin CUI-ul " + buyerCUI + ", singurul cumpărător al facturilor primite din SPV, și furnizorul prin CUI-ul " + supplierCUI + ", după care facturile se asociază contractului."
 }
 
@@ -364,7 +367,7 @@ func (s *Store) DismissProposedClause(ctx context.Context, command commercialval
 		if kind != string(commercialvalidation.RuleIdentity) || identityCoverage(snippet, supplierCUI, buyerCUI) != command.ReasonCode {
 			return false, fmt.Errorf("%w: the clause does not only name the CUIs of the contract parties", apperrors.ErrValidation)
 		}
-		reason = partyIdentityReason(supplierCUI, buyerCUI)
+		reason = partyIdentityReason(supplierCUI, buyerCUI, saleDossier(ctx, tx, dossierID))
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE contract_clause_candidates SET review_status='REJECTED',reviewed_at=$2,reviewed_by_id=$3,review_reason_code=$4,review_reason=$5 WHERE id=$1 AND review_status='PROPOSED'`,
 		clauseID, now, command.ActorID, command.ReasonCode, reason); err != nil {
@@ -548,4 +551,12 @@ func (s *Store) ConfirmedDocumentsWithCoverableClauses(ctx context.Context) ([]S
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+// saleDossier reports a dossier whose contract has the client as supplier
+// (D-126); its buyer is the counterparty, not the client.
+func saleDossier(ctx context.Context, tx *sql.Tx, dossierID string) bool {
+	var sale bool
+	_ = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM contract_dossiers d JOIN contracts c ON c.id=d.contract_id WHERE d.id=$1 AND c.client_role='SUPPLIER')`, dossierID).Scan(&sale)
+	return sale
 }
