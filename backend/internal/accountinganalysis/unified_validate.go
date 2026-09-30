@@ -159,11 +159,21 @@ func sourceTaxRate(line Line) *money.Amount {
 
 func validateContextualValue(input Input, line Line, dimension string, value accounting.Value, add func(string, string, string)) {
 	switch dimension {
+	case "ACCOUNT":
+		if input.Direction == Outgoing && !AccountRelevantForDirection(value.Account, Outgoing) {
+			add("ACCOUNT_DIRECTION_MISMATCH", ".proposedValue.account", "factura emisă se înregistrează într-un cont de venituri (clasa 7), 167, 419 sau 472")
+		}
 	case "VAT_TREATMENT":
 		if rate := sourceTaxRate(line); rate == nil || value.SourceRate == nil || !rate.Equal(*value.SourceRate) || strings.TrimSpace(value.SourceCategory) != strings.TrimSpace(line.Facts.Code) {
 			add("VAT_SOURCE_MISMATCH", ".proposedValue", "cota sau categoria TVA nu corespunde faptelor liniei")
 		}
-		if input.SourceFacts != nil && input.SourceFacts.CashAccounting == "YES" && value.Timing != "DEFERRED" {
+		if input.Direction == Outgoing {
+			// D-128: on an issued invoice the client's own profile decides the
+			// chargeability; the note printed on the invoice does not.
+			if want := profileVATTiming(input.Profile); want != "" && value.Timing != want {
+				add("VAT_PROFILE_TIMING_MISMATCH", ".proposedValue.timing", "momentul TVA al facturii emise trebuie să urmeze profilul clientului ("+want+")")
+			}
+		} else if input.SourceFacts != nil && input.SourceFacts.CashAccounting == "YES" && value.Timing != "DEFERRED" {
 			add("VAT_CASH_ACCOUNTING_MISMATCH", ".proposedValue.timing", "factura indică TVA la încasare, iar momentul propus nu este amânat")
 		}
 	case "VAT_DEDUCTIBILITY":
@@ -216,4 +226,19 @@ func validationResults(issues []ValidationIssue) []accounting.ValidationResult {
 
 func ValidationResults(issues []ValidationIssue) []accounting.ValidationResult {
 	return validationResults(issues)
+}
+
+// profileVATTiming is the chargeability an issued invoice must follow: without
+// cash accounting VAT is collected immediately (4427), with it deferred (4428).
+func profileVATTiming(profile *accounting.Profile) string {
+	if profile == nil {
+		return ""
+	}
+	switch profile.CashAccounting {
+	case "NO":
+		return "IMMEDIATE"
+	case "YES":
+		return "DEFERRED"
+	}
+	return ""
 }

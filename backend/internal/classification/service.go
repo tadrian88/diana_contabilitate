@@ -143,7 +143,8 @@ func applyApprovedKnowledge(input InvoiceContext, result Result) Result {
 		proposal := &result.Proposals[i]
 		// Verified deterministic rules retain precedence. ACCOUNT remains owned by
 		// the existing exact account_mappings adapter.
-		if proposal.Dimension == DimensionAccount || proposal.Source == SourceRule {
+		// Direction-derived decisions are definitions, never knowledge.
+		if proposal.Dimension == DimensionAccount || proposal.Source == SourceRule || proposal.Source == SourceDirection {
 			continue
 		}
 		line, ok := lines[proposal.InvoiceLineID]
@@ -360,7 +361,7 @@ func validateResult(input InvoiceContext, result Result, version string) error {
 		if !lines[proposal.InvoiceLineID] || seen[key] || strings.TrimSpace(proposal.ProposedValue) == "" || proposal.Confidence == "" || proposal.Explanation == "" || proposal.LegalBasis == "" {
 			return fmt.Errorf("%w: proposal", ErrInvalidPolicyResult)
 		}
-		if result.ModelVersion == accounting.ModelVersion && (proposal.ModelVersion != accounting.ModelVersion || !proposal.RequiresReview && (proposal.TypedValue == nil || proposal.TypedValue.Validate(string(proposal.Dimension)) != nil || proposal.Evidence == nil || proposal.Rule == nil && !validProfileDerived(input, proposal))) {
+		if result.ModelVersion == accounting.ModelVersion && (proposal.ModelVersion != accounting.ModelVersion || !proposal.RequiresReview && (proposal.TypedValue == nil || proposal.TypedValue.Validate(string(proposal.Dimension)) != nil || proposal.Evidence == nil || proposal.Rule == nil && !validProfileDerived(input, proposal) && !validDirectionDerived(input, proposal))) {
 			return fmt.Errorf("%w: typed decision", ErrInvalidPolicyResult)
 		}
 		if proposal.Dimension == DimensionAccount && proposal.TypedValue != nil {
@@ -374,7 +375,7 @@ func validateResult(input InvoiceContext, result Result, version string) error {
 		for _, dimension := range dimensions {
 			validDimension = validDimension || proposal.Dimension == dimension
 		}
-		if !validDimension || (proposal.Source == SourceRule && proposal.Rule == nil) || (proposal.Source == SourceProfile && !validProfileDerived(input, proposal)) || (proposal.Source == SourceLearnedMapping && proposal.Mapping == nil && proposal.Knowledge == nil) {
+		if !validDimension || (proposal.Source == SourceRule && proposal.Rule == nil) || (proposal.Source == SourceProfile && !validProfileDerived(input, proposal)) || (proposal.Source == SourceDirection && !validDirectionDerived(input, proposal)) || (proposal.Source == SourceLearnedMapping && proposal.Mapping == nil && proposal.Knowledge == nil) {
 			return fmt.Errorf("%w: evidence", ErrInvalidPolicyResult)
 		}
 	}
@@ -390,4 +391,15 @@ func validProfileDerived(input InvoiceContext, proposal Proposal) bool {
 	profile := input.Snapshot.Profile
 	expected, ok := profile.ProfileDerivedExpenseTaxValue()
 	return ok && string(proposal.Dimension) == "EXPENSE_TAX_TREATMENT" && proposal.TypedValue.Kind == expected.Kind && proposal.TypedValue.Reason == expected.Reason && proposal.Evidence.ProfileID == profile.ID && proposal.Evidence.ProfileVersion == profile.Version
+}
+
+// validDirectionDerived accepts an automatic decision without a rule only on an
+// issued invoice and only with exactly the value its direction implies.
+func validDirectionDerived(input InvoiceContext, proposal Proposal) bool {
+	if proposal.Source != SourceDirection || !input.Outgoing() || proposal.Rule != nil || proposal.Mapping != nil || proposal.Knowledge != nil || proposal.TypedValue == nil || proposal.Evidence == nil || input.Snapshot == nil || input.Snapshot.Profile == nil {
+		return false
+	}
+	expected, ok := accounting.DirectionDerivedValue(string(proposal.Dimension))
+	profile := input.Snapshot.Profile
+	return ok && proposal.TypedValue.Kind == expected.Kind && proposal.TypedValue.Reason == expected.Reason && proposal.Evidence.ProfileID == profile.ID && proposal.Evidence.ProfileVersion == profile.Version
 }

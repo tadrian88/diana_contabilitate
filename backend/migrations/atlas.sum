@@ -1,4 +1,4 @@
-h1:OBCk39c686aa4FIZ2hQJ6Gb6QuyQaxvvdwHdhCNr7ck=
+h1:++HWCSFWXNoCQVV9OCUZ2R0/vCSQ06jxlkR4GMc7Q2c=
 000001_foundation.sql h1:1LvkBtffbjWi2YVKW0qGZciJYWvAxKI8su7C3IkgNws=
 000002_invoice_pipeline.sql h1:5NTZwA70HYrkGCZPFDbVk/k2ZqpklocyXKsDWtvfTKU=
 000003_duplicate_status_invariant.sql h1:jbmP08VPjY9Ci+3DbpbCM8Bs/EvLxuHXNuh8EWCW45A=
@@ -38,3 +38,4 @@ h1:OBCk39c686aa4FIZ2hQJ6Gb6QuyQaxvvdwHdhCNr7ck=
 000037_clause_review_reason.sql h1:bcwPb+btEF/VvtWdR94V/MlDWKyzI/xCWwk46ZcBCBA=
 000038_llm_usage.sql h1:xqFMVBz8HFaR3NKv4RORQI2CEbJezj8Mt8MxqC5KDuo=
 000039_vanzari_direction.sql h1:a0L/wG2ZyPEHFyNQDboN37CN09EopCz4Ww3faLJx608=
+000040_vanzari_classification_direction.sql h1:87ZwVSv1T3b0dc1n914nJ59TCgxIQBxowyoXAD/FE0I=

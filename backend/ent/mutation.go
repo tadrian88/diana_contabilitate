@@ -855,6 +855,7 @@ type AccountMappingMutation struct {
 	typ                    string
 	id                     *string
 	client_id              *string
+	direction              *accountmapping.Direction
 	normalized_supplier_id *string
 	service_identity_kind  *accountmapping.ServiceIdentityKind
 	service_identity_value *string
@@ -1010,6 +1011,42 @@ func (m *AccountMappingMutation) OldClientID(ctx context.Context) (v string, err
 // ResetClientID resets all changes to the "client_id" field.
 func (m *AccountMappingMutation) ResetClientID() {
 	m.client_id = nil
+}
+
+// SetDirection sets the "direction" field.
+func (m *AccountMappingMutation) SetDirection(a accountmapping.Direction) {
+	m.direction = &a
+}
+
+// Direction returns the value of the "direction" field in the mutation.
+func (m *AccountMappingMutation) Direction() (r accountmapping.Direction, exists bool) {
+	v := m.direction
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDirection returns the old "direction" field's value of the AccountMapping entity.
+// If the AccountMapping object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMappingMutation) OldDirection(ctx context.Context) (v accountmapping.Direction, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDirection is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDirection requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDirection: %w", err)
+	}
+	return oldValue.Direction, nil
+}
+
+// ResetDirection resets all changes to the "direction" field.
+func (m *AccountMappingMutation) ResetDirection() {
+	m.direction = nil
 }
 
 // SetNormalizedSupplierID sets the "normalized_supplier_id" field.
@@ -1410,9 +1447,12 @@ func (m *AccountMappingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMappingMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.client_id != nil {
 		fields = append(fields, accountmapping.FieldClientID)
+	}
+	if m.direction != nil {
+		fields = append(fields, accountmapping.FieldDirection)
 	}
 	if m.normalized_supplier_id != nil {
 		fields = append(fields, accountmapping.FieldNormalizedSupplierID)
@@ -1451,6 +1491,8 @@ func (m *AccountMappingMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case accountmapping.FieldClientID:
 		return m.ClientID()
+	case accountmapping.FieldDirection:
+		return m.Direction()
 	case accountmapping.FieldNormalizedSupplierID:
 		return m.NormalizedSupplierID()
 	case accountmapping.FieldServiceIdentityKind:
@@ -1480,6 +1522,8 @@ func (m *AccountMappingMutation) OldField(ctx context.Context, name string) (ent
 	switch name {
 	case accountmapping.FieldClientID:
 		return m.OldClientID(ctx)
+	case accountmapping.FieldDirection:
+		return m.OldDirection(ctx)
 	case accountmapping.FieldNormalizedSupplierID:
 		return m.OldNormalizedSupplierID(ctx)
 	case accountmapping.FieldServiceIdentityKind:
@@ -1513,6 +1557,13 @@ func (m *AccountMappingMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetClientID(v)
+		return nil
+	case accountmapping.FieldDirection:
+		v, ok := value.(accountmapping.Direction)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDirection(v)
 		return nil
 	case accountmapping.FieldNormalizedSupplierID:
 		v, ok := value.(string)
@@ -1655,6 +1706,9 @@ func (m *AccountMappingMutation) ResetField(name string) error {
 	switch name {
 	case accountmapping.FieldClientID:
 		m.ResetClientID()
+		return nil
+	case accountmapping.FieldDirection:
+		m.ResetDirection()
 		return nil
 	case accountmapping.FieldNormalizedSupplierID:
 		m.ResetNormalizedSupplierID()

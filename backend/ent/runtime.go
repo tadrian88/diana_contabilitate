@@ -68,23 +68,23 @@ func init() {
 	accountmappingFields := schema.AccountMapping{}.Fields()
 	_ = accountmappingFields
 	// accountmappingDescNormalizedSupplierID is the schema descriptor for normalized_supplier_id field.
-	accountmappingDescNormalizedSupplierID := accountmappingFields[2].Descriptor()
+	accountmappingDescNormalizedSupplierID := accountmappingFields[3].Descriptor()
 	// accountmapping.NormalizedSupplierIDValidator is a validator for the "normalized_supplier_id" field. It is called by the builders before save.
 	accountmapping.NormalizedSupplierIDValidator = accountmappingDescNormalizedSupplierID.Validators[0].(func(string) error)
 	// accountmappingDescServiceIdentityValue is the schema descriptor for service_identity_value field.
-	accountmappingDescServiceIdentityValue := accountmappingFields[4].Descriptor()
+	accountmappingDescServiceIdentityValue := accountmappingFields[5].Descriptor()
 	// accountmapping.ServiceIdentityValueValidator is a validator for the "service_identity_value" field. It is called by the builders before save.
 	accountmapping.ServiceIdentityValueValidator = accountmappingDescServiceIdentityValue.Validators[0].(func(string) error)
 	// accountmappingDescNormalizerVersion is the schema descriptor for normalizer_version field.
-	accountmappingDescNormalizerVersion := accountmappingFields[5].Descriptor()
+	accountmappingDescNormalizerVersion := accountmappingFields[6].Descriptor()
 	// accountmapping.NormalizerVersionValidator is a validator for the "normalizer_version" field. It is called by the builders before save.
 	accountmapping.NormalizerVersionValidator = accountmappingDescNormalizerVersion.Validators[0].(func(string) error)
 	// accountmappingDescCurrentVersion is the schema descriptor for current_version field.
-	accountmappingDescCurrentVersion := accountmappingFields[6].Descriptor()
+	accountmappingDescCurrentVersion := accountmappingFields[7].Descriptor()
 	// accountmapping.CurrentVersionValidator is a validator for the "current_version" field. It is called by the builders before save.
 	accountmapping.CurrentVersionValidator = accountmappingDescCurrentVersion.Validators[0].(func(int) error)
 	// accountmappingDescRevision is the schema descriptor for revision field.
-	accountmappingDescRevision := accountmappingFields[8].Descriptor()
+	accountmappingDescRevision := accountmappingFields[9].Descriptor()
 	// accountmapping.DefaultRevision holds the default value on creation for the revision field.
 	accountmapping.DefaultRevision = accountmappingDescRevision.Default.(uint64)
 	// accountmapping.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.

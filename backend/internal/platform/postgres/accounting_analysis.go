@@ -477,8 +477,8 @@ func (s *Store) loadAnalysisInput(ctx context.Context, clientID, invoiceID strin
 	var sourceRaw, classificationSnapshotRaw []byte
 	var issue time.Time
 	var supplierID sql.NullString
-	var clientCUI, total string
-	err := s.DB.QueryRowContext(ctx, `SELECT i.client_id,i.id,i.revision,i.issue_day,i.currency,i.total_amount,i.supplier_name,i.normalized_supplier_cui,i.source_facts,c.normalized_identifier,COALESCE(i.current_classification_run_id,''),COALESCE(r.snapshot,'{}'::jsonb) FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN classification_runs r ON r.id=i.current_classification_run_id AND r.client_id=i.client_id AND r.invoice_id=i.id WHERE i.id=$1 AND i.client_id=$2 AND i.model_version=$3`, invoiceID, clientID, accounting.ModelVersion).Scan(&input.ClientID, &input.InvoiceID, &input.InvoiceRevision, &issue, &input.Currency, &total, &input.SupplierName, &supplierID, &sourceRaw, &clientCUI, &input.ClassificationRunID, &classificationSnapshotRaw)
+	var clientCUI, total, direction, customerKind string
+	err := s.DB.QueryRowContext(ctx, `SELECT i.client_id,i.id,i.revision,i.issue_day,i.currency,i.total_amount,i.supplier_name,i.normalized_supplier_cui,i.source_facts,c.normalized_identifier,COALESCE(i.current_classification_run_id,''),COALESCE(r.snapshot,'{}'::jsonb),i.direction,COALESCE(i.customer_name,''),COALESCE(i.customer_identifier_kind,'') FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN classification_runs r ON r.id=i.current_classification_run_id AND r.client_id=i.client_id AND r.invoice_id=i.id WHERE i.id=$1 AND i.client_id=$2 AND i.model_version=$3`, invoiceID, clientID, accounting.ModelVersion).Scan(&input.ClientID, &input.InvoiceID, &input.InvoiceRevision, &issue, &input.Currency, &total, &input.SupplierName, &supplierID, &sourceRaw, &clientCUI, &input.ClassificationRunID, &classificationSnapshotRaw, &direction, &input.CustomerName, &customerKind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return input, apperrors.ErrNotFound
 	}
@@ -496,12 +496,19 @@ func (s *Store) loadAnalysisInput(ctx context.Context, clientID, invoiceID strin
 		return input, fmt.Errorf("invalid source facts")
 	}
 	input.SourceFacts = &source
+	// The stored direction (D-124) is authoritative; the parties must still agree
+	// with it.
 	clientIDNorm := normalizeFiscal(clientCUI)
-	if normalizeFiscal(source.BuyerVATID) == clientIDNorm || normalizeFiscal(source.BuyerLegalID) == clientIDNorm {
-		input.Direction = accountinganalysis.Incoming
-	} else if normalizeFiscal(source.SupplierVATID) == clientIDNorm || normalizeFiscal(source.SupplierLegalID) == clientIDNorm {
+	buyerIsClient := normalizeFiscal(source.BuyerVATID) == clientIDNorm || normalizeFiscal(source.BuyerLegalID) == clientIDNorm
+	supplierIsClient := normalizeFiscal(source.SupplierVATID) == clientIDNorm || normalizeFiscal(source.SupplierLegalID) == clientIDNorm
+	switch {
+	case direction == "OUTGOING" && supplierIsClient:
 		input.Direction = accountinganalysis.Outgoing
-	} else {
+		input.CustomerIdentifierKind = customerKind
+	case direction != "OUTGOING" && buyerIsClient:
+		input.Direction = accountinganalysis.Incoming
+		input.CustomerName = ""
+	default:
 		return input, fmt.Errorf("%w: direcția facturii nu poate fi stabilită", apperrors.ErrValidation)
 	}
 	var classificationSnapshot accounting.Snapshot

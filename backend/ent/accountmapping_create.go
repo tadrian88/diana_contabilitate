@@ -26,6 +26,20 @@ func (_c *AccountMappingCreate) SetClientID(v string) *AccountMappingCreate {
 	return _c
 }
 
+// SetDirection sets the "direction" field.
+func (_c *AccountMappingCreate) SetDirection(v accountmapping.Direction) *AccountMappingCreate {
+	_c.mutation.SetDirection(v)
+	return _c
+}
+
+// SetNillableDirection sets the "direction" field if the given value is not nil.
+func (_c *AccountMappingCreate) SetNillableDirection(v *accountmapping.Direction) *AccountMappingCreate {
+	if v != nil {
+		_c.SetDirection(*v)
+	}
+	return _c
+}
+
 // SetNormalizedSupplierID sets the "normalized_supplier_id" field.
 func (_c *AccountMappingCreate) SetNormalizedSupplierID(v string) *AccountMappingCreate {
 	_c.mutation.SetNormalizedSupplierID(v)
@@ -137,6 +151,10 @@ func (_c *AccountMappingCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *AccountMappingCreate) defaults() {
+	if _, ok := _c.mutation.Direction(); !ok {
+		v := accountmapping.DefaultDirection
+		_c.mutation.SetDirection(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := accountmapping.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -151,6 +169,14 @@ func (_c *AccountMappingCreate) defaults() {
 func (_c *AccountMappingCreate) check() error {
 	if _, ok := _c.mutation.ClientID(); !ok {
 		return &ValidationError{Name: "client_id", err: errors.New(`ent: missing required field "AccountMapping.client_id"`)}
+	}
+	if _, ok := _c.mutation.Direction(); !ok {
+		return &ValidationError{Name: "direction", err: errors.New(`ent: missing required field "AccountMapping.direction"`)}
+	}
+	if v, ok := _c.mutation.Direction(); ok {
+		if err := accountmapping.DirectionValidator(v); err != nil {
+			return &ValidationError{Name: "direction", err: fmt.Errorf(`ent: validator failed for field "AccountMapping.direction": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.NormalizedSupplierID(); !ok {
 		return &ValidationError{Name: "normalized_supplier_id", err: errors.New(`ent: missing required field "AccountMapping.normalized_supplier_id"`)}
@@ -252,6 +278,10 @@ func (_c *AccountMappingCreate) createSpec() (*AccountMapping, *sqlgraph.CreateS
 	if value, ok := _c.mutation.ClientID(); ok {
 		_spec.SetField(accountmapping.FieldClientID, field.TypeString, value)
 		_node.ClientID = value
+	}
+	if value, ok := _c.mutation.Direction(); ok {
+		_spec.SetField(accountmapping.FieldDirection, field.TypeEnum, value)
+		_node.Direction = value
 	}
 	if value, ok := _c.mutation.NormalizedSupplierID(); ok {
 		_spec.SetField(accountmapping.FieldNormalizedSupplierID, field.TypeString, value)

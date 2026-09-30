@@ -252,6 +252,7 @@ const (
 	SourceLEARNED_MAPPING Source = "LEARNED_MAPPING"
 	SourceAI_PROPOSAL     Source = "AI_PROPOSAL"
 	SourcePROFILE         Source = "PROFILE"
+	SourceDIRECTION       Source = "DIRECTION"
 )
 
 func (s Source) String() string {
@@ -261,7 +262,7 @@ func (s Source) String() string {
 // SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
 func SourceValidator(s Source) error {
 	switch s {
-	case SourceRULE, SourceNO_MATCH, SourceAMBIGUOUS, SourceLEARNED_MAPPING, SourceAI_PROPOSAL, SourcePROFILE:
+	case SourceRULE, SourceNO_MATCH, SourceAMBIGUOUS, SourceLEARNED_MAPPING, SourceAI_PROPOSAL, SourcePROFILE, SourceDIRECTION:
 		return nil
 	default:
 		return fmt.Errorf("lineclassification: invalid enum value for source field: %q", s)

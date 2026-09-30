@@ -12,7 +12,7 @@ import (
 )
 
 const SchemaVersion = "UNIFIED_ACCOUNTING_PROPOSAL_V2"
-const PromptVersion = "UNIFIED_ACCOUNTING_PROMPT_V3"
+const PromptVersion = "UNIFIED_ACCOUNTING_PROMPT_V4"
 const LegacySchemaVersion = "ACCOUNTING_ANALYSIS_V1"
 
 type Direction string
@@ -60,22 +60,26 @@ type Line struct {
 }
 
 type Input struct {
-	ClientID            string                  `json:"clientId"`
-	InvoiceID           string                  `json:"invoiceId"`
-	ClassificationRunID string                  `json:"classificationRunId"`
-	SupplierID          string                  `json:"supplierId"`
-	SupplierName        string                  `json:"supplierName"`
-	InvoiceRevision     uint64                  `json:"invoiceRevision"`
-	IssueDate           accountingdate.Date     `json:"issueDate"`
-	Direction           Direction               `json:"direction"`
-	Currency            string                  `json:"currency"`
-	Total               money.Amount            `json:"total"`
-	SourceFacts         *accounting.SourceFacts `json:"sourceFacts"`
-	Profile             *accounting.Profile     `json:"profile"`
-	AccountCatalog      Catalog                 `json:"accountCatalog,omitempty"`
-	AccountCandidates   []AccountCandidate      `json:"accountCandidates"`
-	ResolvedDimensions  []ResolvedDimension     `json:"resolvedDimensions"`
-	Lines               []Line                  `json:"lines"`
+	ClientID            string              `json:"clientId"`
+	InvoiceID           string              `json:"invoiceId"`
+	ClassificationRunID string              `json:"classificationRunId"`
+	SupplierID          string              `json:"supplierId"`
+	SupplierName        string              `json:"supplierName"`
+	InvoiceRevision     uint64              `json:"invoiceRevision"`
+	IssueDate           accountingdate.Date `json:"issueDate"`
+	Direction           Direction           `json:"direction"`
+	// CustomerName and CustomerIdentifierKind describe the customer of an
+	// issued invoice; the identifier itself is never sent (it may be a CNP).
+	CustomerName           string                  `json:"customerName,omitempty"`
+	CustomerIdentifierKind string                  `json:"customerIdentifierKind,omitempty"`
+	Currency               string                  `json:"currency"`
+	Total                  money.Amount            `json:"total"`
+	SourceFacts            *accounting.SourceFacts `json:"sourceFacts"`
+	Profile                *accounting.Profile     `json:"profile"`
+	AccountCatalog         Catalog                 `json:"accountCatalog,omitempty"`
+	AccountCandidates      []AccountCandidate      `json:"accountCandidates"`
+	ResolvedDimensions     []ResolvedDimension     `json:"resolvedDimensions"`
+	Lines                  []Line                  `json:"lines"`
 }
 
 type AccountCandidate struct {

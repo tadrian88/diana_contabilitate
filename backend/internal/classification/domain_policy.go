@@ -47,6 +47,15 @@ func (p DomainPolicy) Evaluate(in InvoiceContext) (Result, error) {
 					proposal.Source = SourceProfile
 					proposal.RequiresReview = false
 				}
+				if v, derived := accounting.DirectionDerivedValue(dimension); derived && in.Outgoing() {
+					proposal.TypedValue = &v
+					proposal.ProposedValue = v.Text()
+					proposal.Explanation = v.Reason
+					proposal.LegalBasis = "Factura este emisă de client; dimensiunea privește doar facturile primite."
+					proposal.Confidence = "Derivat din direcția facturii"
+					proposal.Source = SourceDirection
+					proposal.RequiresReview = false
+				}
 			}
 			if profile.Valid(in.ClientID, in.IssueDate) && (!profile.TestOnly || p.AllowTestOnly) && profile.Ordinary() && pack.Valid(profile, in.ClientID, in.IssueDate, p.AllowTestOnly) && ordinarySource(in, line) {
 				applicable := []accounting.Rule{}
@@ -104,7 +113,7 @@ func (p DomainPolicy) Evaluate(in InvoiceContext) (Result, error) {
 func ordinarySource(in InvoiceContext, l LineContext) bool {
 	f := in.SourceFacts
 	lf := l.SourceFacts
-	return in.DocumentType == "INVOICE" && in.Currency == "RON" && f != nil && f.TypeCode == "380" && f.PrecedingInvoice == "" && f.SupplierVATID == in.SupplierID && f.SupplierCountry == "RO" && f.BuyerCountry == "RO" && f.CashAccounting != "YES" && (f.CashAccounting == "NO" || f.CashAccounting == "UNKNOWN") && f.TaxPointCode == "" && (f.TaxPointDate == "" || f.TaxPointDate == string(in.IssueDate)) && lf != nil && lf.Rate != nil && lf.Rate.Valid() && lf.Code == "S" && lf.Scheme == "VAT" && lf.ExemptionCode == "" && lf.ExemptionReason == "" && lf.Rate.Equal(l.VATRate)
+	return !in.Outgoing() && in.DocumentType == "INVOICE" && in.Currency == "RON" && f != nil && f.TypeCode == "380" && f.PrecedingInvoice == "" && f.SupplierVATID == in.SupplierID && f.SupplierCountry == "RO" && f.BuyerCountry == "RO" && f.CashAccounting != "YES" && (f.CashAccounting == "NO" || f.CashAccounting == "UNKNOWN") && f.TaxPointCode == "" && (f.TaxPointDate == "" || f.TaxPointDate == string(in.IssueDate)) && lf != nil && lf.Rate != nil && lf.Rate.Valid() && lf.Code == "S" && lf.Scheme == "VAT" && lf.ExemptionCode == "" && lf.ExemptionReason == "" && lf.Rate.Equal(l.VATRate)
 }
 func matchesDomain(r accounting.Rule, in InvoiceContext, l LineContext) bool {
 	pred := r.Predicate

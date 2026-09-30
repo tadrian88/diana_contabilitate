@@ -169,6 +169,26 @@ func ClientIDContainsFold(v string) predicate.AccountMapping {
 	return predicate.AccountMapping(sql.FieldContainsFold(FieldClientID, v))
 }
 
+// DirectionEQ applies the EQ predicate on the "direction" field.
+func DirectionEQ(v Direction) predicate.AccountMapping {
+	return predicate.AccountMapping(sql.FieldEQ(FieldDirection, v))
+}
+
+// DirectionNEQ applies the NEQ predicate on the "direction" field.
+func DirectionNEQ(v Direction) predicate.AccountMapping {
+	return predicate.AccountMapping(sql.FieldNEQ(FieldDirection, v))
+}
+
+// DirectionIn applies the In predicate on the "direction" field.
+func DirectionIn(vs ...Direction) predicate.AccountMapping {
+	return predicate.AccountMapping(sql.FieldIn(FieldDirection, vs...))
+}
+
+// DirectionNotIn applies the NotIn predicate on the "direction" field.
+func DirectionNotIn(vs ...Direction) predicate.AccountMapping {
+	return predicate.AccountMapping(sql.FieldNotIn(FieldDirection, vs...))
+}
+
 // NormalizedSupplierIDEQ applies the EQ predicate on the "normalized_supplier_id" field.
 func NormalizedSupplierIDEQ(v string) predicate.AccountMapping {
 	return predicate.AccountMapping(sql.FieldEQ(FieldNormalizedSupplierID, v))

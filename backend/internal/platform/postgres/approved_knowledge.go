@@ -19,6 +19,7 @@ import (
 type promotionRecord struct {
 	preview                                                                                   classification.PromotionPreview
 	clientName, supplierName, normalizedSupplier, currency, documentType, lineID, description string
+	direction                                                                                 string
 	lineFacts                                                                                 *accounting.LineFacts
 	source, runID                                                                             string
 	legalCitations                                                                            []accounting.LegalCitation
@@ -30,7 +31,7 @@ func (s *Store) loadPromotionRecord(ctx context.Context, clientID, invoiceID, cl
 	var profileID sql.NullString
 	var profileVersion sql.NullInt64
 	var r promotionRecord
-	err := s.DB.QueryRowContext(ctx, `SELECT c.name,i.supplier_name,COALESCE(i.normalized_supplier_cui,''),i.currency,i.document_type,i.current_classification_run_id,
+	err := s.DB.QueryRowContext(ctx, `SELECT c.name,`+counterpartyNameSQL+`,`+counterpartyIDSQL+`,i.direction,i.currency,i.document_type,i.current_classification_run_id,
 		lc.classification_run_id,lc.dimension,lc.effective_typed_value,lc.revision,lc.source,COALESCE(lc.legal_citations,'[]'::jsonb),lc.proposal_provenance,
 		l.id,l.description,l.source_facts,l.vat_rate,cr.profile_id,cr.profile_version
 		FROM line_classifications lc JOIN invoices i ON i.id=lc.invoice_id AND i.client_id=lc.client_id
@@ -38,7 +39,7 @@ func (s *Store) loadPromotionRecord(ctx context.Context, clientID, invoiceID, cl
 		JOIN classification_runs cr ON cr.id=lc.classification_run_id
 		WHERE lc.id=$1 AND lc.invoice_id=$2 AND lc.client_id=$3 AND lc.review_status IN ('ACCEPTED','CORRECTED')
 		AND lc.effective_typed_value IS NOT NULL`, classificationID, invoiceID, clientID).Scan(
-		&r.clientName, &r.supplierName, &r.normalizedSupplier, &r.currency, &r.documentType, &r.preview.ClassificationRunID,
+		&r.clientName, &r.supplierName, &r.normalizedSupplier, &r.direction, &r.currency, &r.documentType, &r.preview.ClassificationRunID,
 		&r.runID, &r.preview.Dimension, &valueRaw, &r.preview.ClassificationRevision, &r.source, &citationsRaw, &provenanceRaw,
 		&r.lineID, &r.description, &factsRaw, &r.preview.Scope.VATRate, &profileID, &profileVersion)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -72,7 +73,7 @@ func (s *Store) loadPromotionRecord(ctx context.Context, clientID, invoiceID, cl
 	if !ok || r.normalizedSupplier == "" {
 		return nil, apperrors.ErrValidation
 	}
-	r.preview.Scope = classification.KnowledgeScope{ClientID: clientID, ClientDisplay: r.clientName, SupplierDisplay: r.supplierName, NormalizedSupplierID: r.normalizedSupplier, ServiceIdentityKind: string(identity.Kind), ServiceIdentityValue: identity.Value, NormalizerVersion: identity.NormalizerVersion, Currency: r.currency, DocumentType: r.documentType, VATRate: r.preview.Scope.VATRate, ProfileID: profileID.String, ProfileVersion: int(profileVersion.Int64)}
+	r.preview.Scope = classification.KnowledgeScope{ClientID: clientID, ClientDisplay: r.clientName, SupplierDisplay: r.supplierName, NormalizedSupplierID: r.normalizedSupplier, ServiceIdentityKind: string(identity.Kind), ServiceIdentityValue: identity.Value, NormalizerVersion: identity.NormalizerVersion, Currency: r.currency, DocumentType: r.documentType, VATRate: r.preview.Scope.VATRate, ProfileID: profileID.String, ProfileVersion: int(profileVersion.Int64), Direction: scopeDirection(r.direction)}
 	r.preview.ClassificationID = classificationID
 	return &r, nil
 }
@@ -88,7 +89,7 @@ func (s *Store) PreviewApprovedKnowledge(ctx context.Context, clientID, invoiceI
 func knowledgeHashes(scope classification.KnowledgeScope, dimension classification.Dimension, value accounting.Value) (string, string) {
 	valueRaw, _ := json.Marshal(value)
 	vd := sha256.Sum256(valueRaw)
-	identity := strings.Join([]string{scope.NormalizedSupplierID, scope.ServiceIdentityKind, scope.ServiceIdentityValue, scope.NormalizerVersion, scope.Currency, scope.DocumentType, scope.VATRate, scope.ProfileID, fmt.Sprint(scope.ProfileVersion), string(dimension)}, "\x00")
+	identity := strings.Join([]string{scope.NormalizedSupplierID, scope.ServiceIdentityKind, scope.ServiceIdentityValue, scope.NormalizerVersion, scope.Currency, scope.DocumentType, scope.VATRate, scope.ProfileID, fmt.Sprint(scope.ProfileVersion), string(dimension)}, "\x00") + directionKeySuffix(scope.Direction)
 	id := sha256.Sum256([]byte(identity))
 	return hex.EncodeToString(id[:]), hex.EncodeToString(vd[:])
 }
@@ -193,8 +194,8 @@ func (s *Store) PromoteApprovedKnowledge(ctx context.Context, command classifica
 		return nil, false, err
 	}
 	id := stableID("approved-knowledge", command.ClientID+"\x00"+command.CommandID)
-	_, err = tx.ExecContext(ctx, `INSERT INTO approved_accounting_knowledge(id,version,supersedes_id,client_id,dimension,decision,approved_value_hash,normalized_supplier_id,semantic_kind,semantic_value,normalizer_version,currency,document_type,vat_rate,profile_id,profile_version,legislation_version_ids,source_invoice_id,source_invoice_line_id,source_classification_id,source_classification_run_id,source_classification_revision,original_source,original_provenance,promoted_by_id,promoted_by_display,promoted_at,status,revision,identity_hash,command_key,effective_from,created_at,updated_at)
-		SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'ACTIVE',1,$28,$29,i.issue_day,$27,$27 FROM invoices i WHERE i.id=$18 AND i.client_id=$4`, id, version, nullableString(previousID), command.ClientID, r.preview.Dimension, valueRaw, valueHash, r.preview.Scope.NormalizedSupplierID, r.preview.Scope.ServiceIdentityKind, r.preview.Scope.ServiceIdentityValue, r.preview.Scope.NormalizerVersion, r.preview.Scope.Currency, r.preview.Scope.DocumentType, r.preview.Scope.VATRate, r.preview.Scope.ProfileID, r.preview.Scope.ProfileVersion, versionsRaw, command.InvoiceID, r.lineID, command.ClassificationID, r.runID, r.preview.ClassificationRevision, r.source, provenanceRaw, optionalString(command.ActorID), command.ActorDisplay, now, identityHash, "knowledge:"+command.ClientID+":"+command.CommandID)
+	_, err = tx.ExecContext(ctx, `INSERT INTO approved_accounting_knowledge(id,version,supersedes_id,client_id,dimension,decision,approved_value_hash,normalized_supplier_id,semantic_kind,semantic_value,normalizer_version,currency,document_type,vat_rate,profile_id,profile_version,legislation_version_ids,source_invoice_id,source_invoice_line_id,source_classification_id,source_classification_run_id,source_classification_revision,original_source,original_provenance,promoted_by_id,promoted_by_display,promoted_at,status,revision,identity_hash,command_key,effective_from,created_at,updated_at,direction)
+		SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'ACTIVE',1,$28,$29,i.issue_day,$27,$27,i.direction FROM invoices i WHERE i.id=$18 AND i.client_id=$4`, id, version, nullableString(previousID), command.ClientID, r.preview.Dimension, valueRaw, valueHash, r.preview.Scope.NormalizedSupplierID, r.preview.Scope.ServiceIdentityKind, r.preview.Scope.ServiceIdentityValue, r.preview.Scope.NormalizerVersion, r.preview.Scope.Currency, r.preview.Scope.DocumentType, r.preview.Scope.VATRate, r.preview.Scope.ProfileID, r.preview.Scope.ProfileVersion, versionsRaw, command.InvoiceID, r.lineID, command.ClassificationID, r.runID, r.preview.ClassificationRevision, r.source, provenanceRaw, optionalString(command.ActorID), command.ActorDisplay, now, identityHash, "knowledge:"+command.ClientID+":"+command.CommandID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -248,11 +249,11 @@ func (s *Store) promoteAccountKnowledge(ctx context.Context, command classificat
 		}
 		return nil, false, err
 	}
-	mappingID := stableID("account-mapping", command.ClientID+"\x00"+r.preview.Scope.NormalizedSupplierID+"\x00"+r.preview.Scope.ServiceIdentityKind+"\x00"+r.preview.Scope.ServiceIdentityValue+"\x00"+r.preview.Scope.NormalizerVersion)
+	mappingID := stableID("account-mapping", command.ClientID+"\x00"+r.preview.Scope.NormalizedSupplierID+"\x00"+r.preview.Scope.ServiceIdentityKind+"\x00"+r.preview.Scope.ServiceIdentityValue+"\x00"+r.preview.Scope.NormalizerVersion+directionKeySuffix(r.preview.Scope.Direction))
 	var existingID, existingAccount, status string
 	var existingVersion int
 	var existingRevision uint64
-	err = tx.QueryRowContext(ctx, `SELECT m.id,v.account_code,m.status,m.current_version,m.revision FROM account_mappings m JOIN account_mapping_versions v ON v.mapping_id=m.id AND v.version=m.current_version WHERE m.client_id=$1 AND m.normalized_supplier_id=$2 AND m.service_identity_kind=$3 AND m.service_identity_value=$4 AND m.normalizer_version=$5 FOR UPDATE`, command.ClientID, r.preview.Scope.NormalizedSupplierID, r.preview.Scope.ServiceIdentityKind, r.preview.Scope.ServiceIdentityValue, r.preview.Scope.NormalizerVersion).Scan(&existingID, &existingAccount, &status, &existingVersion, &existingRevision)
+	err = tx.QueryRowContext(ctx, `SELECT m.id,v.account_code,m.status,m.current_version,m.revision FROM account_mappings m JOIN account_mapping_versions v ON v.mapping_id=m.id AND v.version=m.current_version WHERE m.client_id=$1 AND m.normalized_supplier_id=$2 AND m.service_identity_kind=$3 AND m.service_identity_value=$4 AND m.normalizer_version=$5 AND m.direction=$6 FOR UPDATE`, command.ClientID, r.preview.Scope.NormalizedSupplierID, r.preview.Scope.ServiceIdentityKind, r.preview.Scope.ServiceIdentityValue, r.preview.Scope.NormalizerVersion, scopeDirection(r.preview.Scope.Direction)).Scan(&existingID, &existingAccount, &status, &existingVersion, &existingRevision)
 	if err == nil {
 		if status == "ACTIVE" && existingAccount == r.preview.Value.Account {
 			return nil, false, classification.ErrKnowledgeDuplicate
@@ -282,7 +283,7 @@ func (s *Store) promoteAccountKnowledge(ctx context.Context, command classificat
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, false, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO account_mappings(id,client_id,normalized_supplier_id,service_identity_kind,service_identity_value,normalizer_version,current_version,status,revision,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,1,'ACTIVE',1,$7,$7)`, mappingID, command.ClientID, r.preview.Scope.NormalizedSupplierID, r.preview.Scope.ServiceIdentityKind, r.preview.Scope.ServiceIdentityValue, r.preview.Scope.NormalizerVersion, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO account_mappings(id,client_id,normalized_supplier_id,service_identity_kind,service_identity_value,normalizer_version,current_version,status,revision,created_at,updated_at,direction) VALUES($1,$2,$3,$4,$5,$6,1,'ACTIVE',1,$7,$7,$8)`, mappingID, command.ClientID, r.preview.Scope.NormalizedSupplierID, r.preview.Scope.ServiceIdentityKind, r.preview.Scope.ServiceIdentityValue, r.preview.Scope.NormalizerVersion, now, scopeDirection(r.preview.Scope.Direction))
 	if err != nil {
 		return nil, false, err
 	}
@@ -314,7 +315,7 @@ func (s *Store) ListApprovedKnowledge(ctx context.Context, clientID string) ([]c
 		filter = " WHERE k.client_id=$1"
 		args = append(args, clientID)
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT k.id,k.version,k.client_id,c.name,k.dimension,k.decision,k.normalized_supplier_id,i.supplier_name,k.semantic_kind,k.semantic_value,k.normalizer_version,k.currency,k.document_type,k.vat_rate,k.profile_id,k.profile_version,k.legislation_version_ids,k.source_invoice_id,k.source_invoice_line_id,k.source_classification_id,k.source_classification_run_id,k.original_source,k.promoted_by_display,k.promoted_at,k.status,COALESCE(k.stale_reason,''),k.revision FROM approved_accounting_knowledge k JOIN clients c ON c.id=k.client_id JOIN invoices i ON i.id=k.source_invoice_id`+filter+func() string {
+	rows, err := s.DB.QueryContext(ctx, `SELECT k.id,k.version,k.client_id,c.name,k.dimension,k.decision,k.normalized_supplier_id,`+counterpartyNameSQL+`,k.direction,k.semantic_kind,k.semantic_value,k.normalizer_version,k.currency,k.document_type,k.vat_rate,k.profile_id,k.profile_version,k.legislation_version_ids,k.source_invoice_id,k.source_invoice_line_id,k.source_classification_id,k.source_classification_run_id,k.original_source,k.promoted_by_display,k.promoted_at,k.status,COALESCE(k.stale_reason,''),k.revision FROM approved_accounting_knowledge k JOIN clients c ON c.id=k.client_id JOIN invoices i ON i.id=k.source_invoice_id`+filter+func() string {
 		if filter == "" {
 			return " WHERE k.dimension IS NOT NULL"
 		}
@@ -326,7 +327,7 @@ func (s *Store) ListApprovedKnowledge(ctx context.Context, clientID string) ([]c
 	for rows.Next() {
 		var item classification.KnowledgeItem
 		var valueRaw, versionsRaw []byte
-		if err = rows.Scan(&item.ID, &item.Version, &item.Scope.ClientID, &item.Scope.ClientDisplay, &item.Dimension, &valueRaw, &item.Scope.NormalizedSupplierID, &item.Scope.SupplierDisplay, &item.Scope.ServiceIdentityKind, &item.Scope.ServiceIdentityValue, &item.Scope.NormalizerVersion, &item.Scope.Currency, &item.Scope.DocumentType, &item.Scope.VATRate, &item.Scope.ProfileID, &item.Scope.ProfileVersion, &versionsRaw, &item.SourceInvoiceID, &item.SourceInvoiceLineID, &item.SourceClassificationID, &item.SourceRunID, &item.OriginalSource, &item.PromotedBy, &item.PromotedAt, &item.Status, &item.StaleReason, &item.Revision); err != nil {
+		if err = rows.Scan(&item.ID, &item.Version, &item.Scope.ClientID, &item.Scope.ClientDisplay, &item.Dimension, &valueRaw, &item.Scope.NormalizedSupplierID, &item.Scope.SupplierDisplay, &item.Scope.Direction, &item.Scope.ServiceIdentityKind, &item.Scope.ServiceIdentityValue, &item.Scope.NormalizerVersion, &item.Scope.Currency, &item.Scope.DocumentType, &item.Scope.VATRate, &item.Scope.ProfileID, &item.Scope.ProfileVersion, &versionsRaw, &item.SourceInvoiceID, &item.SourceInvoiceLineID, &item.SourceClassificationID, &item.SourceRunID, &item.OriginalSource, &item.PromotedBy, &item.PromotedAt, &item.Status, &item.StaleReason, &item.Revision); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -350,7 +351,7 @@ func (s *Store) ListApprovedKnowledge(ctx context.Context, clientID string) ([]c
 		accountFilter = " WHERE m.client_id=$1"
 		accountArgs = append(accountArgs, clientID)
 	}
-	rows, err = s.DB.QueryContext(ctx, `SELECT m.id,v.version,m.client_id,c.name,v.account_code,m.normalized_supplier_id,i.supplier_name,m.service_identity_kind,m.service_identity_value,m.normalizer_version,i.currency,i.document_type,l.vat_rate,COALESCE(cr.profile_id,''),COALESCE(cr.profile_version,0),v.source_classification_id,v.source_invoice_line_id,lc.invoice_id,lc.classification_run_id,lc.source,v.actor_display,v.created_at,m.status,m.revision FROM account_mappings m JOIN account_mapping_versions v ON v.mapping_id=m.id AND v.version=m.current_version JOIN clients c ON c.id=m.client_id JOIN line_classifications lc ON lc.id=v.source_classification_id JOIN invoices i ON i.id=lc.invoice_id JOIN invoice_lines l ON l.id=v.source_invoice_line_id LEFT JOIN classification_runs cr ON cr.id=lc.classification_run_id`+accountFilter+` ORDER BY v.created_at DESC,m.id`, accountArgs...)
+	rows, err = s.DB.QueryContext(ctx, `SELECT m.id,v.version,m.client_id,c.name,v.account_code,m.normalized_supplier_id,`+counterpartyNameSQL+`,m.direction,m.service_identity_kind,m.service_identity_value,m.normalizer_version,i.currency,i.document_type,l.vat_rate,COALESCE(cr.profile_id,''),COALESCE(cr.profile_version,0),v.source_classification_id,v.source_invoice_line_id,lc.invoice_id,lc.classification_run_id,lc.source,v.actor_display,v.created_at,m.status,m.revision FROM account_mappings m JOIN account_mapping_versions v ON v.mapping_id=m.id AND v.version=m.current_version JOIN clients c ON c.id=m.client_id JOIN line_classifications lc ON lc.id=v.source_classification_id JOIN invoices i ON i.id=lc.invoice_id JOIN invoice_lines l ON l.id=v.source_invoice_line_id LEFT JOIN classification_runs cr ON cr.id=lc.classification_run_id`+accountFilter+` ORDER BY v.created_at DESC,m.id`, accountArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +359,7 @@ func (s *Store) ListApprovedKnowledge(ctx context.Context, clientID string) ([]c
 	for rows.Next() {
 		var item classification.KnowledgeItem
 		var accountCode, status string
-		if err = rows.Scan(&item.ID, &item.Version, &item.Scope.ClientID, &item.Scope.ClientDisplay, &accountCode, &item.Scope.NormalizedSupplierID, &item.Scope.SupplierDisplay, &item.Scope.ServiceIdentityKind, &item.Scope.ServiceIdentityValue, &item.Scope.NormalizerVersion, &item.Scope.Currency, &item.Scope.DocumentType, &item.Scope.VATRate, &item.Scope.ProfileID, &item.Scope.ProfileVersion, &item.SourceClassificationID, &item.SourceInvoiceLineID, &item.SourceInvoiceID, &item.SourceRunID, &item.OriginalSource, &item.PromotedBy, &item.PromotedAt, &status, &item.Revision); err != nil {
+		if err = rows.Scan(&item.ID, &item.Version, &item.Scope.ClientID, &item.Scope.ClientDisplay, &accountCode, &item.Scope.NormalizedSupplierID, &item.Scope.SupplierDisplay, &item.Scope.Direction, &item.Scope.ServiceIdentityKind, &item.Scope.ServiceIdentityValue, &item.Scope.NormalizerVersion, &item.Scope.Currency, &item.Scope.DocumentType, &item.Scope.VATRate, &item.Scope.ProfileID, &item.Scope.ProfileVersion, &item.SourceClassificationID, &item.SourceInvoiceLineID, &item.SourceInvoiceID, &item.SourceRunID, &item.OriginalSource, &item.PromotedBy, &item.PromotedAt, &status, &item.Revision); err != nil {
 			return nil, err
 		}
 		item.Dimension = classification.DimensionAccount
@@ -435,11 +436,11 @@ func (s *Store) loadApprovedKnowledgeCandidates(ctx context.Context, input *clas
 		return err
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT k.id,k.version,k.dimension,k.decision,k.normalized_supplier_id,k.semantic_kind,k.semantic_value,k.normalizer_version,k.currency,k.document_type,k.vat_rate,k.profile_id,k.profile_version,k.source_invoice_id,k.source_invoice_line_id,k.source_classification_id,k.promoted_by_display,k.promoted_at,k.status
-		FROM approved_accounting_knowledge k WHERE k.client_id=$1 AND k.normalized_supplier_id=$2 AND k.status='ACTIVE'
+		FROM approved_accounting_knowledge k WHERE k.client_id=$1 AND k.normalized_supplier_id=$2 AND k.status='ACTIVE' AND k.direction=$6
 		AND k.profile_id=$3 AND k.profile_version=$4
 		AND k.dimension IS NOT NULL AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(k.legislation_version_ids) dep LEFT JOIN legislation_versions lv ON lv.id=dep WHERE lv.id IS NULL OR $5::date < lv.effective_from OR (lv.effective_to IS NOT NULL AND $5::date > lv.effective_to))
 		AND NOT EXISTS (SELECT 1 FROM legislation_versions current_v JOIN legislation_versions depended_v ON depended_v.source_id=current_v.source_id WHERE depended_v.id IN (SELECT jsonb_array_elements_text(k.legislation_version_ids)) AND current_v.id NOT IN (SELECT jsonb_array_elements_text(k.legislation_version_ids)) AND $5::date>=current_v.effective_from AND (current_v.effective_to IS NULL OR $5::date<=current_v.effective_to))
-		ORDER BY k.id`, input.ClientID, input.NormalizedSupplierID, input.Snapshot.Profile.ID, input.Snapshot.Profile.Version, string(input.IssueDate))
+		ORDER BY k.id`, input.ClientID, input.NormalizedSupplierID, input.Snapshot.Profile.ID, input.Snapshot.Profile.Version, string(input.IssueDate), scopeDirection(input.Direction))
 	if err != nil {
 		return err
 	}
@@ -534,4 +535,25 @@ func (s *Store) ListLegislationSources(ctx context.Context) ([]classification.Le
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+// Learning scope helpers (D-129). The counterparty of an issued invoice is its
+// customer; purchase keys, hashes and mapping IDs stay exactly as before.
+const (
+	counterpartyNameSQL = `CASE WHEN i.direction='OUTGOING' THEN COALESCE(i.customer_name,'') ELSE i.supplier_name END`
+	counterpartyIDSQL   = `CASE WHEN i.direction='OUTGOING' THEN COALESCE(i.normalized_customer_identifier,'') ELSE COALESCE(i.normalized_supplier_cui,'') END`
+)
+
+func scopeDirection(direction string) string {
+	if direction == "OUTGOING" {
+		return "OUTGOING"
+	}
+	return "INCOMING"
+}
+
+func directionKeySuffix(direction string) string {
+	if direction == "OUTGOING" {
+		return "\x00OUTGOING"
+	}
+	return ""
 }

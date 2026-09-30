@@ -324,6 +324,18 @@ func (p *Profile) ProfileDerivedExpenseTaxValue() (Value, bool) {
 	return Value{Kind: "NOT_APPLICABLE", Reason: "Profilul aprobat indică regimul microîntreprinderii pentru această dată."}, true
 }
 
+// DirectionDerivedValue is what an issued invoice implies by definition (D-129):
+// the client cannot deduct VAT on its own sale nor treat it as an expense.
+func DirectionDerivedValue(dimension string) (Value, bool) {
+	switch dimension {
+	case "VAT_DEDUCTIBILITY":
+		return Value{Kind: "NOT_APPLICABLE", Reason: "Factură emisă de client: dreptul de deducere a TVA nu se aplică."}, true
+	case "EXPENSE_TAX_TREATMENT":
+		return Value{Kind: "NOT_APPLICABLE", Reason: "Factură emisă de client: tratamentul fiscal al cheltuielii nu se aplică."}, true
+	}
+	return Value{}, false
+}
+
 // SAGAExportSupported reports whether the code-owned SAGA mapping can represent
 // this profile faithfully. Classification works for every valid profile; only
 // the export is limited, with an explicit reason for unsupported variants.

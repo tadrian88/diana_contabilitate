@@ -45,6 +45,9 @@ const (
 	// SourceProfile marks a decision derived deterministically from the
 	// approved client accounting profile (see Profile.ProfileDerivedExpenseTaxValue).
 	SourceProfile Source = "PROFILE"
+	// SourceDirection marks a decision implied by the invoice being issued by
+	// the client (see accounting.DirectionDerivedValue, D-129).
+	SourceDirection Source = "DIRECTION"
 )
 
 type MappingReference struct {
@@ -167,7 +170,11 @@ type Decision struct {
 }
 
 type InvoiceContext struct {
-	ModelVersion          string
+	ModelVersion string
+	// Direction is INCOMING or OUTGOING. For an issued invoice
+	// NormalizedSupplierID holds the normalized customer: learning is keyed by
+	// the counterparty (D-129).
+	Direction             string
 	SourceFacts           *accounting.SourceFacts
 	Snapshot              *accounting.Snapshot
 	Currency              string
@@ -187,6 +194,9 @@ type InvoiceContext struct {
 	ContextBlocker        string
 	ContextBlockerMessage string
 }
+
+// Outgoing reports an invoice issued by the client.
+func (in InvoiceContext) Outgoing() bool { return in.Direction == "OUTGOING" }
 
 type LineContext struct {
 	SourceFacts *accounting.LineFacts

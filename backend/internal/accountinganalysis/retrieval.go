@@ -58,6 +58,22 @@ var IncomingFiscalArticles = map[string][]string{
 	"EXPENSE_TAX_TREATMENT": {"ART. 25"},
 }
 
+// OutgoingAccountFunctions are the accounts an issued invoice may credit
+// (D-129): revenue from services, rentals and other activities (704, 706,
+// 708), guarantees received (167), customer advances (419) and deferred
+// revenue (472). Their functions are short (about 7 000 characters in total).
+var OutgoingAccountFunctions = []string{"704", "706", "708", "167", "419", "472"}
+
+// OutgoingFiscalArticles are sent, by exact citation key, when the VAT treatment
+// of an issued invoice is unresolved: operations outside the scope of VAT
+// (art. 268, e.g. a rental guarantee), chargeable event and chargeability
+// (art. 280-282, including advances invoiced before delivery and cash
+// accounting), the taxable base (art. 286) and exemptions (art. 292). About
+// 39 600 characters.
+var OutgoingFiscalArticles = map[string][]string{
+	"VAT_TREATMENT": {"ART. 268", "ART. 280", "ART. 281", "ART. 282", "ART. 286", "ART. 292"},
+}
+
 // AccountFunctionCitationKey is the corpus citation key of an OMFP account function.
 func AccountFunctionCitationKey(account string) string {
 	return "OMFP 1802/2014 contul " + account
@@ -75,16 +91,20 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 	plan := []RetrievalQuery{}
 	// Account functions go first: the merge budget is spent in plan order, and
 	// long Fiscal Code articles would otherwise crowd these short fragments out.
-	if needed["ACCOUNT"] && input.Direction == Incoming {
-		keys := make([]string, 0, len(IncomingAccountFunctions))
-		for _, account := range IncomingAccountFunctions {
+	accounts, articles := IncomingAccountFunctions, IncomingFiscalArticles
+	if input.Direction == Outgoing {
+		accounts, articles = OutgoingAccountFunctions, OutgoingFiscalArticles
+	}
+	if needed["ACCOUNT"] && (input.Direction == Incoming || input.Direction == Outgoing) {
+		keys := make([]string, 0, len(accounts))
+		for _, account := range accounts {
 			keys = append(keys, AccountFunctionCitationKey(account))
 		}
 		plan = append(plan, RetrievalQuery{Dimension: "ACCOUNT", Kinds: []string{"ORDER"}, Limit: len(keys), CitationKeys: keys})
 	}
-	if input.Direction == Incoming {
+	if input.Direction == Incoming || input.Direction == Outgoing {
 		for _, dimension := range []string{"VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT"} {
-			if keys := IncomingFiscalArticles[dimension]; needed[dimension] && len(keys) > 0 {
+			if keys := articles[dimension]; needed[dimension] && len(keys) > 0 {
 				plan = append(plan, RetrievalQuery{Dimension: dimension, Kinds: []string{"LAW"}, Limit: len(keys), CitationKeys: keys})
 			}
 		}
@@ -100,6 +120,9 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 	}
 	if needed["ACCOUNT"] {
 		terms := []string{"serviciile executate", "onorariile", "comisioanele"}
+		if input.Direction == Outgoing {
+			terms = []string{"venituri din", "prestari de servicii", "chirii", "avansuri", "garantii"}
+		}
 		seen := map[string]bool{}
 		for _, term := range terms {
 			seen[term] = true
@@ -158,7 +181,8 @@ func MergeFragments(groups [][]legislation.Fragment) []legislation.Fragment {
 // AccountRelevantForDirection narrows the global catalog sent to the provider
 // when the profile has no explicit account list: purchases go to fixed assets
 // (class 2), inventories (class 3), expenses (class 6) or prepaid expenses
-// (471); sales go to revenue (class 7). An explicit profile list is never
+// (471); sales credit revenue (class 7), guarantees received (167), customer
+// advances (419) or deferred revenue (472) (D-129). An explicit profile list is never
 // narrowed, and deterministic validation still accepts any allowed account.
 func AccountRelevantForDirection(code string, direction Direction) bool {
 	if code == "" {
@@ -168,7 +192,7 @@ func AccountRelevantForDirection(code string, direction Direction) bool {
 	case Incoming:
 		return strings.ContainsRune("236", rune(code[0])) || strings.HasPrefix(code, "471")
 	case Outgoing:
-		return code[0] == '7'
+		return code[0] == '7' || strings.HasPrefix(code, "167") || strings.HasPrefix(code, "419") || strings.HasPrefix(code, "472")
 	}
 	return true
 }

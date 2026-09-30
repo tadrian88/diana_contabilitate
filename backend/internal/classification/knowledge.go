@@ -26,6 +26,9 @@ type KnowledgeScope struct {
 	VATRate              string `json:"vatRate"`
 	ProfileID            string `json:"profileId,omitempty"`
 	ProfileVersion       int    `json:"profileVersion,omitempty"`
+	// Direction is OUTGOING for knowledge learned on issued invoices; the
+	// supplier fields then describe the customer (D-129).
+	Direction string `json:"direction,omitempty"`
 }
 
 type KnowledgeItem struct {

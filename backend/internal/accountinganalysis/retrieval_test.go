@@ -1,7 +1,10 @@
 package accountinganalysis
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,9 +54,14 @@ func TestIncomingAccountRetrievalAlwaysIncludesOMFPAccountFunctions(t *testing.T
 
 	outgoing := input
 	outgoing.Direction = Outgoing
-	for _, planned := range RetrievalPlan(outgoing) {
-		if len(planned.CitationKeys) > 0 {
-			t.Fatalf("sales must not receive purchase account functions: %#v", planned)
+	salesPlan := RetrievalPlan(outgoing)
+	salesKeys := strings.Join(salesPlan[0].CitationKeys, "|")
+	if salesPlan[0].Dimension != "ACCOUNT" || strings.Contains(salesKeys, "contul 628") {
+		t.Fatalf("sales must not receive purchase account functions: %#v", salesPlan[0])
+	}
+	for _, account := range OutgoingAccountFunctions {
+		if !strings.Contains(salesKeys, AccountFunctionCitationKey(account)) {
+			t.Fatalf("missing sales account %s in %s", account, salesKeys)
 		}
 	}
 	// With every dimension unresolved, the account functions still come first,
@@ -122,7 +130,7 @@ func TestAccountRelevantForDirection(t *testing.T) {
 			t.Fatal("incoming", code)
 		}
 	}
-	if !AccountRelevantForDirection("704", Outgoing) || AccountRelevantForDirection("628", Outgoing) || AccountRelevantForDirection("", Incoming) {
+	if !AccountRelevantForDirection("704", Outgoing) || !AccountRelevantForDirection("7041", Outgoing) || !AccountRelevantForDirection("167", Outgoing) || !AccountRelevantForDirection("419", Outgoing) || !AccountRelevantForDirection("472", Outgoing) || AccountRelevantForDirection("4111", Outgoing) || AccountRelevantForDirection("628", Outgoing) || AccountRelevantForDirection("", Incoming) {
 		t.Fatal("outgoing")
 	}
 }
@@ -167,5 +175,72 @@ func TestPromptVocabularyShapesValidate(t *testing.T) {
 	}
 	if !strings.Contains(analysisPrompt, "never send \"percentage\" with FULL") || !strings.Contains(analysisPrompt, "Never put the tax category in \"category\"") {
 		t.Fatal("prompt must document the observed failure modes")
+	}
+}
+
+func TestOutgoingVATRetrievalUsesChargeabilityArticles(t *testing.T) {
+	input := Input{Direction: Outgoing, Lines: []Line{{ID: "l1", Description: "chirie lunara birouri", UnresolvedDimensions: []string{"VAT_TREATMENT", "ACCOUNT"}}}}
+	plan := RetrievalPlan(input)
+	if len(plan) < 3 || plan[0].Dimension != "ACCOUNT" || plan[1].Dimension != "VAT_TREATMENT" {
+		t.Fatalf("plan = %#v", plan)
+	}
+	if got, want := strings.Join(plan[1].CitationKeys, "|"), strings.Join(OutgoingFiscalArticles["VAT_TREATMENT"], "|"); got != want {
+		t.Fatalf("VAT articles = %s, want %s", got, want)
+	}
+	lexical := plan[len(plan)-1]
+	if lexical.Dimension != "ACCOUNT" || lexical.Terms[0] != "venituri din" {
+		t.Fatalf("sales lexical terms = %#v", lexical.Terms)
+	}
+}
+
+// TestRetrievalKeysExistInSnapshots guards every exact citation key against
+// the repository legislation snapshots, so a key typo cannot silently send
+// no evidence.
+func TestRetrievalKeysExistInSnapshots(t *testing.T) {
+	keys := map[string]bool{}
+	files, _ := filepath.Glob("../../legislation/source-snapshots/*.json")
+	if len(files) == 0 {
+		t.Skip("legislation snapshots are not available")
+	}
+	var walk func(any)
+	walk = func(value any) {
+		switch typed := value.(type) {
+		case map[string]any:
+			if key, ok := typed["citationKey"].(string); ok {
+				keys[key] = true
+			}
+			for _, child := range typed {
+				walk(child)
+			}
+		case []any:
+			for _, child := range typed {
+				walk(child)
+			}
+		}
+	}
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document any
+		if err = json.Unmarshal(raw, &document); err != nil {
+			t.Fatal(err)
+		}
+		walk(document)
+	}
+	want := []string{}
+	for _, account := range append(append([]string{}, IncomingAccountFunctions...), OutgoingAccountFunctions...) {
+		want = append(want, AccountFunctionCitationKey(account))
+	}
+	for _, articles := range []map[string][]string{IncomingFiscalArticles, OutgoingFiscalArticles} {
+		for _, list := range articles {
+			want = append(want, list...)
+		}
+	}
+	for _, key := range want {
+		if !keys[key] {
+			t.Errorf("citation key %q is not in the legislation snapshots", key)
+		}
 	}
 }

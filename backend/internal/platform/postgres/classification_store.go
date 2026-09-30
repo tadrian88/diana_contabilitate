@@ -66,6 +66,15 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 	if row.NormalizedSupplierCui != nil {
 		input.NormalizedSupplierID = *row.NormalizedSupplierCui
 	}
+	// Learning is keyed by the counterparty: the customer of an issued invoice
+	// (D-129). SupplierID stays the UBL supplier.
+	input.Direction = string(row.Direction)
+	if input.Outgoing() {
+		input.NormalizedSupplierID = ""
+		if row.NormalizedCustomerIdentifier != nil {
+			input.NormalizedSupplierID = *row.NormalizedCustomerIdentifier
+		}
+	}
 	if row.ModelVersion == accounting.ModelVersion {
 		input.Snapshot = &accounting.Snapshot{}
 		profiles, err := tx.ClientAccountingProfile.Query().Where(clientaccountingprofile.ClientIDEQ(row.ClientID)).All(ctx)
@@ -109,6 +118,7 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 	if input.NormalizedSupplierID != "" {
 		mappingRows, err := tx.AccountMapping.Query().Where(
 			accountmapping.ClientIDEQ(row.ClientID),
+			accountmapping.DirectionEQ(accountmapping.Direction(row.Direction)),
 			accountmapping.NormalizedSupplierIDEQ(input.NormalizedSupplierID),
 			accountmapping.StatusEQ(accountmapping.StatusACTIVE),
 		).All(ctx)

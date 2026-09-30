@@ -43,6 +43,7 @@ var (
 	AccountMappingsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "client_id", Type: field.TypeString},
+		{Name: "direction", Type: field.TypeEnum, Enums: []string{"INCOMING", "OUTGOING"}, Default: "INCOMING"},
 		{Name: "normalized_supplier_id", Type: field.TypeString},
 		{Name: "service_identity_kind", Type: field.TypeEnum, Enums: []string{"SELLER_ITEM_ID", "STANDARD_ITEM_ID", "NORMALIZED_DESCRIPTION"}},
 		{Name: "service_identity_value", Type: field.TypeString},
@@ -60,14 +61,14 @@ var (
 		PrimaryKey: []*schema.Column{AccountMappingsColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "accountmapping_client_id_normalized_supplier_id_service_identity_kind_service_identity_value_normalizer_version",
+				Name:    "accountmapping_client_id_direction_normalized_supplier_id_service_identity_kind_service_identity_value_normalizer_version",
 				Unique:  true,
-				Columns: []*schema.Column{AccountMappingsColumns[1], AccountMappingsColumns[2], AccountMappingsColumns[3], AccountMappingsColumns[4], AccountMappingsColumns[5]},
+				Columns: []*schema.Column{AccountMappingsColumns[1], AccountMappingsColumns[2], AccountMappingsColumns[3], AccountMappingsColumns[4], AccountMappingsColumns[5], AccountMappingsColumns[6]},
 			},
 			{
-				Name:    "accountmapping_client_id_normalized_supplier_id_status",
+				Name:    "accountmapping_client_id_direction_normalized_supplier_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{AccountMappingsColumns[1], AccountMappingsColumns[2], AccountMappingsColumns[7]},
+				Columns: []*schema.Column{AccountMappingsColumns[1], AccountMappingsColumns[2], AccountMappingsColumns[3], AccountMappingsColumns[8]},
 			},
 		},
 	}
@@ -895,7 +896,7 @@ var (
 		{Name: "legal_basis", Type: field.TypeString},
 		{Name: "required_review", Type: field.TypeBool},
 		{Name: "review_status", Type: field.TypeEnum, Enums: []string{"PENDING", "ACCEPTED", "CORRECTED", "REJECTED"}},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL", "PROFILE"}},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL", "PROFILE", "DIRECTION"}},
 		{Name: "account_mapping_id", Type: field.TypeString, Nullable: true},
 		{Name: "account_mapping_version", Type: field.TypeInt, Nullable: true},
 		{Name: "policy_version", Type: field.TypeString},

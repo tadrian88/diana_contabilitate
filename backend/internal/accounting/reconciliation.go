@@ -32,6 +32,18 @@ type SourceLine struct {
 // adjustments and one currency. Unsupported allocations fail instead of rounding
 // or synthesizing source totals. Explicit zero remains distinguishable from nil.
 func Reconcile(f *SourceFacts, lines []SourceLine, gross money.Amount, currency string) error {
+	return reconcile(f, lines, gross, currency, false)
+}
+
+// ReconcileIssued applies the same bounds to an invoice issued by the client
+// (D-129). The customer may be identified only by a CNP or by a CUI without
+// RO (not VAT registered), and the "TVA la încasare" note is the client's own
+// statement, which the profile decides (D-128), so it is not a source blocker.
+func ReconcileIssued(f *SourceFacts, lines []SourceLine, gross money.Amount, currency string) error {
+	return reconcile(f, lines, gross, currency, true)
+}
+
+func reconcile(f *SourceFacts, lines []SourceLine, gross money.Amount, currency string, issued bool) error {
 	fail := func(s string) error { return fmt.Errorf("Date sursă: %s", s) }
 	if f == nil || f.ParserVersion == "" || f.SourceDocumentID == "" || f.SourceHash == "" {
 		return fail("lipsește proveniența e-Factura")
@@ -39,10 +51,11 @@ func Reconcile(f *SourceFacts, lines []SourceLine, gross money.Amount, currency 
 	if currency != "RON" || f.TaxCurrency != "" && f.TaxCurrency != "RON" || f.TypeCode != "380" || f.PrecedingInvoice != "" {
 		return fail("documentul/moneda necesită tratament neacceptat")
 	}
-	if f.SupplierCountry != "RO" || f.BuyerCountry != "RO" || f.SupplierVATID == "" || f.BuyerVATID == "" {
+	buyerIdentified := f.BuyerVATID != "" || issued && f.BuyerLegalID != ""
+	if f.SupplierCountry != "RO" || f.BuyerCountry != "RO" || f.SupplierVATID == "" || !buyerIdentified {
 		return fail("identitatea fiscală și țara trebuie confirmate")
 	}
-	if !oneOf(f.CashAccounting, "NO", "UNKNOWN") || f.TaxPointCode != "" {
+	if !issued && !oneOf(f.CashAccounting, "NO", "UNKNOWN") || f.TaxPointCode != "" {
 		return fail("momentul deducerii nu este confirmat pentru domeniul inițial")
 	}
 	if len(f.Adjustments) > 0 {

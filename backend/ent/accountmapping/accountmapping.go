@@ -15,6 +15,8 @@ const (
 	FieldID = "id"
 	// FieldClientID holds the string denoting the client_id field in the database.
 	FieldClientID = "client_id"
+	// FieldDirection holds the string denoting the direction field in the database.
+	FieldDirection = "direction"
 	// FieldNormalizedSupplierID holds the string denoting the normalized_supplier_id field in the database.
 	FieldNormalizedSupplierID = "normalized_supplier_id"
 	// FieldServiceIdentityKind holds the string denoting the service_identity_kind field in the database.
@@ -41,6 +43,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldClientID,
+	FieldDirection,
 	FieldNormalizedSupplierID,
 	FieldServiceIdentityKind,
 	FieldServiceIdentityValue,
@@ -76,6 +79,32 @@ var (
 	// RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
 	RevisionValidator func(uint64) error
 )
+
+// Direction defines the type for the "direction" enum field.
+type Direction string
+
+// DirectionINCOMING is the default value of the Direction enum.
+const DefaultDirection = DirectionINCOMING
+
+// Direction values.
+const (
+	DirectionINCOMING Direction = "INCOMING"
+	DirectionOUTGOING Direction = "OUTGOING"
+)
+
+func (d Direction) String() string {
+	return string(d)
+}
+
+// DirectionValidator is a validator for the "direction" field enum values. It is called by the builders before save.
+func DirectionValidator(d Direction) error {
+	switch d {
+	case DirectionINCOMING, DirectionOUTGOING:
+		return nil
+	default:
+		return fmt.Errorf("accountmapping: invalid enum value for direction field: %q", d)
+	}
+}
 
 // ServiceIdentityKind defines the type for the "service_identity_kind" enum field.
 type ServiceIdentityKind string
@@ -138,6 +167,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByClientID orders the results by the client_id field.
 func ByClientID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldClientID, opts...).ToFunc()
+}
+
+// ByDirection orders the results by the direction field.
+func ByDirection(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDirection, opts...).ToFunc()
 }
 
 // ByNormalizedSupplierID orders the results by the normalized_supplier_id field.

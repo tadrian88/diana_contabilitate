@@ -36,7 +36,7 @@ func (LineClassification) Fields() []ent.Field {
 		field.String("legal_basis").NotEmpty().Immutable(),
 		field.Bool("required_review").Immutable(),
 		field.Enum("review_status").Values("PENDING", "ACCEPTED", "CORRECTED", "REJECTED"),
-		field.Enum("source").Values("RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL", "PROFILE"),
+		field.Enum("source").Values("RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL", "PROFILE", "DIRECTION"),
 		field.String("rule_version_id").Optional().Nillable().Immutable(),
 		field.String("account_mapping_id").Optional().Nillable().Immutable(),
 		field.Int("account_mapping_version").Optional().Nillable().Immutable(),

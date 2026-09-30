@@ -19,6 +19,8 @@ type AccountMapping struct {
 	ID string `json:"id,omitempty"`
 	// ClientID holds the value of the "client_id" field.
 	ClientID string `json:"client_id,omitempty"`
+	// Direction holds the value of the "direction" field.
+	Direction accountmapping.Direction `json:"direction,omitempty"`
 	// NormalizedSupplierID holds the value of the "normalized_supplier_id" field.
 	NormalizedSupplierID string `json:"normalized_supplier_id,omitempty"`
 	// ServiceIdentityKind holds the value of the "service_identity_kind" field.
@@ -47,7 +49,7 @@ func (*AccountMapping) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case accountmapping.FieldCurrentVersion, accountmapping.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case accountmapping.FieldID, accountmapping.FieldClientID, accountmapping.FieldNormalizedSupplierID, accountmapping.FieldServiceIdentityKind, accountmapping.FieldServiceIdentityValue, accountmapping.FieldNormalizerVersion, accountmapping.FieldStatus:
+		case accountmapping.FieldID, accountmapping.FieldClientID, accountmapping.FieldDirection, accountmapping.FieldNormalizedSupplierID, accountmapping.FieldServiceIdentityKind, accountmapping.FieldServiceIdentityValue, accountmapping.FieldNormalizerVersion, accountmapping.FieldStatus:
 			values[i] = new(sql.NullString)
 		case accountmapping.FieldCreatedAt, accountmapping.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -77,6 +79,12 @@ func (_m *AccountMapping) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field client_id", values[i])
 			} else if value.Valid {
 				_m.ClientID = value.String
+			}
+		case accountmapping.FieldDirection:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field direction", values[i])
+			} else if value.Valid {
+				_m.Direction = accountmapping.Direction(value.String)
 			}
 		case accountmapping.FieldNormalizedSupplierID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -170,6 +178,9 @@ func (_m *AccountMapping) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("client_id=")
 	builder.WriteString(_m.ClientID)
+	builder.WriteString(", ")
+	builder.WriteString("direction=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Direction))
 	builder.WriteString(", ")
 	builder.WriteString("normalized_supplier_id=")
 	builder.WriteString(_m.NormalizedSupplierID)
