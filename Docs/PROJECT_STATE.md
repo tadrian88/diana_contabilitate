@@ -10,7 +10,8 @@
   - 628, 622 și 623 sunt nepostabile în catalogul Diana, iar contabilul folosește 628 direct;
   - aproape nicio propunere AI nu primea textul OMFP despre conturi.
 - Schimbarea:
-  - pentru achiziții, AI-ul primește mereu funcțiunea conturilor 601–628, 231 și 471, selectate după cheia de citare exactă;
+  - pentru achiziții, AI-ul primește mereu funcțiunea conturilor 601–628, 231 și 471, selectate după cheia de citare exactă, primele în plan;
+  - bugetul de retrieval crește de la 60.000 la 75.000 de caractere, pentru că la prima variantă articolele din Codul fiscal umpleau bugetul și din funcțiuni intra doar „contul 601”;
   - `legislation.Query` are câmpul nou `CitationKeys`.
 - Fără migrări. Harness-ul (`test-data/victoria1881/compara.py`, în afara git) raportează acum separat potrivirea exactă, cea compatibilă și cea pe același cont sintetic de grad I.
 - Rămas deschis, decizie de produs: planul de conturi al clientului, adică 628 postabil pentru clienții care nu folosesc analitice.

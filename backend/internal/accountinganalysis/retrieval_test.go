@@ -1,6 +1,7 @@
 package accountinganalysis
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -54,6 +55,24 @@ func TestIncomingAccountRetrievalAlwaysIncludesOMFPAccountFunctions(t *testing.T
 		if len(planned.CitationKeys) > 0 {
 			t.Fatalf("sales must not receive purchase account functions: %#v", planned)
 		}
+	}
+	// With every dimension unresolved, the account functions still come first,
+	// so the long Fiscal Code articles cannot crowd them out of the budget.
+	all := input
+	all.Lines = []Line{{ID: "l1", Description: "Promovare online", UnresolvedDimensions: []string{"VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT", "ACCOUNT"}}}
+	if full := RetrievalPlan(all); len(full) != 5 || len(full[0].CitationKeys) == 0 || full[1].Dimension != "VAT_TREATMENT" {
+		t.Fatalf("account functions must lead the plan: %#v", full)
+	}
+	functions := make([]legislation.Fragment, len(IncomingAccountFunctions))
+	for index := range functions {
+		functions[index] = legislation.Fragment{ID: fmt.Sprintf("function-%d", index), Text: strings.Repeat("x", 540)}
+	}
+	fiscal := []legislation.Fragment{}
+	for index, size := range []int{16202, 10853, 969, 13145, 17963} {
+		fiscal = append(fiscal, legislation.Fragment{ID: fmt.Sprintf("law-%d", index), Text: strings.Repeat("x", size)})
+	}
+	if merged := MergeFragments([][]legislation.Fragment{functions, fiscal}); len(merged) != len(functions)+len(fiscal) {
+		t.Fatalf("account functions and the observed Fiscal Code articles must both fit: %d fragments", len(merged))
 	}
 	resolved := Input{IssueDate: "2026-06-01", Direction: Incoming, Lines: []Line{{ID: "l1", UnresolvedDimensions: []string{"VAT_DEDUCTIBILITY"}}}}
 	for _, planned := range RetrievalPlan(resolved) {

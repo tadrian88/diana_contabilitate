@@ -9,9 +9,12 @@ import (
 
 // Retrieval bounds keep the provider envelope small enough for a single,
 // timely call while still giving every unresolved dimension citable evidence.
+// The total adds 15 000 characters for the OMFP account functions of a purchase
+// (about 12 300 in the corpus), which come first; the Fiscal Code articles
+// retrieved for VAT and expense tax (up to 60 000 together) keep their room.
 const (
 	RetrievalMaxFragmentChars = 20000
-	RetrievalMaxTotalChars    = 60000
+	RetrievalMaxTotalChars    = 75000
 )
 
 // RetrievalQuery is one dimension-focused lexical lookup. Terms are OR-ed by
@@ -55,6 +58,15 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 		}
 	}
 	plan := []RetrievalQuery{}
+	// Account functions go first: the merge budget is spent in plan order, and
+	// long Fiscal Code articles would otherwise crowd these short fragments out.
+	if needed["ACCOUNT"] && input.Direction == Incoming {
+		keys := make([]string, 0, len(IncomingAccountFunctions))
+		for _, account := range IncomingAccountFunctions {
+			keys = append(keys, AccountFunctionCitationKey(account))
+		}
+		plan = append(plan, RetrievalQuery{Dimension: "ACCOUNT", Kinds: []string{"ORDER"}, Limit: len(keys), CitationKeys: keys})
+	}
 	if needed["VAT_TREATMENT"] {
 		plan = append(plan, RetrievalQuery{Dimension: "VAT_TREATMENT", Kinds: []string{"LAW"}, Limit: 3, Terms: []string{"cota standard", "faptul generator", "exigibilitatea"}})
 	}
@@ -63,13 +75,6 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 	}
 	if needed["EXPENSE_TAX_TREATMENT"] {
 		plan = append(plan, RetrievalQuery{Dimension: "EXPENSE_TAX_TREATMENT", Kinds: []string{"LAW"}, Limit: 3, Terms: []string{"cheltuieli deductibile", "cheltuieli nedeductibile", "deductibilitate limitata"}})
-	}
-	if needed["ACCOUNT"] && input.Direction == Incoming {
-		keys := make([]string, 0, len(IncomingAccountFunctions))
-		for _, account := range IncomingAccountFunctions {
-			keys = append(keys, AccountFunctionCitationKey(account))
-		}
-		plan = append(plan, RetrievalQuery{Dimension: "ACCOUNT", Kinds: []string{"ORDER"}, Limit: len(keys), CitationKeys: keys})
 	}
 	if needed["ACCOUNT"] {
 		terms := []string{"serviciile executate", "onorariile", "comisioanele"}
