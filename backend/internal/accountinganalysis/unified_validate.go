@@ -6,6 +6,7 @@ import (
 
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/legislation"
+	"diana-contabilitate/backend/internal/money"
 )
 
 type ValidatedDecision struct {
@@ -128,19 +129,38 @@ func ValidateUnified(input Input, proposal Proposal, fragments []legislation.Fra
 // facts, not judgments; values the provider did send are never replaced, so a
 // mismatch still fails VAT_SOURCE_MISMATCH.
 func withSourceTaxFacts(value accounting.Value, line Line) accounting.Value {
-	if value.SourceCategory != "" || value.SourceRate != nil || line.Facts == nil || line.Facts.Rate == nil || strings.TrimSpace(line.Facts.Code) == "" {
+	rate := sourceTaxRate(line)
+	if value.SourceCategory != "" || value.SourceRate != nil || rate == nil || strings.TrimSpace(line.Facts.Code) == "" {
 		return value
 	}
-	rate := *line.Facts.Rate
 	value.SourceCategory = line.Facts.Code
-	value.SourceRate = &rate
+	value.SourceRate = rate
 	return value
+}
+
+// sourceTaxRate is the line's VAT rate as a source fact. EN 16931 (BR-O-05)
+// forbids a rate on a line not subject to VAT (category O), so such a line's
+// rate is zero by definition rather than unknown. Any other missing rate stays
+// missing.
+func sourceTaxRate(line Line) *money.Amount {
+	if line.Facts == nil {
+		return nil
+	}
+	if line.Facts.Rate != nil {
+		rate := *line.Facts.Rate
+		return &rate
+	}
+	if strings.TrimSpace(line.Facts.Code) == "O" {
+		zero := money.MustParse("0")
+		return &zero
+	}
+	return nil
 }
 
 func validateContextualValue(input Input, line Line, dimension string, value accounting.Value, add func(string, string, string)) {
 	switch dimension {
 	case "VAT_TREATMENT":
-		if line.Facts == nil || line.Facts.Rate == nil || value.SourceRate == nil || !line.Facts.Rate.Equal(*value.SourceRate) || strings.TrimSpace(value.SourceCategory) != strings.TrimSpace(line.Facts.Code) {
+		if rate := sourceTaxRate(line); rate == nil || value.SourceRate == nil || !rate.Equal(*value.SourceRate) || strings.TrimSpace(value.SourceCategory) != strings.TrimSpace(line.Facts.Code) {
 			add("VAT_SOURCE_MISMATCH", ".proposedValue", "cota sau categoria TVA nu corespunde faptelor liniei")
 		}
 		if input.SourceFacts != nil && input.SourceFacts.CashAccounting == "YES" && value.Timing != "DEFERRED" {

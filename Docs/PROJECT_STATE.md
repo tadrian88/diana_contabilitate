@@ -1,5 +1,17 @@
 # Project State
 
+## Retrieval Cod fiscal + linii neimpozabile (categoria O) — 2026-09-30
+
+- IMPLEMENTAT PE RAMURA `feature/victoria-iteratia-2`, pornită din `feature/victoria-iteratia-1` — AȘTEAPTĂ TESTELE UTILIZATORULUI.
+- Ce s-a schimbat:
+  - pentru achiziții, AI-ul primește mereu articolele 282, 297–299 și 25 din Codul fiscal, selectate după cheia exactă;
+  - limita pe fragment urcă de la 20.000 la 30.000 de caractere; art. 25 (circa 26.100) nu încăpea niciodată.
+- Linii cu categoria TVA „O” (D-123):
+  - cota sursă este 0 în validarea AI și în dialogul de corecție;
+  - înainte, toate cele 16 propuneri pe astfel de linii erau invalide, iar corecția manuală era blocată.
+- Frontend „FROZEN” extins cu aprobarea utilizatorului: `DomainCorrectionDialog`. Fără migrări.
+- Verificare: doar statică de Claude (`gofmt`, `go build`, `go vet`, `tsc`).
+
 ## Retrieval: funcțiunea conturilor OMFP ajunge la AI + metrică pe cont sintetic în harness — 2026-09-30
 
 - IMPLEMENTAT PE RAMURA `feature/victoria-iteratia-1` — AȘTEAPTĂ TESTELE UTILIZATORULUI.

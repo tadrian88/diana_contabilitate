@@ -166,6 +166,26 @@ func TestGoldenUnifiedContractsDoNotModelFutureEvents(t *testing.T) {
 	}
 }
 
+func TestNotSubjectToVATLineHasZeroSourceRate(t *testing.T) {
+	f := testFragment()
+	line := Line{ID: "line-o", VAT: money.MustParse("0"), Facts: &accounting.LineFacts{TaxCategory: accounting.TaxCategory{Code: "O"}}}
+	input := testInput(Incoming, line)
+	results, _ := ValidateUnified(input, proposal(line.ID, citedDecision("VAT_TREATMENT", accounting.Value{Kind: "ORDINARY", Timing: "IMMEDIATE"}, f)), []legislation.Fragment{f}, testCatalog())
+	if len(results) != 1 || !results[0].Valid() || results[0].TypedValue.SourceCategory != "O" || !results[0].TypedValue.SourceRate.Equal(money.MustParse("0")) {
+		t.Fatalf("category O without a rate must validate with source rate 0: %#v", results)
+	}
+	zero := money.MustParse("0")
+	results, _ = ValidateUnified(input, proposal(line.ID, citedDecision("VAT_TREATMENT", accounting.Value{Kind: "ORDINARY", Timing: "IMMEDIATE", SourceCategory: "S", SourceRate: &zero}, f)), []legislation.Fragment{f}, testCatalog())
+	if len(results) != 1 || results[0].Valid() {
+		t.Fatalf("a category other than the source must still mismatch: %#v", results)
+	}
+	missing := Line{ID: "line-s", VAT: money.MustParse("21"), Facts: &accounting.LineFacts{TaxCategory: accounting.TaxCategory{Code: "S"}}}
+	results, _ = ValidateUnified(testInput(Incoming, missing), proposal(missing.ID, citedDecision("VAT_TREATMENT", accounting.Value{Kind: "ORDINARY", Timing: "IMMEDIATE"}, f)), []legislation.Fragment{f}, testCatalog())
+	if len(results) != 1 || results[0].Valid() {
+		t.Fatalf("a missing rate outside category O must stay missing: %#v", results)
+	}
+}
+
 func TestVATTreatmentOmittedSourceFactsAreCopiedButNeverOverridden(t *testing.T) {
 	f := testFragment()
 	line := testLine("line-vat", "21")

@@ -60,19 +60,31 @@ func TestIncomingAccountRetrievalAlwaysIncludesOMFPAccountFunctions(t *testing.T
 	// so the long Fiscal Code articles cannot crowd them out of the budget.
 	all := input
 	all.Lines = []Line{{ID: "l1", Description: "Promovare online", UnresolvedDimensions: []string{"VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT", "ACCOUNT"}}}
-	if full := RetrievalPlan(all); len(full) != 5 || len(full[0].CitationKeys) == 0 || full[1].Dimension != "VAT_TREATMENT" {
+	full := RetrievalPlan(all)
+	if len(full) != 8 || full[0].Dimension != "ACCOUNT" || len(full[0].CitationKeys) == 0 {
 		t.Fatalf("account functions must lead the plan: %#v", full)
+	}
+	for index, want := range map[int][]string{1: {"ART. 282"}, 2: {"ART. 297", "ART. 298", "ART. 299"}, 3: {"ART. 25"}} {
+		if strings.Join(full[index].CitationKeys, "|") != strings.Join(want, "|") || full[index].Kinds[0] != "LAW" || len(full[index].Terms) != 0 {
+			t.Fatalf("fiscal articles %d = %#v, want %v", index, full[index], want)
+		}
+	}
+	for _, planned := range full[4:] {
+		if len(planned.CitationKeys) != 0 || len(planned.Terms) == 0 {
+			t.Fatalf("lexical lookups come after the fixed evidence: %#v", planned)
+		}
 	}
 	functions := make([]legislation.Fragment, len(IncomingAccountFunctions))
 	for index := range functions {
 		functions[index] = legislation.Fragment{ID: fmt.Sprintf("function-%d", index), Text: strings.Repeat("x", 540)}
 	}
 	fiscal := []legislation.Fragment{}
-	for index, size := range []int{16202, 10853, 969, 13145, 17963} {
+	// Observed sizes: art. 282, 297, 298, 299 and art. 25 (above the former 20 000 cap).
+	for index, size := range []int{10853, 3826, 2596, 2939, 26147} {
 		fiscal = append(fiscal, legislation.Fragment{ID: fmt.Sprintf("law-%d", index), Text: strings.Repeat("x", size)})
 	}
 	if merged := MergeFragments([][]legislation.Fragment{functions, fiscal}); len(merged) != len(functions)+len(fiscal) {
-		t.Fatalf("account functions and the observed Fiscal Code articles must both fit: %d fragments", len(merged))
+		t.Fatalf("account functions and the fixed Fiscal Code articles must both fit: %d fragments", len(merged))
 	}
 	resolved := Input{IssueDate: "2026-06-01", Direction: Incoming, Lines: []Line{{ID: "l1", UnresolvedDimensions: []string{"VAT_DEDUCTIBILITY"}}}}
 	for _, planned := range RetrievalPlan(resolved) {

@@ -16,6 +16,8 @@ export function DomainCorrectionDialog({ item, invoice, onCancel, onSubmit }: { 
   const [timing, setTiming] = useState(current?.timing ?? 'IMMEDIATE')
   const [error, setError] = useState('')
   const source = invoice.lines.find((line) => line.id === item.lineId)?.sourceFacts
+  // EN 16931 (BR-O-05): o linie neimpozabilă (categoria O) nu are cotă; cota ei este 0, nu necunoscută.
+  const sourceRate = source?.rate ?? (source?.code === 'O' ? '0' : undefined)
   return <Dialog.Root open onOpenChange={(open) => !open && onCancel()}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" /><Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(95vw,32rem)] -translate-x-1/2 -translate-y-1/2"><form className="card max-h-[90vh] w-full space-y-4 overflow-auto p-6" onSubmit={(event) => {
     event.preventDefault()
     if (!reason.trim()) { setError('Completează motivul și documentele justificative.'); return }
@@ -23,13 +25,13 @@ export function DomainCorrectionDialog({ item, invoice, onCancel, onSubmit }: { 
     if (kind === 'LIMITED' && (!/^\d+(?:\.\d{1,4})?$/.test(percentage) || !basis.trim())) { setError('Completează procentul exact și baza limitării.'); return }
     if (kind === 'LIMITED') { const [whole, fraction = ''] = percentage.split('.'); const exact = BigInt(whole) * 10000n + BigInt(fraction.padEnd(4, '0')); if (exact <= 0n || exact >= 1000000n) { setError('Procentul trebuie să fie mai mare de 0 și mai mic de 100.'); return } }
     if (kind === 'PERIOD_LIMIT_CATEGORY' && (!category.trim() || !basis.trim())) { setError('Completează categoria și baza plafonului.'); return }
-    if (item.dimension === 'VAT_TREATMENT' && (!source?.rate || !source.code)) { setError('Sursa nu conține cota/categoria necesară. Faptele sursă nu se modifică prin clasificare.'); return }
+    if (item.dimension === 'VAT_TREATMENT' && (!sourceRate || !source?.code)) { setError('Sursa nu conține cota/categoria necesară. Faptele sursă nu se modifică prin clasificare.'); return }
     const value: DomainValue = { kind }
     if (kind === 'ACCOUNT') value.account = account
     if (kind === 'LIMITED') { value.percentage = percentage; value.basis = basis.trim() }
     if (kind === 'PERIOD_LIMIT_CATEGORY') { value.category = category.trim(); value.basis = basis.trim() }
     if (['NONE', 'NONDEDUCTIBLE', 'NOT_APPLICABLE', 'SPECIAL_UNSUPPORTED'].includes(kind)) value.reason = reason.trim()
-    if (item.dimension === 'VAT_TREATMENT') { value.timing = timing; value.sourceRate = source?.rate; value.sourceCategory = source?.code }
+    if (item.dimension === 'VAT_TREATMENT') { value.timing = timing; value.sourceRate = sourceRate; value.sourceCategory = source?.code }
     onSubmit(value, reason.trim())
   }}>
     <Dialog.Title className="font-bold">Corectează decizia contabilă</Dialog.Title>

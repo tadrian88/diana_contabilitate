@@ -9,11 +9,12 @@ import (
 
 // Retrieval bounds keep the provider envelope small enough for a single,
 // timely call while still giving every unresolved dimension citable evidence.
-// The total adds 15 000 characters for the OMFP account functions of a purchase
-// (about 12 300 in the corpus), which come first; the Fiscal Code articles
-// retrieved for VAT and expense tax (up to 60 000 together) keep their room.
+// A purchase always receives, first, about 12 300 characters of OMFP account
+// functions and about 49 300 of Fiscal Code articles (IncomingFiscalArticles);
+// the lexical lookups fill what remains. The per-fragment cap admits art. 25
+// (expense deductibility, about 26 100 characters).
 const (
-	RetrievalMaxFragmentChars = 20000
+	RetrievalMaxFragmentChars = 30000
 	RetrievalMaxTotalChars    = 75000
 )
 
@@ -43,6 +44,20 @@ var IncomingAccountFunctions = []string{
 	"231", "471",
 }
 
+// IncomingFiscalArticles are the Fiscal Code articles always sent, by exact
+// citation key, for a purchase whose dimension is unresolved: art. 282 (VAT
+// chargeability, including cash accounting), art. 297-299 (scope, limits and
+// conditions of the VAT deduction right) and art. 25 (deductible, limited and
+// non-deductible expenses for profit tax). The lexical lookup ranked unrelated
+// long articles first (definitions, mixed-regime pro-rata, special returns), and
+// art. 25 exceeded the former 20 000-character fragment cap, so it never reached
+// the provider.
+var IncomingFiscalArticles = map[string][]string{
+	"VAT_TREATMENT":         {"ART. 282"},
+	"VAT_DEDUCTIBILITY":     {"ART. 297", "ART. 298", "ART. 299"},
+	"EXPENSE_TAX_TREATMENT": {"ART. 25"},
+}
+
 // AccountFunctionCitationKey is the corpus citation key of an OMFP account function.
 func AccountFunctionCitationKey(account string) string {
 	return "OMFP 1802/2014 contul " + account
@@ -66,6 +81,13 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 			keys = append(keys, AccountFunctionCitationKey(account))
 		}
 		plan = append(plan, RetrievalQuery{Dimension: "ACCOUNT", Kinds: []string{"ORDER"}, Limit: len(keys), CitationKeys: keys})
+	}
+	if input.Direction == Incoming {
+		for _, dimension := range []string{"VAT_TREATMENT", "VAT_DEDUCTIBILITY", "EXPENSE_TAX_TREATMENT"} {
+			if keys := IncomingFiscalArticles[dimension]; needed[dimension] && len(keys) > 0 {
+				plan = append(plan, RetrievalQuery{Dimension: dimension, Kinds: []string{"LAW"}, Limit: len(keys), CitationKeys: keys})
+			}
+		}
 	}
 	if needed["VAT_TREATMENT"] {
 		plan = append(plan, RetrievalQuery{Dimension: "VAT_TREATMENT", Kinds: []string{"LAW"}, Limit: 3, Terms: []string{"cota standard", "faptul generator", "exigibilitatea"}})

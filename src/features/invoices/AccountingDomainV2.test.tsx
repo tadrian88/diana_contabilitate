@@ -60,6 +60,14 @@ describe('accounting domain v2', () => {
     expect(submit).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toHaveTextContent('Sursa nu conține cota/categoria')
   })
+  it('corrects VAT treatment on a line not subject to VAT, whose source rate is zero by definition', async () => {
+    const user = userEvent.setup(); const submit = vi.fn(); const invoice = fixture()
+    invoice.lines[0].sourceFacts = { ...invoice.lines[0].sourceFacts!, code: 'O' }; delete invoice.lines[0].sourceFacts!.rate
+    render(<DomainCorrectionDialog item={item('VAT_TREATMENT')} invoice={invoice} onCancel={() => undefined} onSubmit={submit} />)
+    await user.type(screen.getByLabelText('Motiv / documente justificative'), 'TEST_ONLY review')
+    await user.click(screen.getByRole('button', { name: 'Salvează decizia' }))
+    expect(submit).toHaveBeenCalledWith({ kind: 'ORDINARY', timing: 'IMMEDIATE', sourceRate: '0', sourceCategory: 'O' }, 'TEST_ONLY review')
+  })
   it('shows granular AI validation while retaining a valid sibling proposal', async () => {
     const invoice = fixture()
     invoice.pipelineStatus = 'AWAITING_REVIEW'
