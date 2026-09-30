@@ -1,5 +1,22 @@
 # Project State
 
+## Vânzări V1: facturi emise, contracte cu clientul Locator, SAGA Ieșiri blocat (D-124…D-131) — 2026-09-30
+
+- IMPLEMENTAT PE RAMURA `feature/vanzari` — AȘTEAPTĂ TESTELE UTILIZATORULUI. Design: `Docs/VANZARI_V1.md`; comenzi:
+  `Docs/VANZARI_V1_TEST_HANDOFF.md`.
+- Utilizatorul a aprobat explicit extinderea aditivă a zonelor „FROZEN”:
+  - ANAF/SPV ingestion (lista `T`, direcția din părțile XML, `fakeanaf -emit-sent`);
+  - Module 2/4 (matching `OUTGOING_CONTEXT_V1`: contract opțional, fără task);
+  - Module 6 (validare comercială `NOT_APPLICABLE_OUTGOING`);
+  - clasificarea (sursa `DIRECTION`, TVA din profil, conturi 7/167/419/472, prompt `UNIFIED_ACCOUNTING_PROMPT_V4`);
+  - SAGA (generator Ieșiri, poarta `SAGA_C_DOMAIN_V2_OUTGOING_V1` neaprobată);
+  - extragerea contractelor (`CONTRACT_EXTRACTION_PROMPT_V4_3`, `buyerName`, rolul clientului);
+  - frontend-ul (tab-uri „Primite”/„Emise”, clientul facturii emise, revizuirea contractului cu clientul Locator).
+- Migrări: `000039_vanzari_direction.sql`, `000040_vanzari_classification_direction.sql` (hash recalculat).
+- Harness VICTORIA (în afara git): pasul `contracte`, import pe ambele direcții, comparația vânzărilor în `compara.py`.
+- Verificare: doar statică de Claude (`go build`, `go vet` inclusiv cu tag-ul de integrare, `atlas migrate validate`,
+  `tsc`, `py_compile`). Testele Go unit/integration, vitest, E2E și harness-ul urmează să fie rulate de utilizator.
+
 ## Retrieval Cod fiscal + linii neimpozabile (categoria O) — 2026-09-30
 
 - IMPLEMENTAT PE RAMURA `feature/victoria-iteratia-2`, pornită din `feature/victoria-iteratia-1` — AȘTEAPTĂ TESTELE UTILIZATORULUI.

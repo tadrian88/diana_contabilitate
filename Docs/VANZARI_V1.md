@@ -1,6 +1,6 @@
 # Vânzări V1 — facturi emise
 
-Status: ÎN IMPLEMENTARE pe ramura `feature/vanzari` (worktree `diana_worktrees/vanzari`). Decizii D-124…D-131.
+Status: IMPLEMENTAT pe ramura `feature/vanzari`, AȘTEAPTĂ TESTELE UTILIZATORULUI (`Docs/VANZARI_V1_TEST_HANDOFF.md`) (worktree `diana_worktrees/vanzari`). Decizii D-124…D-131.
 Migrări: `000039_vanzari_direction.sql`, `000040_vanzari_classification_direction.sql`.
 
 ## Scop
@@ -70,3 +70,11 @@ contractului de bază.
 `/invoices` are tab-urile „Primite” și „Emise” (`?kind=issued`). În „Emise” prima coloană este „Client”
 (cumpărătorul, CNP mascat), coloana clientului contabil devine „Emitent”, iar căutarea este după client și număr.
 „Primite” nu se schimbă. Detaliul facturii emise arată clientul în locul furnizorului.
+
+## Abateri de la plan
+
+- Scenariile mock comune nu primesc o factură emisă, pentru că ar schimba numărătorile din Dashboard și Task Inbox.
+  Tab-urile sunt acoperite de `src/features/invoices/IssuedInvoiceList.test.tsx`, care adaugă factura doar în test.
+  Nu există suită E2E nouă.
+- Golden-ul XML Ieșiri este verificat pe fragmente (`saga/outgoing_readiness_test.go`), nu byte cu byte.
+- Task Inbox și Dashboard primesc direcția și clientul facturii, ca să numească partenerul corect.

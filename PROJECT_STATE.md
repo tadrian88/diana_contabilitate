@@ -60,6 +60,9 @@ Docs/CONTRACT_INGESTION_AI.md (manual commands A–V; no heavy tests or live Gem
 AI Usage + Cost Tracking (D-121, D-122):
 IMPLEMENTED — AWAITING USER-RUN TESTS / REVIEW; initial prices pending user confirmation (Docs/AI_USAGE_COST_TRACKING.md)
 
+Vânzări V1 (facturi emise, contracte cu clientul Locator, SAGA Ieșiri blocat; D-124…D-131):
+IMPLEMENTED ON feature/vanzari — AWAITING USER-RUN TESTS / REVIEW (Docs/VANZARI_V1_TEST_HANDOFF.md)
+
 Canonical project state:
 Docs/PROJECT_STATE.md
 # Authentication V1 — 2026-09-16

@@ -99,3 +99,17 @@ V2 generator calls the shared authoritative readiness validator and rechecks aut
 Mapping policy/version/approval and model/profile/pack/rule/source evidence are retained in immutable invoice and artifact snapshots. V2 exporter uses SAGA_C_DOMAIN_V2_V1/<mapping version>; legacy exporter version and XML bytes are unchanged. Real production mapping approval/desktop SAGA acceptance is still outstanding. Synthetic opt-in XML is engineering evidence only and is rejected by the production generator. Generation/download still does not imply EXPORTED. See ACCOUNTING_DOMAIN_V2.md and CLASSIFICATION_V1_TEST_HANDOFF.md.
 
 > Update 2026-09-28 (D-108/D-109): without a pack the code-owned mapping `SAGA_C_DOMAIN_V2_ORDINARY_V1` applies (exporter version `SAGA_C_DOMAIN_V2_V1/SAGA_C_DOMAIN_V2_ORDINARY_V1`). A microenterprise `NOT_APPLICABLE` expense treatment maps like full/full omission. Other combinations remain unrepresentable.
+
+## Ieșiri (Vânzări V1) — generat, neverificat
+
+Manualul SAGA C (Import date) spune că un fișier cu `FurnizorCIF` egal cu codul fiscal al firmei se importă în
+**Ieșiri**; antetul admite `FacturaTVAIncasare` (Da/Nu), iar `TipDeducere` există doar la Intrări. Diana generează pentru
+o factură emisă:
+
+- `FurnizorNume`/`FurnizorCIF` = clientul contabil, `ClientNume`/`ClientCIF` = cumpărătorul (CNP nemascat);
+- `FacturaTVAIncasare` = `Nu`/`Da` din profilul clientului, după `FacturaScadenta` și înainte de `FacturaMoneda`;
+- `Cont` = contul creditat al liniei (clasa 7, 167, 419, 472), fără `TipDeducere`;
+- numele `F_<CIF client>_<număr>_<dd.mm.yyyy>.xml`.
+
+Maparea `SAGA_C_DOMAIN_V2_OUTGOING_V1` este neaprobată până la un import acceptat în SAGA C (D-102, D-130); readiness
+raportează „Formatul SAGA Ieșiri nu este încă verificat.” XML-ul pentru achiziții nu s-a schimbat.

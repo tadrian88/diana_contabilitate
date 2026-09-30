@@ -51,3 +51,28 @@ These questions do not block execution of the ANAF/SPV Connection UX test handof
 - **SAGA EXPORT DATA GAP:** Replace demonstrative ACCOUNT/VAT/DEDUCTIBILITY rule
   results with explicit approved adapter values (`Cont`, numeric VAT confirmation,
   and `SAGA_DEFAULT`/`N50`/`I`) before real export can succeed.
+
+## Vânzări V1 (D-124…D-131)
+
+- **Linii pe mai multe perioade:** o linie care acoperă luni trecute și viitoare (ex. GASHRI „Iunie–septembrie” facturat pe
+  19.08) trebuie împărțită 70x (trecut/curent) și 472 (viitor). Diana decide un singur cont pe linie; împărțirea rămâne
+  la contabil.
+- **461 și facturile fără e-Factura:** IA BILET (seria EV) apare doar în jurnal, pe 461/708. Nu există sursă XML.
+- **Verificarea SAGA Ieșiri:** lipsește un import acceptat în SAGA C. De confirmat:
+  - numele fișierului (`F_<CIF emitent>_…`);
+  - poziția și valorile `FacturaTVAIncasare`;
+  - `ClientCIF` pentru CNP, pentru CUI fără RO și pentru placeholder-ul `0000000000000`;
+  - `Cont` = contul de venit.
+  Până atunci poarta `SAGA_C_DOMAIN_V2_OUTGOING_V1` rămâne neaprobată.
+- **Categoriile E/O la export:** garanția VE18810067 (E, VATEX-EU-O, 167) nu trece de reconcilierea exportului, care
+  cere categoria S.
+- **704/708 nepostabile:** catalogul are analiticele 7041/7081, deci 704/708 nu pot fi alese direct. Decizie de produs
+  comună cu 628 la achiziții (planul de conturi al clientului).
+- **Contract încărcat după facturi:** facturile emise nu așteaptă contract, deci un contract confirmat ulterior nu le
+  re-leagă.
+- **Autofacturare:** o factură în care clientul e și furnizor, și cumpărător e tratată ca primită.
+- **Placeholder CNP:** toți cumpărătorii anonimi cu `0000000000000` au aceeași cheie de învățare.
+- **Validarea prețului pe vânzări:** contractele VICTORIA sunt în EUR, facturate în lei la cursul BNR; Diana nu are
+  sursă de curs BNR.
+- **Regimul TVA la încasare al VICTORIA:** facturile emise poartă mențiunea, dar contabilul înregistrează 4427 imediat.
+  Diana urmează profilul (D-128). De confirmat cu contabilul.
