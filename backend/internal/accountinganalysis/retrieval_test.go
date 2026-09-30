@@ -88,8 +88,11 @@ func TestIncomingAccountRetrievalAlwaysIncludesOMFPAccountFunctions(t *testing.T
 	}
 	resolved := Input{IssueDate: "2026-06-01", Direction: Incoming, Lines: []Line{{ID: "l1", UnresolvedDimensions: []string{"VAT_DEDUCTIBILITY"}}}}
 	for _, planned := range RetrievalPlan(resolved) {
-		if len(planned.CitationKeys) > 0 {
+		if planned.Dimension == "ACCOUNT" {
 			t.Fatalf("a resolved account must not retrieve account functions: %#v", planned)
+		}
+		if planned.Dimension != "VAT_DEDUCTIBILITY" {
+			t.Fatalf("only the unresolved dimension may retrieve evidence: %#v", planned)
 		}
 	}
 }
