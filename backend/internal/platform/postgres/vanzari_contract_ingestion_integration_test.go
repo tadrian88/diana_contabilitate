@@ -4,7 +4,9 @@ package postgres
 
 import (
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"diana-contabilitate/backend/ent/contract"
 	ci "diana-contabilitate/backend/internal/contractingestion"
@@ -16,14 +18,18 @@ import (
 func TestLeaseWhereClientIsLocatorIsConfirmedWithSupplierRole(t *testing.T) {
 	tc := newContractTestContext(t)
 	service, _, extractor := contractIngestionFixture(t, tc)
-	client, err := tc.store.Client.AccountingClient.Get(tc.ctx, tc.clientID)
+	// The contract test client has a synthetic non-numeric CUI; as the supplier
+	// of a lease it must be a valid Romanian CUI, so give it a unique numeric one.
+	numericCUI := fmt.Sprintf("RO%d", 10000000+time.Now().UnixNano()%89999999)
+	client, err := tc.store.Client.AccountingClient.UpdateOneID(tc.clientID).SetCui(numericCUI).Save(tc.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tenantName, tenantCUI := "Chiriaș Test SRL", "RO40138380"
-	extractor.proposal.SupplierCUI.Value, extractor.proposal.BuyerCUI.Value = &client.Cui, &tenantCUI
+	extractor.proposal.SupplierCUI.Value, extractor.proposal.SupplierCUI.Evidence.Snippet = &client.Cui, client.Cui
+	extractor.proposal.BuyerCUI.Value, extractor.proposal.BuyerCUI.Evidence.Snippet = &tenantCUI, tenantCUI
 	extractor.proposal.BuyerName = extractor.proposal.SupplierName
-	extractor.proposal.BuyerName.Value = &tenantName
+	extractor.proposal.BuyerName.Value, extractor.proposal.BuyerName.Evidence.Snippet = &tenantName, tenantName
 	doc := ingestionUpload(t, tc, service)
 	command := ingestionReview(t, tc, service, doc)
 	command.Contract.SupplierName, command.Contract.SupplierCUI = client.Name, client.Cui
