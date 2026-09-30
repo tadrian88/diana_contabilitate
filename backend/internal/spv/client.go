@@ -98,8 +98,17 @@ func (c *HTTPClient) token(ctx context.Context, values url.Values) (TokenRespons
 	return TokenResponse{AccessToken: raw.Access, RefreshToken: raw.Refresh, ExpiresIn: time.Duration(raw.Expires) * time.Second, RefreshExpiresIn: time.Duration(raw.RefreshExpires) * time.Second}, nil
 }
 
+// ListIncoming lists received invoices (filter P).
 func (c *HTTPClient) ListIncoming(ctx context.Context, token, cif string, start, end time.Time, page int) ([]Message, int, error) {
-	q := url.Values{"startTime": {strconv.FormatInt(start.UnixMilli(), 10)}, "endTime": {strconv.FormatInt(end.UnixMilli(), 10)}, "pagina": {strconv.Itoa(page)}, "cif": {cif}, "filtru": {"P"}}
+	return c.ListMessages(ctx, token, cif, MessageFilterReceived, start, end, page)
+}
+
+// ListMessages lists one ANAF message list: received (P) or sent (T) invoices.
+func (c *HTTPClient) ListMessages(ctx context.Context, token, cif string, filter MessageFilter, start, end time.Time, page int) ([]Message, int, error) {
+	if filter != MessageFilterReceived && filter != MessageFilterSent {
+		return nil, 0, fmt.Errorf("%w: unsupported ANAF message filter", ErrPermanent)
+	}
+	q := url.Values{"startTime": {strconv.FormatInt(start.UnixMilli(), 10)}, "endTime": {strconv.FormatInt(end.UnixMilli(), 10)}, "pagina": {strconv.Itoa(page)}, "cif": {cif}, "filtru": {string(filter)}}
 	var raw struct {
 		Messages []json.RawMessage `json:"mesaje"`
 		Pages    int               `json:"numar_total_pagini"`

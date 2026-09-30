@@ -89,3 +89,22 @@ func TestAESGCMCipherRoundTripAndRejectsWrongKey(t *testing.T) {
 		t.Fatal("wrong key accepted")
 	}
 }
+
+func TestHTTPClientListsSentInvoicesWithFilterT(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("filtru") != "T" {
+			t.Errorf("filtru=%q, want T", r.URL.Query().Get("filtru"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"mesaje":[{"id":"201","tip":"FACTURA TRIMISA","data_creare":"202609141200"}],"numar_total_pagini":1}`))
+	}))
+	defer server.Close()
+	client := NewHTTPClient(server.Client(), server.URL, server.URL)
+	messages, _, err := client.ListMessages(context.Background(), "token", "22222222", MessageFilterSent, time.Unix(0, 0), time.Now(), 1)
+	if err != nil || len(messages) != 1 || messages[0].Type != "FACTURA TRIMISA" {
+		t.Fatalf("messages=%+v err=%v", messages, err)
+	}
+	if _, _, err = client.ListMessages(context.Background(), "token", "22222222", "E", time.Unix(0, 0), time.Now(), 1); err == nil {
+		t.Fatal("an unsupported filter was sent to ANAF")
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"diana-contabilitate/backend/internal/fiscalidentity"
+	"diana-contabilitate/backend/internal/invoicing"
 )
 
 type ServiceConfig struct {
@@ -79,33 +80,64 @@ func (s *Service) Sync(ctx context.Context, connectionID string) (result SyncRes
 	if err != nil {
 		return result, err
 	}
-	start := now.Add(-s.config.InitialWindow)
-	if connection.LastSuccessfulSyncAt != nil {
-		start = connection.LastSuccessfulSyncAt.Add(-s.config.Overlap)
-		minimum := now.Add(-s.config.InitialWindow)
-		if start.Before(minimum) {
-			start = minimum
-		}
-	}
-	pages := 1
-	for page := 1; page <= pages; page++ {
-		messages, totalPages, listErr := s.client.ListIncoming(ctx, token, fiscalidentity.ForComparison(connection.CIF, "RO"), start, now, page)
-		if listErr != nil {
-			return result, listErr
-		}
-		if totalPages > pages {
-			pages = totalPages
-		}
-		result.Pages = pages
-		for _, message := range messages {
-			document, _, discoverErr := s.store.Discover(ctx, connection, message, now)
-			if discoverErr != nil {
-				return result, discoverErr
+	// Received (P) and sent (T) invoices are listed with their own windows
+	// (D-125); a document is kept once even if both lists return it.
+	seen := map[string]bool{}
+	for _, list := range []struct {
+		filter MessageFilter
+		since  *time.Time
+	}{{MessageFilterReceived, connection.LastSuccessfulSyncAt}, {MessageFilterSent, connection.LastSuccessfulSentSyncAt}} {
+		start := s.windowStart(now, list.since)
+		pages := 1
+		for page := 1; page <= pages; page++ {
+			messages, totalPages, listErr := s.client.ListMessages(ctx, token, fiscalidentity.ForComparison(connection.CIF, "RO"), list.filter, start, now, page)
+			if listErr != nil {
+				return result, listErr
 			}
-			result.Documents = append(result.Documents, document)
+			if totalPages > pages {
+				pages = totalPages
+			}
+			result.Pages += 1
+			for _, message := range messages {
+				document, _, discoverErr := s.store.Discover(ctx, connection, message, now)
+				if discoverErr != nil {
+					return result, discoverErr
+				}
+				if seen[document.ID] {
+					continue
+				}
+				seen[document.ID] = true
+				result.Documents = append(result.Documents, document)
+			}
 		}
 	}
 	return result, nil
+}
+
+func (s *Service) windowStart(now time.Time, since *time.Time) time.Time {
+	minimum := now.Add(-s.config.InitialWindow)
+	if since == nil {
+		return minimum
+	}
+	start := since.Add(-s.config.Overlap)
+	if start.Before(minimum) {
+		return minimum
+	}
+	return start
+}
+
+// ResolveDirection decides from the parsed XML parties whether the client
+// received the invoice or issued it (D-125). A buyer equal to the client wins,
+// so self-billing stays a received invoice; a document naming neither party is
+// not the client's.
+func ResolveDirection(parsed ParsedDocument, clientCUI string) (invoicing.Direction, error) {
+	switch {
+	case fiscalidentity.SameRomanian(parsed.BuyerCUI, clientCUI):
+		return invoicing.DirectionIncoming, nil
+	case fiscalidentity.SameRomanian(parsed.SupplierCUI, clientCUI):
+		return invoicing.DirectionOutgoing, nil
+	}
+	return "", fmt.Errorf("%w: neither invoice party matches the target client", ErrPermanent)
 }
 
 func (s *Service) ProcessDocument(ctx context.Context, documentID, owner string) (invoiceID string, created bool, returnedErr error) {
@@ -152,8 +184,17 @@ func (s *Service) ProcessDocument(ctx context.Context, documentID, owner string)
 	if err != nil {
 		return fail(errorKind(err), err)
 	}
-	if !fiscalidentity.SameRomanian(parsed.BuyerCUI, connection.CIF) {
-		return fail("PERMANENT", fmt.Errorf("%w: buyer identity does not match target client", ErrPermanent))
+	direction, err := ResolveDirection(parsed, connection.CIF)
+	if err != nil {
+		return fail("PERMANENT", err)
+	}
+	parsed.Invoice.Direction = direction
+	if direction == invoicing.DirectionOutgoing && parsed.Invoice.CustomerName == "" {
+		return fail("PERMANENT", fmt.Errorf("%w: issued invoice has no customer name", ErrPermanent))
+	}
+	if direction == invoicing.DirectionIncoming {
+		// The customer of a received invoice is the client itself.
+		parsed.Invoice.CustomerName, parsed.Invoice.CustomerIdentifier = "", ""
 	}
 	if parsed.Invoice.SourceFacts != nil {
 		parsed.Invoice.SourceFacts.SourceDocumentID = document.ID

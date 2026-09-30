@@ -87,3 +87,19 @@ func testZIP(t *testing.T, files map[string]string) []byte {
 	}
 	return buffer.Bytes()
 }
+
+// A natural-person customer is identified only by a CNP in
+// PartyLegalEntity/CompanyID; the parser keeps the customer and both parties.
+func TestUBLParserKeepsCustomerOfIssuedInvoice(t *testing.T) {
+	xml := `<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>VE-001</ID><IssueDate>2026-06-03</IssueDate><DocumentCurrencyCode>RON</DocumentCurrencyCode><AccountingSupplierParty><Party><PostalAddress><Country><IdentificationCode>RO</IdentificationCode></Country></PostalAddress><PartyLegalEntity><RegistrationName>Emitent Sintetic SRL</RegistrationName><CompanyID>J40/1/2020</CompanyID></PartyLegalEntity><PartyTaxScheme><CompanyID>RO11111111</CompanyID></PartyTaxScheme></Party></AccountingSupplierParty><AccountingCustomerParty><Party><PostalAddress><Country><IdentificationCode>RO</IdentificationCode></Country></PostalAddress><PartyLegalEntity><RegistrationName>Persoană Fizică Sintetică</RegistrationName><CompanyID>1800101420010</CompanyID></PartyLegalEntity></Party></AccountingCustomerParty><LegalMonetaryTotal><LineExtensionAmount>100</LineExtensionAmount><TaxExclusiveAmount>100</TaxExclusiveAmount><TaxInclusiveAmount>121</TaxInclusiveAmount><PayableAmount>121</PayableAmount></LegalMonetaryTotal><TaxTotal><TaxAmount>21</TaxAmount></TaxTotal><InvoiceLine><ID>1</ID><InvoicedQuantity unitCode="H87">1</InvoicedQuantity><LineExtensionAmount>100</LineExtensionAmount><Item><Name>shooting</Name><ClassifiedTaxCategory><ID>S</ID><Percent>21</Percent></ClassifiedTaxCategory></Item><Price><PriceAmount>100</PriceAmount></Price></InvoiceLine></Invoice>`
+	parsed, err := (UBLParser{}).Parse(testZIP(t, map[string]string{"invoice.xml": xml}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.SupplierCUI != "RO11111111" || parsed.BuyerCUI != "1800101420010" || parsed.Invoice.CustomerName != "Persoană Fizică Sintetică" || parsed.Invoice.CustomerIdentifier != "1800101420010" || parsed.Invoice.CustomerCountry != "RO" {
+		t.Fatalf("unexpected parties: supplier=%q buyer=%q customer=%q/%q/%q", parsed.SupplierCUI, parsed.BuyerCUI, parsed.Invoice.CustomerName, parsed.Invoice.CustomerIdentifier, parsed.Invoice.CustomerCountry)
+	}
+	if direction, err := ResolveDirection(parsed, "RO11111111"); err != nil || direction != "OUTGOING" {
+		t.Fatalf("direction=%s err=%v", direction, err)
+	}
+}

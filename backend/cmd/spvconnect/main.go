@@ -130,8 +130,16 @@ func importFixture(ctx context.Context, cfg config.Config, input fixtureImport) 
 	if err != nil {
 		return fmt.Errorf("load accounting client: %w", err)
 	}
-	if !fiscalidentity.SameRomanian(parsed.BuyerCUI, clientCUI) {
-		return fmt.Errorf("fixture buyer CUI %q does not match client CUI %q", parsed.BuyerCUI, clientCUI)
+	// The client may be the buyer (received invoice) or the supplier (issued
+	// invoice, D-125). A natural-person buyer is identified by a CNP, which is
+	// never printed in full.
+	direction, err := spv.ResolveDirection(parsed, clientCUI)
+	if err != nil {
+		return fmt.Errorf("fixture parties (buyer %q, supplier %q) do not include client CUI %q", fiscalidentity.MaskIfCNP(parsed.BuyerCUI), parsed.SupplierCUI, clientCUI)
+	}
+	messageType := "FACTURA PRIMITA"
+	if direction == invoicing.DirectionOutgoing {
+		messageType = "FACTURA TRIMISA"
 	}
 	connection, err := store.ConnectionByClient(ctx, input.ClientID)
 	if err != nil {
@@ -157,7 +165,7 @@ func importFixture(ctx context.Context, cfg config.Config, input fixtureImport) 
 	// production evidence.
 	fixtureCreatedAt := parsed.Invoice.IssueDate
 	document, _, err := store.Discover(ctx, *connection, spv.Message{
-		ID: input.ExternalMessageID, Type: "FACTURA PRIMITA", CreatedRaw: "LOCAL_FIXTURE_FROM_INVOICE_ISSUE_DATE:" + fixtureCreatedAt.Format("2006-01-02"), CreatedAt: &fixtureCreatedAt,
+		ID: input.ExternalMessageID, Type: messageType, CreatedRaw: "LOCAL_FIXTURE_FROM_INVOICE_ISSUE_DATE:" + fixtureCreatedAt.Format("2006-01-02"), CreatedAt: &fixtureCreatedAt,
 	}, now)
 	if err != nil {
 		return fmt.Errorf("discover fixture delivery: %w", err)
@@ -195,7 +203,7 @@ type fixtureSPVClient struct{ raw []byte }
 func (c fixtureSPVClient) Download(context.Context, string, string) ([]byte, string, error) {
 	return append([]byte(nil), c.raw...), "application/zip", nil
 }
-func (fixtureSPVClient) ListIncoming(context.Context, string, string, time.Time, time.Time, int) ([]spv.Message, int, error) {
+func (fixtureSPVClient) ListMessages(context.Context, string, string, spv.MessageFilter, time.Time, time.Time, int) ([]spv.Message, int, error) {
 	return nil, 0, fmt.Errorf("fixture client does not support listing")
 }
 func (fixtureSPVClient) RefreshToken(context.Context, string, string, string) (spv.TokenResponse, error) {

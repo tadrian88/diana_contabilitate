@@ -18,8 +18,10 @@ import (
 func main() {
 	address := flag.String("address", "127.0.0.1:8090", "listen address")
 	buyerCUI := flag.String("buyer-cui", "RO990002", "synthetic buyer CUI")
+	emitSent := flag.Bool("emit-sent", false, "also list one synthetic invoice issued by the buyer CUI (ANAF filter T)")
 	flag.Parse()
 	zipBytes := invoiceZIP(*buyerCUI)
+	sentZIPBytes := sentInvoiceZIP(*buyerCUI)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		redirectURI := r.URL.Query().Get("redirect_uri")
@@ -51,12 +53,25 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "fake-access", "refresh_token": "fake-refresh", "expires_in": 3600, "refresh_expires_in": 7200})
 	})
-	mux.HandleFunc("/listaMesajePaginatieFactura", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/listaMesajePaginatieFactura", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"mesaje": []map[string]string{{"id": "70001", "id_solicitare": "60001", "tip": "FACTURA PRIMITA", "data_creare": "202609141200"}}, "numar_total_pagini": 1, "cui": *buyerCUI})
+		messages := []map[string]string{{"id": "70001", "id_solicitare": "60001", "tip": "FACTURA PRIMITA", "data_creare": "202609141200"}}
+		if r.URL.Query().Get("filtru") == "T" {
+			// Sent invoices (D-125) are listed only on request, so existing
+			// suites keep seeing exactly one received invoice.
+			messages = []map[string]string{}
+			if *emitSent {
+				messages = append(messages, map[string]string{"id": "70002", "id_solicitare": "60002", "tip": "FACTURA TRIMISA", "data_creare": "202609141300"})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"mesaje": messages, "numar_total_pagini": 1, "cui": *buyerCUI})
 	})
-	mux.HandleFunc("/descarcare", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/descarcare", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
+		if r.URL.Query().Get("id") == "70002" {
+			_, _ = w.Write(sentZIPBytes)
+			return
+		}
 		_, _ = w.Write(zipBytes)
 	})
 	server := &http.Server{Addr: *address, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -78,6 +93,18 @@ var authorizationPage = template.Must(template.New("authorize").Parse(`<!doctype
 
 func invoiceZIP(buyerCUI string) []byte {
 	xml := fmt.Sprintf(`<Invoice><ID>FAKE-ANAF-LOCAL-1</ID><IssueDate>2026-09-14</IssueDate><DocumentCurrencyCode>RON</DocumentCurrencyCode><AccountingSupplierParty><Party><PartyLegalEntity><RegistrationName>Furnizor Sintetic</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>RO990003</CompanyID></PartyTaxScheme></Party></AccountingSupplierParty><AccountingCustomerParty><Party><PartyTaxScheme><CompanyID>%s</CompanyID></PartyTaxScheme></Party></AccountingCustomerParty><LegalMonetaryTotal><TaxInclusiveAmount>119</TaxInclusiveAmount></LegalMonetaryTotal><InvoiceLine><ID>1</ID><InvoicedQuantity unitCode="H87">1</InvoicedQuantity><LineExtensionAmount>100</LineExtensionAmount><Item><Name>Linie sintetică</Name><ClassifiedTaxCategory><Percent>19</Percent></ClassifiedTaxCategory></Item><Price><PriceAmount>100</PriceAmount></Price></InvoiceLine></Invoice>`, buyerCUI)
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	entry, _ := writer.Create("invoice.xml")
+	_, _ = entry.Write([]byte(xml))
+	_ = writer.Close()
+	return buffer.Bytes()
+}
+
+// sentInvoiceZIP is a synthetic invoice issued by the connected company to a
+// synthetic customer.
+func sentInvoiceZIP(companyCUI string) []byte {
+	xml := fmt.Sprintf(`<Invoice><ID>FAKE-ANAF-EMISA-1</ID><IssueDate>2026-09-14</IssueDate><DocumentCurrencyCode>RON</DocumentCurrencyCode><AccountingSupplierParty><Party><PartyLegalEntity><RegistrationName>Companie Sintetică</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>%s</CompanyID></PartyTaxScheme></Party></AccountingSupplierParty><AccountingCustomerParty><Party><PartyLegalEntity><RegistrationName>Client Sintetic</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>RO990004</CompanyID></PartyTaxScheme></Party></AccountingCustomerParty><LegalMonetaryTotal><TaxInclusiveAmount>121</TaxInclusiveAmount></LegalMonetaryTotal><InvoiceLine><ID>1</ID><InvoicedQuantity unitCode="H87">1</InvoicedQuantity><LineExtensionAmount>100</LineExtensionAmount><Item><Name>Chirie sintetică</Name><ClassifiedTaxCategory><Percent>21</Percent></ClassifiedTaxCategory></Item><Price><PriceAmount>100</PriceAmount></Price></InvoiceLine></Invoice>`, companyCUI)
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
 	entry, _ := writer.Create("invoice.xml")

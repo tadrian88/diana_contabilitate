@@ -268,7 +268,7 @@ func (s *Store) InstallSPVConnection(ctx context.Context, clientID, environment,
 }
 
 func spvConnectionDomain(row *ent.SPVConnection) spv.Connection {
-	return spv.Connection{ID: row.ID, ClientID: row.ClientID, CIF: row.Cif, Environment: string(row.Environment), AccessTokenCiphertext: row.AccessTokenCiphertext, RefreshTokenCiphertext: row.RefreshTokenCiphertext, AccessTokenExpiresAt: row.AccessTokenExpiresAt, RefreshTokenExpiresAt: row.RefreshTokenExpiresAt, ConnectedAt: row.ConnectedAt, LastSuccessfulSyncAt: row.LastSuccessfulSyncAt, LastSyncStartedAt: row.LastSyncStartedAt, LastSyncFinishedAt: row.LastSyncFinishedAt, LastSyncStatus: string(row.LastSyncStatus), LastError: valueOrEmpty(row.LastError), Status: string(row.Status), Revision: row.Revision}
+	return spv.Connection{ID: row.ID, ClientID: row.ClientID, CIF: row.Cif, Environment: string(row.Environment), AccessTokenCiphertext: row.AccessTokenCiphertext, RefreshTokenCiphertext: row.RefreshTokenCiphertext, AccessTokenExpiresAt: row.AccessTokenExpiresAt, RefreshTokenExpiresAt: row.RefreshTokenExpiresAt, ConnectedAt: row.ConnectedAt, LastSuccessfulSyncAt: row.LastSuccessfulSyncAt, LastSuccessfulSentSyncAt: row.LastSuccessfulSentSyncAt, LastSyncStartedAt: row.LastSyncStartedAt, LastSyncFinishedAt: row.LastSyncFinishedAt, LastSyncStatus: string(row.LastSyncStatus), LastError: valueOrEmpty(row.LastError), Status: string(row.Status), Revision: row.Revision}
 }
 
 func (s *Store) SaveTokens(ctx context.Context, id string, revision uint64, access, refresh string, expires time.Time, refreshExpires *time.Time, now time.Time) (spv.Connection, error) {
@@ -293,7 +293,7 @@ func (s *Store) MarkSyncStarted(ctx context.Context, id string, now time.Time) e
 func (s *Store) MarkSyncFinished(ctx context.Context, id string, now time.Time, cause error) error {
 	update := s.Client.SPVConnection.UpdateOneID(id).SetUpdatedAt(now).SetLastSyncFinishedAt(now)
 	if cause == nil {
-		update.SetLastSuccessfulSyncAt(now).SetLastSyncStatus(spvconnection.LastSyncStatusSUCCEEDED).ClearLastError()
+		update.SetLastSuccessfulSyncAt(now).SetLastSuccessfulSentSyncAt(now).SetLastSyncStatus(spvconnection.LastSyncStatusSUCCEEDED).ClearLastError()
 	} else {
 		update.SetLastSyncStatus(spvconnection.LastSyncStatusFAILED).SetLastError(safeStoreError(cause))
 		if errors.Is(cause, spv.ErrReauthenticationRequired) {

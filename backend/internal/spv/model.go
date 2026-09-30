@@ -25,10 +25,12 @@ var (
 )
 
 type Connection struct {
-	ID, ClientID, CIF, Environment                     string
-	AccessTokenCiphertext, RefreshTokenCiphertext      string
-	AccessTokenExpiresAt                               time.Time
-	RefreshTokenExpiresAt, LastSuccessfulSyncAt        *time.Time
+	ID, ClientID, CIF, Environment                string
+	AccessTokenCiphertext, RefreshTokenCiphertext string
+	AccessTokenExpiresAt                          time.Time
+	RefreshTokenExpiresAt, LastSuccessfulSyncAt   *time.Time
+	// LastSuccessfulSentSyncAt is the cursor of the sent-invoice list (D-125).
+	LastSuccessfulSentSyncAt                           *time.Time
 	ConnectedAt, LastSyncStartedAt, LastSyncFinishedAt *time.Time
 	Status                                             string
 	LastSyncStatus, LastError                          string
@@ -75,11 +77,21 @@ type SourceDocument struct {
 }
 
 type ParsedDocument struct {
-	Invoice  invoicing.IngestionInput
-	BuyerCUI string
-	Format   string
-	Version  string
+	Invoice     invoicing.IngestionInput
+	BuyerCUI    string
+	SupplierCUI string
+	Format      string
+	Version     string
 }
+
+// MessageFilter selects an ANAF e-Factura message list: invoices received by
+// the company (P) or sent by it (T).
+type MessageFilter string
+
+const (
+	MessageFilterReceived MessageFilter = "P"
+	MessageFilterSent     MessageFilter = "T"
+)
 
 type DocumentStore interface {
 	ListActiveConnections(context.Context) ([]Connection, error)
@@ -99,7 +111,7 @@ type InvoiceDocumentParser interface {
 }
 
 type SPVClient interface {
-	ListIncoming(context.Context, string, string, time.Time, time.Time, int) ([]Message, int, error)
+	ListMessages(context.Context, string, string, MessageFilter, time.Time, time.Time, int) ([]Message, int, error)
 	Download(context.Context, string, string) ([]byte, string, error)
 	RefreshToken(context.Context, string, string, string) (TokenResponse, error)
 }

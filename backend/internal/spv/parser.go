@@ -255,6 +255,12 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 		return ParsedDocument{}, err
 	}
 	input := invoicing.IngestionInput{ModelVersion: accounting.ModelVersion, SourceFacts: facts, Source: SourceName, DocumentType: documentType, SupplierName: supplierName, SupplierCUI: &supplierCUI, DocumentNumber: strings.TrimSpace(document.ID), IssueDate: issueDate, DueDate: dueDate, Total: money.Money{Amount: total, Currency: currency}}
+	// The buyer is kept as the customer; it is used only when the invoice turns
+	// out to be issued by the client (D-124). A natural person is identified by
+	// a CNP in PartyLegalEntity/CompanyID.
+	input.CustomerName = strings.TrimSpace(first(document.Buyer.RegistrationName, document.Buyer.Name))
+	input.CustomerIdentifier = buyerCUI
+	input.CustomerCountry = document.Buyer.Country
 	for index, external := range lines {
 		q := external.InvoiceQuantity
 		if root == "CreditNote" {
@@ -341,7 +347,7 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 		}
 		input.Lines = append(input.Lines, invoicing.Line{SourceFacts: lineFacts, Position: index + 1, Description: description, Unit: q.Unit, VATRate: rate, VATValue: vat, Quantity: quantityValue, UnitPrice: unitPrice, NetValue: net, TotalValue: lineTotal, AdditionalInfo: additional})
 	}
-	return ParsedDocument{Invoice: input, BuyerCUI: buyerCUI, Format: ParserTypeUBL, Version: facts.ParserVersion}, nil
+	return ParsedDocument{Invoice: input, BuyerCUI: buyerCUI, SupplierCUI: supplierCUI, Format: ParserTypeUBL, Version: facts.ParserVersion}, nil
 }
 
 func nonemptyTrimmed(values []string) []string {

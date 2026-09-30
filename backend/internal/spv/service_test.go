@@ -72,9 +72,18 @@ func (fixedCipher) Decrypt(v string) (string, error) { return v, nil }
 type fakeSPVClient struct {
 	downloads  int
 	refreshErr error
+	filters    []MessageFilter
+	starts     map[MessageFilter]time.Time
 }
 
-func (f *fakeSPVClient) ListIncoming(context.Context, string, string, time.Time, time.Time, int) ([]Message, int, error) {
+// ListMessages returns the same message for every list, as ANAF test fakes
+// that ignore the filter do; the service must keep it once.
+func (f *fakeSPVClient) ListMessages(_ context.Context, _, _ string, filter MessageFilter, start, _ time.Time, _ int) ([]Message, int, error) {
+	f.filters = append(f.filters, filter)
+	if f.starts == nil {
+		f.starts = map[MessageFilter]time.Time{}
+	}
+	f.starts[filter] = start
 	return []Message{{ID: "100"}}, 1, nil
 }
 func (f *fakeSPVClient) Download(context.Context, string, string) ([]byte, string, error) {
