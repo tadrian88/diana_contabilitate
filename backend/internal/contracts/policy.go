@@ -66,3 +66,44 @@ func dateWithin(value, from time.Time, to *time.Time) bool {
 func dateOnly(value time.Time) time.Time {
 	return time.Date(value.UTC().Year(), value.UTC().Month(), value.UTC().Day(), 0, 0, 0, 0, time.UTC)
 }
+
+const OutgoingContextPolicyVersion = "OUTGOING_CONTEXT_V1"
+
+// OutgoingContextPolicy links an issued invoice to a contract where the client
+// is the supplier (D-126). The contract is context only: it is optional, it is
+// never price-checked, and currency is not compared (sale contracts are priced
+// in EUR and invoiced in RON). Contracts outside their effective period are not
+// candidates. Several candidates leave the invoice unlinked instead of asking
+// the accountant, because the link has no accounting effect in V1.
+type OutgoingContextPolicy struct{}
+
+func (OutgoingContextPolicy) Version() string { return OutgoingContextPolicyVersion }
+
+func (policy OutgoingContextPolicy) Evaluate(invoice InvoiceContext, discovered []Contract) (MatchDecision, error) {
+	candidates := make([]Contract, 0, len(discovered))
+	for _, contract := range discovered {
+		if dateWithin(invoice.IssueDay, contract.EffectiveFrom, contract.EffectiveTo) {
+			candidates = append(candidates, contract)
+		}
+	}
+	sort.Slice(candidates, func(left, right int) bool { return candidates[left].Reference < candidates[right].Reference })
+	result := MatchDecision{Outcome: OutcomeNoMatch, PolicyVersion: policy.Version(), ContractOptional: true}
+	for index, contract := range candidates {
+		reasons := []string{"CUI-ul clientului facturii coincide cu cumpărătorul contractului în care clientul contabil este furnizor.", "Data facturii este în perioada efectivă a contractului."}
+		if invoice.Currency != contract.Value.Currency {
+			reasons = append(reasons, "Contractul este în "+contract.Value.Currency+", factura în "+invoice.Currency+"; prețul nu este verificat pentru facturile emise.")
+		}
+		result.Candidates = append(result.Candidates, Candidate{
+			ContractID: contract.ID, ContractRevision: contract.Revision, Rank: index + 1, Recommended: index == 0,
+			Compatibility: Compatible, Confidence: "Context pentru factura emisă — fără validare de preț", Reasons: reasons,
+		})
+	}
+	switch len(result.Candidates) {
+	case 0:
+	case 1:
+		result.Outcome = OutcomeUniqueCompatible
+	default:
+		result.Outcome = OutcomeMultiplePlausible
+	}
+	return result, nil
+}

@@ -40,6 +40,9 @@ type Contract struct {
 	ServiceTerms        []ServiceTerm
 }
 
+// Outgoing reports an issued invoice.
+func (i InvoiceContext) Outgoing() bool { return i.Direction == "OUTGOING" }
+
 const (
 	ClientRoleBuyer    = "BUYER"
 	ClientRoleSupplier = "SUPPLIER"
@@ -126,6 +129,10 @@ type MatchDecision struct {
 	Outcome       MatchOutcome
 	PolicyVersion string
 	Candidates    []Candidate
+	// ContractOptional means the invoice continues whatever the outcome: only a
+	// unique compatible contract is linked, and no validation task is created
+	// (issued invoices, D-126).
+	ContractOptional bool
 }
 
 type Filter struct {
@@ -148,11 +155,14 @@ type AssociatedInvoice struct {
 type InvoiceContext struct {
 	ID                    string
 	ClientID              string
+	Direction             string
 	NormalizedSupplierCUI *string
-	IssueDay              time.Time
-	Currency              string
-	PipelineStatus        string
-	Revision              uint64
+	// NormalizedCustomerID is the customer of an issued invoice.
+	NormalizedCustomerID *string
+	IssueDay             time.Time
+	Currency             string
+	PipelineStatus       string
+	Revision             uint64
 }
 
 type BlockedInvoice struct {

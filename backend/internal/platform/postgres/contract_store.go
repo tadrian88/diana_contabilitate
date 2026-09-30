@@ -138,10 +138,17 @@ func (s *Store) LoadMatchingInput(ctx context.Context, invoiceID string) (contra
 		return contracts.InvoiceContext{}, nil, err
 	}
 	input := contracts.InvoiceContext{
-		ID: row.ID, ClientID: row.ClientID, NormalizedSupplierCUI: row.NormalizedSupplierCui,
-		IssueDay: row.IssueDay, Currency: row.Currency, PipelineStatus: string(row.PipelineStatus), Revision: row.Revision,
+		ID: row.ID, ClientID: row.ClientID, Direction: string(row.Direction), NormalizedSupplierCUI: row.NormalizedSupplierCui,
+		NormalizedCustomerID: row.NormalizedCustomerIdentifier,
+		IssueDay:             row.IssueDay, Currency: row.Currency, PipelineStatus: string(row.PipelineStatus), Revision: row.Revision,
 	}
-	if row.NormalizedSupplierCui == nil {
+	// A received invoice is discovered by supplier among purchase contracts; an
+	// issued one by customer among contracts where the client is the supplier.
+	counterparty := row.NormalizedSupplierCui
+	if input.Outgoing() {
+		counterparty = row.NormalizedCustomerIdentifier
+	}
+	if counterparty == nil {
 		return input, nil, nil
 	}
 	items, err := s.ListContracts(ctx, contracts.Filter{ClientID: row.ClientID})
@@ -150,7 +157,13 @@ func (s *Store) LoadMatchingInput(ctx context.Context, invoiceID string) (contra
 	}
 	matched := make([]contracts.Contract, 0)
 	for _, item := range items {
-		if item.NormalizedSupplierCUI == *row.NormalizedSupplierCui {
+		if input.Outgoing() {
+			if item.ClientIsSupplier() && item.NormalizedBuyerCUI != nil && *item.NormalizedBuyerCUI == *counterparty {
+				matched = append(matched, item)
+			}
+			continue
+		}
+		if !item.ClientIsSupplier() && item.NormalizedSupplierCUI == *counterparty {
 			matched = append(matched, item)
 		}
 	}
@@ -224,8 +237,14 @@ func (s *Store) ListBlockedInvoicesForContract(ctx context.Context, contractID, 
 	if err != nil {
 		return nil, err
 	}
+	if available.ClientRole == contract.ClientRoleSUPPLIER {
+		// Sale contracts never resume purchase invoices, and issued invoices
+		// never wait for a contract (D-126).
+		return []contracts.BlockedInvoice{}, nil
+	}
 	predicates := []predicate.Invoice{
 		invoice.ClientIDEQ(available.ClientID),
+		invoice.DirectionEQ(invoice.DirectionINCOMING),
 		invoice.PipelineStatusEQ(invoice.PipelineStatusAWAITING_CONTRACT),
 		invoice.NormalizedSupplierCuiEQ(available.NormalizedSupplierCui),
 		invoice.HasValidationTasksWith(
@@ -260,7 +279,7 @@ func (s *Store) ApplyMatchDecision(ctx context.Context, command contracts.MatchC
 	}
 	rollback := func(cause error) (bool, error) { _ = tx.Rollback(); return false, cause }
 	to := invoice.PipelineStatusAWAITING_MATCH_CONFIRM
-	if decision.Outcome == contracts.OutcomeUniqueCompatible {
+	if decision.Outcome == contracts.OutcomeUniqueCompatible || decision.ContractOptional {
 		to = invoice.PipelineStatusDEDUPE_CHECKED
 	} else if decision.Outcome == contracts.OutcomeNoMatch {
 		to = invoice.PipelineStatusAWAITING_CONTRACT
@@ -316,16 +335,35 @@ func (s *Store) ApplyMatchDecision(ctx context.Context, command contracts.MatchC
 		return rollback(err)
 	}
 
-	switch decision.Outcome {
-	case contracts.OutcomeUniqueCompatible:
+	switch {
+	case decision.ContractOptional && decision.Outcome != contracts.OutcomeUniqueCompatible:
+		detail := "Factura emisă continuă fără contract: contractul este opțional pentru facturile emise."
+		if decision.Outcome == contracts.OutcomeMultiplePlausible {
+			detail = fmt.Sprintf("Factura emisă continuă fără contract asociat: %d contracte candidate, niciunul ales automat.", len(decision.Candidates))
+		}
+		if err = createAudit(tx, ctx, auditRecord{
+			key: commandKey + ":not-required", invoiceID: invoiceRow.ID, clientID: invoiceRow.ClientID,
+			eventType: "CONTRACT_NOT_REQUIRED_OUTGOING", trigger: string(decision.Outcome), detail: detail,
+			actor: audit.ActorSystem, actorDisplay: "Sistem matching", correlationID: command.CorrelationID, at: now,
+		}); err != nil {
+			return rollback(err)
+		}
+		if err = createOutbox(tx, ctx, invoiceRow.ID, commandKey+":continue", command.CorrelationID, now); err != nil {
+			return rollback(err)
+		}
+	case decision.Outcome == contracts.OutcomeUniqueCompatible:
 		selected := contractRows[decision.Candidates[0].ContractID]
+		evidence := "exact supplier CUI, effective period and currency evidence"
+		if decision.ContractOptional {
+			evidence = "exact customer CUI and effective period; context only, no price validation"
+		}
 		if err = createAssociation(ctx, tx, invoiceRow, selected, runID, decision.PolicyVersion, contracts.AssociationAutomatic, "", "Sistem matching", now); err != nil {
 			return rollback(err)
 		}
 		if err = createAudit(tx, ctx, auditRecord{
 			key: commandKey + ":associated", invoiceID: invoiceRow.ID, clientID: invoiceRow.ClientID,
 			eventType: "CONTRACT_AUTO_ASSOCIATED", from: selected.Reference, to: selected.ID, trigger: "UNIQUE_COMPATIBLE",
-			detail: fmt.Sprintf("Contract %s associated automatically; policy=%s; exact supplier CUI, effective period and currency evidence.", selected.Reference, decision.PolicyVersion),
+			detail: fmt.Sprintf("Contract %s associated automatically; policy=%s; %s.", selected.Reference, decision.PolicyVersion, evidence),
 			actor:  audit.ActorSystem, actorDisplay: "Sistem matching", correlationID: command.CorrelationID, at: now,
 		}); err != nil {
 			return rollback(err)
@@ -333,7 +371,7 @@ func (s *Store) ApplyMatchDecision(ctx context.Context, command contracts.MatchC
 		if err = createOutbox(tx, ctx, invoiceRow.ID, commandKey+":continue", command.CorrelationID, now); err != nil {
 			return rollback(err)
 		}
-	case contracts.OutcomeMultiplePlausible, contracts.OutcomeUniqueIncompatible:
+	case decision.Outcome == contracts.OutcomeMultiplePlausible || decision.Outcome == contracts.OutcomeUniqueIncompatible:
 		reason := "Au fost identificate mai multe contracte candidate; este necesară confirmarea contabilului."
 		if decision.Outcome == contracts.OutcomeUniqueIncompatible {
 			reason = "Singurul contract identificat are semnale incompatibile și nu poate fi asociat automat."
@@ -356,7 +394,7 @@ func (s *Store) ApplyMatchDecision(ctx context.Context, command contracts.MatchC
 		}); err != nil {
 			return rollback(err)
 		}
-	case contracts.OutcomeNoMatch:
+	case decision.Outcome == contracts.OutcomeNoMatch:
 		taskID := stableID("task", commandKey+":missing")
 		_, err = tx.ValidationTask.Create().SetID(taskID).SetClientID(invoiceRow.ClientID).SetInvoiceID(invoiceRow.ID).
 			SetTaskType(entvalidationtask.TaskTypeMISSING_CONTRACT).SetStatus(entvalidationtask.StatusOPEN).

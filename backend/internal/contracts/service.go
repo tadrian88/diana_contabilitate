@@ -126,15 +126,25 @@ func (s *Service) MatchInvoice(ctx context.Context, command MatchCommand) (Match
 	if invoice.PipelineStatus != "MATCHING" || invoice.Revision != command.ExpectedRevision {
 		return MatchDecision{}, false, apperrors.ErrConflict
 	}
-	decision, err := s.policy.Evaluate(invoice, candidates)
+	policy := s.policyFor(invoice)
+	decision, err := policy.Evaluate(invoice, candidates)
 	if err != nil {
 		return MatchDecision{}, false, err
 	}
-	if err = validateMatchDecision(decision, s.policy.Version()); err != nil {
+	if err = validateMatchDecision(decision, policy.Version()); err != nil {
 		return MatchDecision{}, false, err
 	}
 	changed, err := s.store.ApplyMatchDecision(ctx, command, decision, s.clock())
 	return decision, changed, err
+}
+
+// policyFor keeps the configured Module 4 policy for received invoices; issued
+// invoices always use the optional context policy (D-126).
+func (s *Service) policyFor(invoice InvoiceContext) MatchingPolicy {
+	if invoice.Outgoing() {
+		return OutgoingContextPolicy{}
+	}
+	return s.policy
 }
 
 func validateMatchDecision(decision MatchDecision, expectedPolicyVersion string) error {

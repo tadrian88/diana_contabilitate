@@ -20,6 +20,13 @@ type Engine struct{}
 
 func (Engine) Validate(input Input, now time.Time) Run {
 	run := Run{InvoiceID: input.Invoice.ID, SnapshotID: input.Snapshot.ID, DossierID: input.Snapshot.DossierID, EngineVersion: EngineVersion, InvoiceRevision: input.Invoice.Revision, SnapshotVersion: input.Snapshot.Version, CreatedAt: now, CompletedAt: now}
+	if input.Invoice.Outgoing() {
+		// D-127: the contract of an issued invoice is context only; nothing is
+		// checked against it, whether or not one is linked.
+		run.Findings = []Finding{{RuleID: "outgoing", Code: "NOT_APPLICABLE_OUTGOING", Outcome: Conform, Reason: "Validarea comercială nu se aplică facturilor emise în V1; contractul este doar context."}}
+		run.Outcome = aggregate(run.Findings)
+		return run
+	}
 	variables := make(map[string]string, len(input.Variables)+8)
 	for name, value := range input.Variables {
 		variables[name] = value.Value
