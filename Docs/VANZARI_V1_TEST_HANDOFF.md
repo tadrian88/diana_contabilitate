@@ -98,3 +98,18 @@ fiecare rulare completă plătește din nou extragerea Gemini a celor 5 PDF-uri.
    (VE18810067, garanția cu categoria E, arată motivul de reconciliere).
 5. `compara.py`: secțiunea „vânzări” din tabelul de metrici. Reconcilierea pe iunie și iulie: 4111 D 69.838,37 /
    188.839,32 și 4427 C.
+
+## Rezultate rulate de utilizator — 2026-09-30
+
+- Go unit (`go test ./...`): trec toate pachetele.
+- vitest: 204/204 după corecția testului de tab-uri (așteaptă încărcarea listei).
+- Integrare Go (`-tags=integration ./...`, bază `diana_vanzari_it`): trec toate. Singurul eșec, la confirmarea
+  contractului cu clientul Locator, venea din fixture: clientul de test avea un CUI sintetic nenumeric. Testul a fost
+  corectat; rerularea lui este încă de confirmat.
+- E2E care trec: `spv-connection`, `backend4`, `contract-ingestion`, `accounting-v2`, `accounting-workflow`,
+  `saga-export-ux`.
+- E2E care pică identic pe `main` (eb39eda, fără Vânzări V1), deci existau dinainte:
+  - `test:e2e` (9): `account-learning` și `accounting-automatic-workflow` rulează în suita de bază deși cer backend
+    (lipsesc din `testIgnore`); `module6` (reguli) și `module7` (link-ul „Reguli”, azi „Reguli și surse”);
+  - `test:e2e:client-onboarding` A–G, la salvarea versiunii 2 a profilului;
+  - `test:e2e:account-learning`, butonul „Selectează cont” lipsește pe I1.
