@@ -21,8 +21,9 @@ describe('Invoice list tabs (D-131)', () => {
     const user = userEvent.setup()
     renderApp(new RepositoryWithIssuedInvoice(), '/invoices')
 
-    expect(await screen.findByRole('tab', { name: /Primite/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /Emise \(1\)/ })).toBeInTheDocument()
+    // The counts appear once the list has loaded.
+    expect(await screen.findByRole('tab', { name: /Emise \(1\)/ })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: /Primite \([1-9]/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByText('VE-DEMO-001')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Caută după furnizor sau număr factură')).toBeInTheDocument()
 
