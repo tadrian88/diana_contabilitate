@@ -105,6 +105,11 @@ func LastSuccessfulSyncAt(v time.Time) predicate.SPVConnection {
 	return predicate.SPVConnection(sql.FieldEQ(FieldLastSuccessfulSyncAt, v))
 }
 
+// LastSuccessfulSentSyncAt applies equality check predicate on the "last_successful_sent_sync_at" field. It's identical to LastSuccessfulSentSyncAtEQ.
+func LastSuccessfulSentSyncAt(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldEQ(FieldLastSuccessfulSentSyncAt, v))
+}
+
 // LastSyncStartedAt applies equality check predicate on the "last_sync_started_at" field. It's identical to LastSyncStartedAtEQ.
 func LastSyncStartedAt(v time.Time) predicate.SPVConnection {
 	return predicate.SPVConnection(sql.FieldEQ(FieldLastSyncStartedAt, v))
@@ -623,6 +628,56 @@ func LastSuccessfulSyncAtIsNil() predicate.SPVConnection {
 // LastSuccessfulSyncAtNotNil applies the NotNil predicate on the "last_successful_sync_at" field.
 func LastSuccessfulSyncAtNotNil() predicate.SPVConnection {
 	return predicate.SPVConnection(sql.FieldNotNull(FieldLastSuccessfulSyncAt))
+}
+
+// LastSuccessfulSentSyncAtEQ applies the EQ predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtEQ(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldEQ(FieldLastSuccessfulSentSyncAt, v))
+}
+
+// LastSuccessfulSentSyncAtNEQ applies the NEQ predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtNEQ(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldNEQ(FieldLastSuccessfulSentSyncAt, v))
+}
+
+// LastSuccessfulSentSyncAtIn applies the In predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtIn(vs ...time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldIn(FieldLastSuccessfulSentSyncAt, vs...))
+}
+
+// LastSuccessfulSentSyncAtNotIn applies the NotIn predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtNotIn(vs ...time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldNotIn(FieldLastSuccessfulSentSyncAt, vs...))
+}
+
+// LastSuccessfulSentSyncAtGT applies the GT predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtGT(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldGT(FieldLastSuccessfulSentSyncAt, v))
+}
+
+// LastSuccessfulSentSyncAtGTE applies the GTE predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtGTE(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldGTE(FieldLastSuccessfulSentSyncAt, v))
+}
+
+// LastSuccessfulSentSyncAtLT applies the LT predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtLT(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldLT(FieldLastSuccessfulSentSyncAt, v))
+}
+
+// LastSuccessfulSentSyncAtLTE applies the LTE predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtLTE(v time.Time) predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldLTE(FieldLastSuccessfulSentSyncAt, v))
+}
+
+// LastSuccessfulSentSyncAtIsNil applies the IsNil predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtIsNil() predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldIsNull(FieldLastSuccessfulSentSyncAt))
+}
+
+// LastSuccessfulSentSyncAtNotNil applies the NotNil predicate on the "last_successful_sent_sync_at" field.
+func LastSuccessfulSentSyncAtNotNil() predicate.SPVConnection {
+	return predicate.SPVConnection(sql.FieldNotNull(FieldLastSuccessfulSentSyncAt))
 }
 
 // LastSyncStartedAtEQ applies the EQ predicate on the "last_sync_started_at" field.

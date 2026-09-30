@@ -10488,6 +10488,10 @@ type ContractMutation struct {
 	supplier_name               *string
 	supplier_cui                *string
 	normalized_supplier_cui     *string
+	client_role                 *contract.ClientRole
+	buyer_name                  *string
+	buyer_cui                   *string
+	normalized_buyer_cui        *string
 	reference                   *string
 	effective_from              *time.Time
 	effective_to                *time.Time
@@ -10769,6 +10773,189 @@ func (m *ContractMutation) OldNormalizedSupplierCui(ctx context.Context) (v stri
 // ResetNormalizedSupplierCui resets all changes to the "normalized_supplier_cui" field.
 func (m *ContractMutation) ResetNormalizedSupplierCui() {
 	m.normalized_supplier_cui = nil
+}
+
+// SetClientRole sets the "client_role" field.
+func (m *ContractMutation) SetClientRole(cr contract.ClientRole) {
+	m.client_role = &cr
+}
+
+// ClientRole returns the value of the "client_role" field in the mutation.
+func (m *ContractMutation) ClientRole() (r contract.ClientRole, exists bool) {
+	v := m.client_role
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientRole returns the old "client_role" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldClientRole(ctx context.Context) (v contract.ClientRole, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientRole is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientRole requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientRole: %w", err)
+	}
+	return oldValue.ClientRole, nil
+}
+
+// ResetClientRole resets all changes to the "client_role" field.
+func (m *ContractMutation) ResetClientRole() {
+	m.client_role = nil
+}
+
+// SetBuyerName sets the "buyer_name" field.
+func (m *ContractMutation) SetBuyerName(s string) {
+	m.buyer_name = &s
+}
+
+// BuyerName returns the value of the "buyer_name" field in the mutation.
+func (m *ContractMutation) BuyerName() (r string, exists bool) {
+	v := m.buyer_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBuyerName returns the old "buyer_name" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldBuyerName(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBuyerName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBuyerName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBuyerName: %w", err)
+	}
+	return oldValue.BuyerName, nil
+}
+
+// ClearBuyerName clears the value of the "buyer_name" field.
+func (m *ContractMutation) ClearBuyerName() {
+	m.buyer_name = nil
+	m.clearedFields[contract.FieldBuyerName] = struct{}{}
+}
+
+// BuyerNameCleared returns if the "buyer_name" field was cleared in this mutation.
+func (m *ContractMutation) BuyerNameCleared() bool {
+	_, ok := m.clearedFields[contract.FieldBuyerName]
+	return ok
+}
+
+// ResetBuyerName resets all changes to the "buyer_name" field.
+func (m *ContractMutation) ResetBuyerName() {
+	m.buyer_name = nil
+	delete(m.clearedFields, contract.FieldBuyerName)
+}
+
+// SetBuyerCui sets the "buyer_cui" field.
+func (m *ContractMutation) SetBuyerCui(s string) {
+	m.buyer_cui = &s
+}
+
+// BuyerCui returns the value of the "buyer_cui" field in the mutation.
+func (m *ContractMutation) BuyerCui() (r string, exists bool) {
+	v := m.buyer_cui
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBuyerCui returns the old "buyer_cui" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldBuyerCui(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBuyerCui is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBuyerCui requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBuyerCui: %w", err)
+	}
+	return oldValue.BuyerCui, nil
+}
+
+// ClearBuyerCui clears the value of the "buyer_cui" field.
+func (m *ContractMutation) ClearBuyerCui() {
+	m.buyer_cui = nil
+	m.clearedFields[contract.FieldBuyerCui] = struct{}{}
+}
+
+// BuyerCuiCleared returns if the "buyer_cui" field was cleared in this mutation.
+func (m *ContractMutation) BuyerCuiCleared() bool {
+	_, ok := m.clearedFields[contract.FieldBuyerCui]
+	return ok
+}
+
+// ResetBuyerCui resets all changes to the "buyer_cui" field.
+func (m *ContractMutation) ResetBuyerCui() {
+	m.buyer_cui = nil
+	delete(m.clearedFields, contract.FieldBuyerCui)
+}
+
+// SetNormalizedBuyerCui sets the "normalized_buyer_cui" field.
+func (m *ContractMutation) SetNormalizedBuyerCui(s string) {
+	m.normalized_buyer_cui = &s
+}
+
+// NormalizedBuyerCui returns the value of the "normalized_buyer_cui" field in the mutation.
+func (m *ContractMutation) NormalizedBuyerCui() (r string, exists bool) {
+	v := m.normalized_buyer_cui
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNormalizedBuyerCui returns the old "normalized_buyer_cui" field's value of the Contract entity.
+// If the Contract object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContractMutation) OldNormalizedBuyerCui(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNormalizedBuyerCui is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNormalizedBuyerCui requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNormalizedBuyerCui: %w", err)
+	}
+	return oldValue.NormalizedBuyerCui, nil
+}
+
+// ClearNormalizedBuyerCui clears the value of the "normalized_buyer_cui" field.
+func (m *ContractMutation) ClearNormalizedBuyerCui() {
+	m.normalized_buyer_cui = nil
+	m.clearedFields[contract.FieldNormalizedBuyerCui] = struct{}{}
+}
+
+// NormalizedBuyerCuiCleared returns if the "normalized_buyer_cui" field was cleared in this mutation.
+func (m *ContractMutation) NormalizedBuyerCuiCleared() bool {
+	_, ok := m.clearedFields[contract.FieldNormalizedBuyerCui]
+	return ok
+}
+
+// ResetNormalizedBuyerCui resets all changes to the "normalized_buyer_cui" field.
+func (m *ContractMutation) ResetNormalizedBuyerCui() {
+	m.normalized_buyer_cui = nil
+	delete(m.clearedFields, contract.FieldNormalizedBuyerCui)
 }
 
 // SetReference sets the "reference" field.
@@ -11691,7 +11878,7 @@ func (m *ContractMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ContractMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 25)
 	if m.client != nil {
 		fields = append(fields, contract.FieldClientID)
 	}
@@ -11703,6 +11890,18 @@ func (m *ContractMutation) Fields() []string {
 	}
 	if m.normalized_supplier_cui != nil {
 		fields = append(fields, contract.FieldNormalizedSupplierCui)
+	}
+	if m.client_role != nil {
+		fields = append(fields, contract.FieldClientRole)
+	}
+	if m.buyer_name != nil {
+		fields = append(fields, contract.FieldBuyerName)
+	}
+	if m.buyer_cui != nil {
+		fields = append(fields, contract.FieldBuyerCui)
+	}
+	if m.normalized_buyer_cui != nil {
+		fields = append(fields, contract.FieldNormalizedBuyerCui)
 	}
 	if m.reference != nil {
 		fields = append(fields, contract.FieldReference)
@@ -11771,6 +11970,14 @@ func (m *ContractMutation) Field(name string) (ent.Value, bool) {
 		return m.SupplierCui()
 	case contract.FieldNormalizedSupplierCui:
 		return m.NormalizedSupplierCui()
+	case contract.FieldClientRole:
+		return m.ClientRole()
+	case contract.FieldBuyerName:
+		return m.BuyerName()
+	case contract.FieldBuyerCui:
+		return m.BuyerCui()
+	case contract.FieldNormalizedBuyerCui:
+		return m.NormalizedBuyerCui()
 	case contract.FieldReference:
 		return m.Reference()
 	case contract.FieldEffectiveFrom:
@@ -11822,6 +12029,14 @@ func (m *ContractMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldSupplierCui(ctx)
 	case contract.FieldNormalizedSupplierCui:
 		return m.OldNormalizedSupplierCui(ctx)
+	case contract.FieldClientRole:
+		return m.OldClientRole(ctx)
+	case contract.FieldBuyerName:
+		return m.OldBuyerName(ctx)
+	case contract.FieldBuyerCui:
+		return m.OldBuyerCui(ctx)
+	case contract.FieldNormalizedBuyerCui:
+		return m.OldNormalizedBuyerCui(ctx)
 	case contract.FieldReference:
 		return m.OldReference(ctx)
 	case contract.FieldEffectiveFrom:
@@ -11892,6 +12107,34 @@ func (m *ContractMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetNormalizedSupplierCui(v)
+		return nil
+	case contract.FieldClientRole:
+		v, ok := value.(contract.ClientRole)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientRole(v)
+		return nil
+	case contract.FieldBuyerName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBuyerName(v)
+		return nil
+	case contract.FieldBuyerCui:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBuyerCui(v)
+		return nil
+	case contract.FieldNormalizedBuyerCui:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNormalizedBuyerCui(v)
 		return nil
 	case contract.FieldReference:
 		v, ok := value.(string)
@@ -12057,6 +12300,15 @@ func (m *ContractMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *ContractMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(contract.FieldBuyerName) {
+		fields = append(fields, contract.FieldBuyerName)
+	}
+	if m.FieldCleared(contract.FieldBuyerCui) {
+		fields = append(fields, contract.FieldBuyerCui)
+	}
+	if m.FieldCleared(contract.FieldNormalizedBuyerCui) {
+		fields = append(fields, contract.FieldNormalizedBuyerCui)
+	}
 	if m.FieldCleared(contract.FieldEffectiveTo) {
 		fields = append(fields, contract.FieldEffectiveTo)
 	}
@@ -12086,6 +12338,15 @@ func (m *ContractMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *ContractMutation) ClearField(name string) error {
 	switch name {
+	case contract.FieldBuyerName:
+		m.ClearBuyerName()
+		return nil
+	case contract.FieldBuyerCui:
+		m.ClearBuyerCui()
+		return nil
+	case contract.FieldNormalizedBuyerCui:
+		m.ClearNormalizedBuyerCui()
+		return nil
 	case contract.FieldEffectiveTo:
 		m.ClearEffectiveTo()
 		return nil
@@ -12120,6 +12381,18 @@ func (m *ContractMutation) ResetField(name string) error {
 		return nil
 	case contract.FieldNormalizedSupplierCui:
 		m.ResetNormalizedSupplierCui()
+		return nil
+	case contract.FieldClientRole:
+		m.ResetClientRole()
+		return nil
+	case contract.FieldBuyerName:
+		m.ResetBuyerName()
+		return nil
+	case contract.FieldBuyerCui:
+		m.ResetBuyerCui()
+		return nil
+	case contract.FieldNormalizedBuyerCui:
+		m.ResetNormalizedBuyerCui()
 		return nil
 	case contract.FieldReference:
 		m.ResetReference()
@@ -18552,65 +18825,70 @@ func (m *ContractSourceDocumentMutation) ResetEdge(name string) error {
 // InvoiceMutation represents an operation that mutates the Invoice nodes in the graph.
 type InvoiceMutation struct {
 	config
-	op                            Op
-	typ                           string
-	id                            *string
-	model_version                 *string
-	source_facts                  **accounting.SourceFacts
-	accounting_snapshot           **accounting.Snapshot
-	readiness_reason              *string
-	current_classification_run_id *string
-	supplier_name                 *string
-	supplier_cui                  *string
-	normalized_supplier_cui       *string
-	document_number               *string
-	normalized_document_number    *string
-	issue_date                    *time.Time
-	issue_day                     *time.Time
-	due_date                      *time.Time
-	total_amount                  *string
-	currency                      *string
-	spv_reference                 *string
-	ingestion_source              *string
-	external_delivery_id          *string
-	duplicate_of_invoice_id       *string
-	duplicate_amount_matches      *bool
-	duplicate_currency_matches    *bool
-	document_type                 *invoice.DocumentType
-	pipeline_status               *invoice.PipelineStatus
-	saga_status                   *invoice.SagaStatus
-	revision                      *uint64
-	addrevision                   *int64
-	created_at                    *time.Time
-	updated_at                    *time.Time
-	clearedFields                 map[string]struct{}
-	client                        *string
-	clearedclient                 bool
-	activity_events               map[string]struct{}
-	removedactivity_events        map[string]struct{}
-	clearedactivity_events        bool
-	lines                         map[string]struct{}
-	removedlines                  map[string]struct{}
-	clearedlines                  bool
-	validation_tasks              map[string]struct{}
-	removedvalidation_tasks       map[string]struct{}
-	clearedvalidation_tasks       bool
-	contract_match_runs           map[string]struct{}
-	removedcontract_match_runs    map[string]struct{}
-	clearedcontract_match_runs    bool
-	contract_association          *string
-	clearedcontract_association   bool
-	line_classifications          map[string]struct{}
-	removedline_classifications   map[string]struct{}
-	clearedline_classifications   bool
-	spv_source_document           *string
-	clearedspv_source_document    bool
-	saga_export_attempts          map[string]struct{}
-	removedsaga_export_attempts   map[string]struct{}
-	clearedsaga_export_attempts   bool
-	done                          bool
-	oldValue                      func(context.Context) (*Invoice, error)
-	predicates                    []predicate.Invoice
+	op                             Op
+	typ                            string
+	id                             *string
+	model_version                  *string
+	source_facts                   **accounting.SourceFacts
+	accounting_snapshot            **accounting.Snapshot
+	readiness_reason               *string
+	current_classification_run_id  *string
+	supplier_name                  *string
+	supplier_cui                   *string
+	normalized_supplier_cui        *string
+	direction                      *invoice.Direction
+	customer_name                  *string
+	customer_identifier            *string
+	normalized_customer_identifier *string
+	customer_identifier_kind       *invoice.CustomerIdentifierKind
+	document_number                *string
+	normalized_document_number     *string
+	issue_date                     *time.Time
+	issue_day                      *time.Time
+	due_date                       *time.Time
+	total_amount                   *string
+	currency                       *string
+	spv_reference                  *string
+	ingestion_source               *string
+	external_delivery_id           *string
+	duplicate_of_invoice_id        *string
+	duplicate_amount_matches       *bool
+	duplicate_currency_matches     *bool
+	document_type                  *invoice.DocumentType
+	pipeline_status                *invoice.PipelineStatus
+	saga_status                    *invoice.SagaStatus
+	revision                       *uint64
+	addrevision                    *int64
+	created_at                     *time.Time
+	updated_at                     *time.Time
+	clearedFields                  map[string]struct{}
+	client                         *string
+	clearedclient                  bool
+	activity_events                map[string]struct{}
+	removedactivity_events         map[string]struct{}
+	clearedactivity_events         bool
+	lines                          map[string]struct{}
+	removedlines                   map[string]struct{}
+	clearedlines                   bool
+	validation_tasks               map[string]struct{}
+	removedvalidation_tasks        map[string]struct{}
+	clearedvalidation_tasks        bool
+	contract_match_runs            map[string]struct{}
+	removedcontract_match_runs     map[string]struct{}
+	clearedcontract_match_runs     bool
+	contract_association           *string
+	clearedcontract_association    bool
+	line_classifications           map[string]struct{}
+	removedline_classifications    map[string]struct{}
+	clearedline_classifications    bool
+	spv_source_document            *string
+	clearedspv_source_document     bool
+	saga_export_attempts           map[string]struct{}
+	removedsaga_export_attempts    map[string]struct{}
+	clearedsaga_export_attempts    bool
+	done                           bool
+	oldValue                       func(context.Context) (*Invoice, error)
+	predicates                     []predicate.Invoice
 }
 
 var _ ent.Mutation = (*InvoiceMutation)(nil)
@@ -19104,6 +19382,238 @@ func (m *InvoiceMutation) NormalizedSupplierCuiCleared() bool {
 func (m *InvoiceMutation) ResetNormalizedSupplierCui() {
 	m.normalized_supplier_cui = nil
 	delete(m.clearedFields, invoice.FieldNormalizedSupplierCui)
+}
+
+// SetDirection sets the "direction" field.
+func (m *InvoiceMutation) SetDirection(i invoice.Direction) {
+	m.direction = &i
+}
+
+// Direction returns the value of the "direction" field in the mutation.
+func (m *InvoiceMutation) Direction() (r invoice.Direction, exists bool) {
+	v := m.direction
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDirection returns the old "direction" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldDirection(ctx context.Context) (v invoice.Direction, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDirection is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDirection requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDirection: %w", err)
+	}
+	return oldValue.Direction, nil
+}
+
+// ResetDirection resets all changes to the "direction" field.
+func (m *InvoiceMutation) ResetDirection() {
+	m.direction = nil
+}
+
+// SetCustomerName sets the "customer_name" field.
+func (m *InvoiceMutation) SetCustomerName(s string) {
+	m.customer_name = &s
+}
+
+// CustomerName returns the value of the "customer_name" field in the mutation.
+func (m *InvoiceMutation) CustomerName() (r string, exists bool) {
+	v := m.customer_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCustomerName returns the old "customer_name" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldCustomerName(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCustomerName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCustomerName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCustomerName: %w", err)
+	}
+	return oldValue.CustomerName, nil
+}
+
+// ClearCustomerName clears the value of the "customer_name" field.
+func (m *InvoiceMutation) ClearCustomerName() {
+	m.customer_name = nil
+	m.clearedFields[invoice.FieldCustomerName] = struct{}{}
+}
+
+// CustomerNameCleared returns if the "customer_name" field was cleared in this mutation.
+func (m *InvoiceMutation) CustomerNameCleared() bool {
+	_, ok := m.clearedFields[invoice.FieldCustomerName]
+	return ok
+}
+
+// ResetCustomerName resets all changes to the "customer_name" field.
+func (m *InvoiceMutation) ResetCustomerName() {
+	m.customer_name = nil
+	delete(m.clearedFields, invoice.FieldCustomerName)
+}
+
+// SetCustomerIdentifier sets the "customer_identifier" field.
+func (m *InvoiceMutation) SetCustomerIdentifier(s string) {
+	m.customer_identifier = &s
+}
+
+// CustomerIdentifier returns the value of the "customer_identifier" field in the mutation.
+func (m *InvoiceMutation) CustomerIdentifier() (r string, exists bool) {
+	v := m.customer_identifier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCustomerIdentifier returns the old "customer_identifier" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldCustomerIdentifier(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCustomerIdentifier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCustomerIdentifier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCustomerIdentifier: %w", err)
+	}
+	return oldValue.CustomerIdentifier, nil
+}
+
+// ClearCustomerIdentifier clears the value of the "customer_identifier" field.
+func (m *InvoiceMutation) ClearCustomerIdentifier() {
+	m.customer_identifier = nil
+	m.clearedFields[invoice.FieldCustomerIdentifier] = struct{}{}
+}
+
+// CustomerIdentifierCleared returns if the "customer_identifier" field was cleared in this mutation.
+func (m *InvoiceMutation) CustomerIdentifierCleared() bool {
+	_, ok := m.clearedFields[invoice.FieldCustomerIdentifier]
+	return ok
+}
+
+// ResetCustomerIdentifier resets all changes to the "customer_identifier" field.
+func (m *InvoiceMutation) ResetCustomerIdentifier() {
+	m.customer_identifier = nil
+	delete(m.clearedFields, invoice.FieldCustomerIdentifier)
+}
+
+// SetNormalizedCustomerIdentifier sets the "normalized_customer_identifier" field.
+func (m *InvoiceMutation) SetNormalizedCustomerIdentifier(s string) {
+	m.normalized_customer_identifier = &s
+}
+
+// NormalizedCustomerIdentifier returns the value of the "normalized_customer_identifier" field in the mutation.
+func (m *InvoiceMutation) NormalizedCustomerIdentifier() (r string, exists bool) {
+	v := m.normalized_customer_identifier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNormalizedCustomerIdentifier returns the old "normalized_customer_identifier" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldNormalizedCustomerIdentifier(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNormalizedCustomerIdentifier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNormalizedCustomerIdentifier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNormalizedCustomerIdentifier: %w", err)
+	}
+	return oldValue.NormalizedCustomerIdentifier, nil
+}
+
+// ClearNormalizedCustomerIdentifier clears the value of the "normalized_customer_identifier" field.
+func (m *InvoiceMutation) ClearNormalizedCustomerIdentifier() {
+	m.normalized_customer_identifier = nil
+	m.clearedFields[invoice.FieldNormalizedCustomerIdentifier] = struct{}{}
+}
+
+// NormalizedCustomerIdentifierCleared returns if the "normalized_customer_identifier" field was cleared in this mutation.
+func (m *InvoiceMutation) NormalizedCustomerIdentifierCleared() bool {
+	_, ok := m.clearedFields[invoice.FieldNormalizedCustomerIdentifier]
+	return ok
+}
+
+// ResetNormalizedCustomerIdentifier resets all changes to the "normalized_customer_identifier" field.
+func (m *InvoiceMutation) ResetNormalizedCustomerIdentifier() {
+	m.normalized_customer_identifier = nil
+	delete(m.clearedFields, invoice.FieldNormalizedCustomerIdentifier)
+}
+
+// SetCustomerIdentifierKind sets the "customer_identifier_kind" field.
+func (m *InvoiceMutation) SetCustomerIdentifierKind(iik invoice.CustomerIdentifierKind) {
+	m.customer_identifier_kind = &iik
+}
+
+// CustomerIdentifierKind returns the value of the "customer_identifier_kind" field in the mutation.
+func (m *InvoiceMutation) CustomerIdentifierKind() (r invoice.CustomerIdentifierKind, exists bool) {
+	v := m.customer_identifier_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCustomerIdentifierKind returns the old "customer_identifier_kind" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldCustomerIdentifierKind(ctx context.Context) (v *invoice.CustomerIdentifierKind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCustomerIdentifierKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCustomerIdentifierKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCustomerIdentifierKind: %w", err)
+	}
+	return oldValue.CustomerIdentifierKind, nil
+}
+
+// ClearCustomerIdentifierKind clears the value of the "customer_identifier_kind" field.
+func (m *InvoiceMutation) ClearCustomerIdentifierKind() {
+	m.customer_identifier_kind = nil
+	m.clearedFields[invoice.FieldCustomerIdentifierKind] = struct{}{}
+}
+
+// CustomerIdentifierKindCleared returns if the "customer_identifier_kind" field was cleared in this mutation.
+func (m *InvoiceMutation) CustomerIdentifierKindCleared() bool {
+	_, ok := m.clearedFields[invoice.FieldCustomerIdentifierKind]
+	return ok
+}
+
+// ResetCustomerIdentifierKind resets all changes to the "customer_identifier_kind" field.
+func (m *InvoiceMutation) ResetCustomerIdentifierKind() {
+	m.customer_identifier_kind = nil
+	delete(m.clearedFields, invoice.FieldCustomerIdentifierKind)
 }
 
 // SetDocumentNumber sets the "document_number" field.
@@ -20325,7 +20835,7 @@ func (m *InvoiceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InvoiceMutation) Fields() []string {
-	fields := make([]string, 0, 28)
+	fields := make([]string, 0, 33)
 	if m.model_version != nil {
 		fields = append(fields, invoice.FieldModelVersion)
 	}
@@ -20352,6 +20862,21 @@ func (m *InvoiceMutation) Fields() []string {
 	}
 	if m.normalized_supplier_cui != nil {
 		fields = append(fields, invoice.FieldNormalizedSupplierCui)
+	}
+	if m.direction != nil {
+		fields = append(fields, invoice.FieldDirection)
+	}
+	if m.customer_name != nil {
+		fields = append(fields, invoice.FieldCustomerName)
+	}
+	if m.customer_identifier != nil {
+		fields = append(fields, invoice.FieldCustomerIdentifier)
+	}
+	if m.normalized_customer_identifier != nil {
+		fields = append(fields, invoice.FieldNormalizedCustomerIdentifier)
+	}
+	if m.customer_identifier_kind != nil {
+		fields = append(fields, invoice.FieldCustomerIdentifierKind)
 	}
 	if m.document_number != nil {
 		fields = append(fields, invoice.FieldDocumentNumber)
@@ -20436,6 +20961,16 @@ func (m *InvoiceMutation) Field(name string) (ent.Value, bool) {
 		return m.SupplierCui()
 	case invoice.FieldNormalizedSupplierCui:
 		return m.NormalizedSupplierCui()
+	case invoice.FieldDirection:
+		return m.Direction()
+	case invoice.FieldCustomerName:
+		return m.CustomerName()
+	case invoice.FieldCustomerIdentifier:
+		return m.CustomerIdentifier()
+	case invoice.FieldNormalizedCustomerIdentifier:
+		return m.NormalizedCustomerIdentifier()
+	case invoice.FieldCustomerIdentifierKind:
+		return m.CustomerIdentifierKind()
 	case invoice.FieldDocumentNumber:
 		return m.DocumentNumber()
 	case invoice.FieldNormalizedDocumentNumber:
@@ -20501,6 +21036,16 @@ func (m *InvoiceMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldSupplierCui(ctx)
 	case invoice.FieldNormalizedSupplierCui:
 		return m.OldNormalizedSupplierCui(ctx)
+	case invoice.FieldDirection:
+		return m.OldDirection(ctx)
+	case invoice.FieldCustomerName:
+		return m.OldCustomerName(ctx)
+	case invoice.FieldCustomerIdentifier:
+		return m.OldCustomerIdentifier(ctx)
+	case invoice.FieldNormalizedCustomerIdentifier:
+		return m.OldNormalizedCustomerIdentifier(ctx)
+	case invoice.FieldCustomerIdentifierKind:
+		return m.OldCustomerIdentifierKind(ctx)
 	case invoice.FieldDocumentNumber:
 		return m.OldDocumentNumber(ctx)
 	case invoice.FieldNormalizedDocumentNumber:
@@ -20610,6 +21155,41 @@ func (m *InvoiceMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetNormalizedSupplierCui(v)
+		return nil
+	case invoice.FieldDirection:
+		v, ok := value.(invoice.Direction)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDirection(v)
+		return nil
+	case invoice.FieldCustomerName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCustomerName(v)
+		return nil
+	case invoice.FieldCustomerIdentifier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCustomerIdentifier(v)
+		return nil
+	case invoice.FieldNormalizedCustomerIdentifier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNormalizedCustomerIdentifier(v)
+		return nil
+	case invoice.FieldCustomerIdentifierKind:
+		v, ok := value.(invoice.CustomerIdentifierKind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCustomerIdentifierKind(v)
 		return nil
 	case invoice.FieldDocumentNumber:
 		v, ok := value.(string)
@@ -20804,6 +21384,18 @@ func (m *InvoiceMutation) ClearedFields() []string {
 	if m.FieldCleared(invoice.FieldNormalizedSupplierCui) {
 		fields = append(fields, invoice.FieldNormalizedSupplierCui)
 	}
+	if m.FieldCleared(invoice.FieldCustomerName) {
+		fields = append(fields, invoice.FieldCustomerName)
+	}
+	if m.FieldCleared(invoice.FieldCustomerIdentifier) {
+		fields = append(fields, invoice.FieldCustomerIdentifier)
+	}
+	if m.FieldCleared(invoice.FieldNormalizedCustomerIdentifier) {
+		fields = append(fields, invoice.FieldNormalizedCustomerIdentifier)
+	}
+	if m.FieldCleared(invoice.FieldCustomerIdentifierKind) {
+		fields = append(fields, invoice.FieldCustomerIdentifierKind)
+	}
 	if m.FieldCleared(invoice.FieldDueDate) {
 		fields = append(fields, invoice.FieldDueDate)
 	}
@@ -20844,6 +21436,18 @@ func (m *InvoiceMutation) ClearField(name string) error {
 		return nil
 	case invoice.FieldNormalizedSupplierCui:
 		m.ClearNormalizedSupplierCui()
+		return nil
+	case invoice.FieldCustomerName:
+		m.ClearCustomerName()
+		return nil
+	case invoice.FieldCustomerIdentifier:
+		m.ClearCustomerIdentifier()
+		return nil
+	case invoice.FieldNormalizedCustomerIdentifier:
+		m.ClearNormalizedCustomerIdentifier()
+		return nil
+	case invoice.FieldCustomerIdentifierKind:
+		m.ClearCustomerIdentifierKind()
 		return nil
 	case invoice.FieldDueDate:
 		m.ClearDueDate()
@@ -20891,6 +21495,21 @@ func (m *InvoiceMutation) ResetField(name string) error {
 		return nil
 	case invoice.FieldNormalizedSupplierCui:
 		m.ResetNormalizedSupplierCui()
+		return nil
+	case invoice.FieldDirection:
+		m.ResetDirection()
+		return nil
+	case invoice.FieldCustomerName:
+		m.ResetCustomerName()
+		return nil
+	case invoice.FieldCustomerIdentifier:
+		m.ResetCustomerIdentifier()
+		return nil
+	case invoice.FieldNormalizedCustomerIdentifier:
+		m.ResetNormalizedCustomerIdentifier()
+		return nil
+	case invoice.FieldCustomerIdentifierKind:
+		m.ResetCustomerIdentifierKind()
 		return nil
 	case invoice.FieldDocumentNumber:
 		m.ResetDocumentNumber()
@@ -29346,35 +29965,36 @@ func (m *RuleVersionMutation) ResetEdge(name string) error {
 // SPVConnectionMutation represents an operation that mutates the SPVConnection nodes in the graph.
 type SPVConnectionMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *string
-	cif                      *string
-	environment              *spvconnection.Environment
-	access_token_ciphertext  *string
-	refresh_token_ciphertext *string
-	access_token_expires_at  *time.Time
-	refresh_token_expires_at *time.Time
-	status                   *spvconnection.Status
-	connected_at             *time.Time
-	last_successful_sync_at  *time.Time
-	last_sync_started_at     *time.Time
-	last_sync_finished_at    *time.Time
-	last_sync_status         *spvconnection.LastSyncStatus
-	last_error               *string
-	revision                 *uint64
-	addrevision              *int64
-	created_at               *time.Time
-	updated_at               *time.Time
-	clearedFields            map[string]struct{}
-	client                   *string
-	clearedclient            bool
-	source_documents         map[string]struct{}
-	removedsource_documents  map[string]struct{}
-	clearedsource_documents  bool
-	done                     bool
-	oldValue                 func(context.Context) (*SPVConnection, error)
-	predicates               []predicate.SPVConnection
+	op                           Op
+	typ                          string
+	id                           *string
+	cif                          *string
+	environment                  *spvconnection.Environment
+	access_token_ciphertext      *string
+	refresh_token_ciphertext     *string
+	access_token_expires_at      *time.Time
+	refresh_token_expires_at     *time.Time
+	status                       *spvconnection.Status
+	connected_at                 *time.Time
+	last_successful_sync_at      *time.Time
+	last_successful_sent_sync_at *time.Time
+	last_sync_started_at         *time.Time
+	last_sync_finished_at        *time.Time
+	last_sync_status             *spvconnection.LastSyncStatus
+	last_error                   *string
+	revision                     *uint64
+	addrevision                  *int64
+	created_at                   *time.Time
+	updated_at                   *time.Time
+	clearedFields                map[string]struct{}
+	client                       *string
+	clearedclient                bool
+	source_documents             map[string]struct{}
+	removedsource_documents      map[string]struct{}
+	clearedsource_documents      bool
+	done                         bool
+	oldValue                     func(context.Context) (*SPVConnection, error)
+	predicates                   []predicate.SPVConnection
 }
 
 var _ ent.Mutation = (*SPVConnectionMutation)(nil)
@@ -29880,6 +30500,55 @@ func (m *SPVConnectionMutation) ResetLastSuccessfulSyncAt() {
 	delete(m.clearedFields, spvconnection.FieldLastSuccessfulSyncAt)
 }
 
+// SetLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field.
+func (m *SPVConnectionMutation) SetLastSuccessfulSentSyncAt(t time.Time) {
+	m.last_successful_sent_sync_at = &t
+}
+
+// LastSuccessfulSentSyncAt returns the value of the "last_successful_sent_sync_at" field in the mutation.
+func (m *SPVConnectionMutation) LastSuccessfulSentSyncAt() (r time.Time, exists bool) {
+	v := m.last_successful_sent_sync_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastSuccessfulSentSyncAt returns the old "last_successful_sent_sync_at" field's value of the SPVConnection entity.
+// If the SPVConnection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SPVConnectionMutation) OldLastSuccessfulSentSyncAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastSuccessfulSentSyncAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastSuccessfulSentSyncAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastSuccessfulSentSyncAt: %w", err)
+	}
+	return oldValue.LastSuccessfulSentSyncAt, nil
+}
+
+// ClearLastSuccessfulSentSyncAt clears the value of the "last_successful_sent_sync_at" field.
+func (m *SPVConnectionMutation) ClearLastSuccessfulSentSyncAt() {
+	m.last_successful_sent_sync_at = nil
+	m.clearedFields[spvconnection.FieldLastSuccessfulSentSyncAt] = struct{}{}
+}
+
+// LastSuccessfulSentSyncAtCleared returns if the "last_successful_sent_sync_at" field was cleared in this mutation.
+func (m *SPVConnectionMutation) LastSuccessfulSentSyncAtCleared() bool {
+	_, ok := m.clearedFields[spvconnection.FieldLastSuccessfulSentSyncAt]
+	return ok
+}
+
+// ResetLastSuccessfulSentSyncAt resets all changes to the "last_successful_sent_sync_at" field.
+func (m *SPVConnectionMutation) ResetLastSuccessfulSentSyncAt() {
+	m.last_successful_sent_sync_at = nil
+	delete(m.clearedFields, spvconnection.FieldLastSuccessfulSentSyncAt)
+}
+
 // SetLastSyncStartedAt sets the "last_sync_started_at" field.
 func (m *SPVConnectionMutation) SetLastSyncStartedAt(t time.Time) {
 	m.last_sync_started_at = &t
@@ -30306,7 +30975,7 @@ func (m *SPVConnectionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SPVConnectionMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.client != nil {
 		fields = append(fields, spvconnection.FieldClientID)
 	}
@@ -30336,6 +31005,9 @@ func (m *SPVConnectionMutation) Fields() []string {
 	}
 	if m.last_successful_sync_at != nil {
 		fields = append(fields, spvconnection.FieldLastSuccessfulSyncAt)
+	}
+	if m.last_successful_sent_sync_at != nil {
+		fields = append(fields, spvconnection.FieldLastSuccessfulSentSyncAt)
 	}
 	if m.last_sync_started_at != nil {
 		fields = append(fields, spvconnection.FieldLastSyncStartedAt)
@@ -30386,6 +31058,8 @@ func (m *SPVConnectionMutation) Field(name string) (ent.Value, bool) {
 		return m.ConnectedAt()
 	case spvconnection.FieldLastSuccessfulSyncAt:
 		return m.LastSuccessfulSyncAt()
+	case spvconnection.FieldLastSuccessfulSentSyncAt:
+		return m.LastSuccessfulSentSyncAt()
 	case spvconnection.FieldLastSyncStartedAt:
 		return m.LastSyncStartedAt()
 	case spvconnection.FieldLastSyncFinishedAt:
@@ -30429,6 +31103,8 @@ func (m *SPVConnectionMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldConnectedAt(ctx)
 	case spvconnection.FieldLastSuccessfulSyncAt:
 		return m.OldLastSuccessfulSyncAt(ctx)
+	case spvconnection.FieldLastSuccessfulSentSyncAt:
+		return m.OldLastSuccessfulSentSyncAt(ctx)
 	case spvconnection.FieldLastSyncStartedAt:
 		return m.OldLastSyncStartedAt(ctx)
 	case spvconnection.FieldLastSyncFinishedAt:
@@ -30521,6 +31197,13 @@ func (m *SPVConnectionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetLastSuccessfulSyncAt(v)
+		return nil
+	case spvconnection.FieldLastSuccessfulSentSyncAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastSuccessfulSentSyncAt(v)
 		return nil
 	case spvconnection.FieldLastSyncStartedAt:
 		v, ok := value.(time.Time)
@@ -30625,6 +31308,9 @@ func (m *SPVConnectionMutation) ClearedFields() []string {
 	if m.FieldCleared(spvconnection.FieldLastSuccessfulSyncAt) {
 		fields = append(fields, spvconnection.FieldLastSuccessfulSyncAt)
 	}
+	if m.FieldCleared(spvconnection.FieldLastSuccessfulSentSyncAt) {
+		fields = append(fields, spvconnection.FieldLastSuccessfulSentSyncAt)
+	}
 	if m.FieldCleared(spvconnection.FieldLastSyncStartedAt) {
 		fields = append(fields, spvconnection.FieldLastSyncStartedAt)
 	}
@@ -30656,6 +31342,9 @@ func (m *SPVConnectionMutation) ClearField(name string) error {
 		return nil
 	case spvconnection.FieldLastSuccessfulSyncAt:
 		m.ClearLastSuccessfulSyncAt()
+		return nil
+	case spvconnection.FieldLastSuccessfulSentSyncAt:
+		m.ClearLastSuccessfulSentSyncAt()
 		return nil
 	case spvconnection.FieldLastSyncStartedAt:
 		m.ClearLastSyncStartedAt()
@@ -30703,6 +31392,9 @@ func (m *SPVConnectionMutation) ResetField(name string) error {
 		return nil
 	case spvconnection.FieldLastSuccessfulSyncAt:
 		m.ResetLastSuccessfulSyncAt()
+		return nil
+	case spvconnection.FieldLastSuccessfulSentSyncAt:
+		m.ResetLastSuccessfulSentSyncAt()
 		return nil
 	case spvconnection.FieldLastSyncStartedAt:
 		m.ResetLastSyncStartedAt()

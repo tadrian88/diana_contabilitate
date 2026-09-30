@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"diana-contabilitate/backend/internal/fiscalidentity"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -137,6 +138,10 @@ type invoiceDTO struct {
 	ClientID                   string                    `json:"clientId"`
 	SupplierName               string                    `json:"supplierName"`
 	SupplierCUI                *string                   `json:"supplierCui,omitempty"`
+	Direction                  string                    `json:"direction"`
+	CustomerName               *string                   `json:"customerName,omitempty"`
+	CustomerIdentifier         *string                   `json:"customerIdentifier,omitempty"`
+	CustomerIdentifierKind     *string                   `json:"customerIdentifierKind,omitempty"`
 	DocumentNumber             string                    `json:"documentNumber"`
 	IssueDate                  string                    `json:"issueDate"`
 	DueDate                    *string                   `json:"dueDate,omitempty"`
@@ -401,15 +406,46 @@ type taskInvoiceDTO struct {
 	SagaStatus     string   `json:"sagaStatus"`
 }
 
+func invoiceDirection(item *invoicing.Invoice) invoicing.Direction {
+	if item.Direction == "" {
+		return invoicing.DirectionIncoming
+	}
+	return item.Direction
+}
+
+// maskedCustomerIdentifier never lets a CNP leave the API in full (D-124).
+func maskedCustomerIdentifier(item *invoicing.Invoice) *string {
+	if item.CustomerIdentifier == nil {
+		return nil
+	}
+	value := fiscalidentity.MaskIfCNP(*item.CustomerIdentifier)
+	return &value
+}
+
+// maskedSourceFacts returns a copy whose party identifiers have any CNP masked.
+func maskedSourceFacts(facts *accounting.SourceFacts) *accounting.SourceFacts {
+	if facts == nil {
+		return nil
+	}
+	copied := *facts
+	copied.BuyerVATID = fiscalidentity.MaskIfCNP(copied.BuyerVATID)
+	copied.BuyerLegalID = fiscalidentity.MaskIfCNP(copied.BuyerLegalID)
+	copied.SupplierVATID = fiscalidentity.MaskIfCNP(copied.SupplierVATID)
+	copied.SupplierLegalID = fiscalidentity.MaskIfCNP(copied.SupplierLegalID)
+	return &copied
+}
+
 func invoiceResponse(item *invoicing.Invoice) (invoiceDTO, error) {
 	amount := item.Total.Amount.String()
 	if !item.Total.Amount.Valid() {
 		return invoiceDTO{}, fmt.Errorf("invalid stored amount")
 	}
-	result := invoiceDTO{ModelVersion: item.ModelVersion, SourceFacts: item.SourceFacts, AccountingSnapshot: item.AccountingSnapshot, ReadinessReason: item.ReadinessReason, CurrentClassificationRunID: item.CurrentClassificationRunID, AccountingWorkflowStatus: item.AccountingWorkflowStatus,
+	result := invoiceDTO{ModelVersion: item.ModelVersion, SourceFacts: maskedSourceFacts(item.SourceFacts), AccountingSnapshot: item.AccountingSnapshot, ReadinessReason: item.ReadinessReason, CurrentClassificationRunID: item.CurrentClassificationRunID, AccountingWorkflowStatus: item.AccountingWorkflowStatus,
 		ID: item.ID, ClientID: item.ClientID, SupplierName: item.SupplierName,
-		SupplierCUI: item.SupplierCUI, DocumentNumber: item.DocumentNumber,
-		IssueDate: item.IssueDate.Format(time.RFC3339), Total: moneyDTO{Amount: json.RawMessage(amount), Currency: item.Total.Currency},
+		SupplierCUI: item.SupplierCUI, Direction: string(invoiceDirection(item)), CustomerName: item.CustomerName,
+		CustomerIdentifier: maskedCustomerIdentifier(item), CustomerIdentifierKind: item.CustomerIdentifierKind,
+		DocumentNumber: item.DocumentNumber,
+		IssueDate:      item.IssueDate.Format(time.RFC3339), Total: moneyDTO{Amount: json.RawMessage(amount), Currency: item.Total.Currency},
 		SPVReference: item.SPVReference, PipelineStatus: string(item.PipelineStatus), SagaStatus: string(item.SagaStatus),
 		Revision: item.Revision, CreatedAt: item.CreatedAt.Format(time.RFC3339), UpdatedAt: item.UpdatedAt.Format(time.RFC3339),
 		Activity: make([]activityDTO, 0, len(item.Activity)),

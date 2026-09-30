@@ -22,6 +22,14 @@ const (
 	FieldSupplierCui = "supplier_cui"
 	// FieldNormalizedSupplierCui holds the string denoting the normalized_supplier_cui field in the database.
 	FieldNormalizedSupplierCui = "normalized_supplier_cui"
+	// FieldClientRole holds the string denoting the client_role field in the database.
+	FieldClientRole = "client_role"
+	// FieldBuyerName holds the string denoting the buyer_name field in the database.
+	FieldBuyerName = "buyer_name"
+	// FieldBuyerCui holds the string denoting the buyer_cui field in the database.
+	FieldBuyerCui = "buyer_cui"
+	// FieldNormalizedBuyerCui holds the string denoting the normalized_buyer_cui field in the database.
+	FieldNormalizedBuyerCui = "normalized_buyer_cui"
 	// FieldReference holds the string denoting the reference field in the database.
 	FieldReference = "reference"
 	// FieldEffectiveFrom holds the string denoting the effective_from field in the database.
@@ -103,6 +111,10 @@ var Columns = []string{
 	FieldSupplierName,
 	FieldSupplierCui,
 	FieldNormalizedSupplierCui,
+	FieldClientRole,
+	FieldBuyerName,
+	FieldBuyerCui,
+	FieldNormalizedBuyerCui,
 	FieldReference,
 	FieldEffectiveFrom,
 	FieldEffectiveTo,
@@ -154,6 +166,32 @@ var (
 	// RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
 	RevisionValidator func(uint64) error
 )
+
+// ClientRole defines the type for the "client_role" enum field.
+type ClientRole string
+
+// ClientRoleBUYER is the default value of the ClientRole enum.
+const DefaultClientRole = ClientRoleBUYER
+
+// ClientRole values.
+const (
+	ClientRoleBUYER    ClientRole = "BUYER"
+	ClientRoleSUPPLIER ClientRole = "SUPPLIER"
+)
+
+func (cr ClientRole) String() string {
+	return string(cr)
+}
+
+// ClientRoleValidator is a validator for the "client_role" field enum values. It is called by the builders before save.
+func ClientRoleValidator(cr ClientRole) error {
+	switch cr {
+	case ClientRoleBUYER, ClientRoleSUPPLIER:
+		return nil
+	default:
+		return fmt.Errorf("contract: invalid enum value for client_role field: %q", cr)
+	}
+}
 
 // PeriodType defines the type for the "period_type" enum field.
 type PeriodType string
@@ -233,6 +271,26 @@ func BySupplierCui(opts ...sql.OrderTermOption) OrderOption {
 // ByNormalizedSupplierCui orders the results by the normalized_supplier_cui field.
 func ByNormalizedSupplierCui(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNormalizedSupplierCui, opts...).ToFunc()
+}
+
+// ByClientRole orders the results by the client_role field.
+func ByClientRole(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClientRole, opts...).ToFunc()
+}
+
+// ByBuyerName orders the results by the buyer_name field.
+func ByBuyerName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBuyerName, opts...).ToFunc()
+}
+
+// ByBuyerCui orders the results by the buyer_cui field.
+func ByBuyerCui(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBuyerCui, opts...).ToFunc()
+}
+
+// ByNormalizedBuyerCui orders the results by the normalized_buyer_cui field.
+func ByNormalizedBuyerCui(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNormalizedBuyerCui, opts...).ToFunc()
 }
 
 // ByReference orders the results by the reference field.

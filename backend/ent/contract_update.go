@@ -73,6 +73,66 @@ func (_u *ContractUpdate) SetNillableNormalizedSupplierCui(v *string) *ContractU
 	return _u
 }
 
+// SetBuyerName sets the "buyer_name" field.
+func (_u *ContractUpdate) SetBuyerName(v string) *ContractUpdate {
+	_u.mutation.SetBuyerName(v)
+	return _u
+}
+
+// SetNillableBuyerName sets the "buyer_name" field if the given value is not nil.
+func (_u *ContractUpdate) SetNillableBuyerName(v *string) *ContractUpdate {
+	if v != nil {
+		_u.SetBuyerName(*v)
+	}
+	return _u
+}
+
+// ClearBuyerName clears the value of the "buyer_name" field.
+func (_u *ContractUpdate) ClearBuyerName() *ContractUpdate {
+	_u.mutation.ClearBuyerName()
+	return _u
+}
+
+// SetBuyerCui sets the "buyer_cui" field.
+func (_u *ContractUpdate) SetBuyerCui(v string) *ContractUpdate {
+	_u.mutation.SetBuyerCui(v)
+	return _u
+}
+
+// SetNillableBuyerCui sets the "buyer_cui" field if the given value is not nil.
+func (_u *ContractUpdate) SetNillableBuyerCui(v *string) *ContractUpdate {
+	if v != nil {
+		_u.SetBuyerCui(*v)
+	}
+	return _u
+}
+
+// ClearBuyerCui clears the value of the "buyer_cui" field.
+func (_u *ContractUpdate) ClearBuyerCui() *ContractUpdate {
+	_u.mutation.ClearBuyerCui()
+	return _u
+}
+
+// SetNormalizedBuyerCui sets the "normalized_buyer_cui" field.
+func (_u *ContractUpdate) SetNormalizedBuyerCui(v string) *ContractUpdate {
+	_u.mutation.SetNormalizedBuyerCui(v)
+	return _u
+}
+
+// SetNillableNormalizedBuyerCui sets the "normalized_buyer_cui" field if the given value is not nil.
+func (_u *ContractUpdate) SetNillableNormalizedBuyerCui(v *string) *ContractUpdate {
+	if v != nil {
+		_u.SetNormalizedBuyerCui(*v)
+	}
+	return _u
+}
+
+// ClearNormalizedBuyerCui clears the value of the "normalized_buyer_cui" field.
+func (_u *ContractUpdate) ClearNormalizedBuyerCui() *ContractUpdate {
+	_u.mutation.ClearNormalizedBuyerCui()
+	return _u
+}
+
 // SetReference sets the "reference" field.
 func (_u *ContractUpdate) SetReference(v string) *ContractUpdate {
 	_u.mutation.SetReference(v)
@@ -513,6 +573,24 @@ func (_u *ContractUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.NormalizedSupplierCui(); ok {
 		_spec.SetField(contract.FieldNormalizedSupplierCui, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.BuyerName(); ok {
+		_spec.SetField(contract.FieldBuyerName, field.TypeString, value)
+	}
+	if _u.mutation.BuyerNameCleared() {
+		_spec.ClearField(contract.FieldBuyerName, field.TypeString)
+	}
+	if value, ok := _u.mutation.BuyerCui(); ok {
+		_spec.SetField(contract.FieldBuyerCui, field.TypeString, value)
+	}
+	if _u.mutation.BuyerCuiCleared() {
+		_spec.ClearField(contract.FieldBuyerCui, field.TypeString)
+	}
+	if value, ok := _u.mutation.NormalizedBuyerCui(); ok {
+		_spec.SetField(contract.FieldNormalizedBuyerCui, field.TypeString, value)
+	}
+	if _u.mutation.NormalizedBuyerCuiCleared() {
+		_spec.ClearField(contract.FieldNormalizedBuyerCui, field.TypeString)
+	}
 	if value, ok := _u.mutation.Reference(); ok {
 		_spec.SetField(contract.FieldReference, field.TypeString, value)
 	}
@@ -767,6 +845,66 @@ func (_u *ContractUpdateOne) SetNillableNormalizedSupplierCui(v *string) *Contra
 	if v != nil {
 		_u.SetNormalizedSupplierCui(*v)
 	}
+	return _u
+}
+
+// SetBuyerName sets the "buyer_name" field.
+func (_u *ContractUpdateOne) SetBuyerName(v string) *ContractUpdateOne {
+	_u.mutation.SetBuyerName(v)
+	return _u
+}
+
+// SetNillableBuyerName sets the "buyer_name" field if the given value is not nil.
+func (_u *ContractUpdateOne) SetNillableBuyerName(v *string) *ContractUpdateOne {
+	if v != nil {
+		_u.SetBuyerName(*v)
+	}
+	return _u
+}
+
+// ClearBuyerName clears the value of the "buyer_name" field.
+func (_u *ContractUpdateOne) ClearBuyerName() *ContractUpdateOne {
+	_u.mutation.ClearBuyerName()
+	return _u
+}
+
+// SetBuyerCui sets the "buyer_cui" field.
+func (_u *ContractUpdateOne) SetBuyerCui(v string) *ContractUpdateOne {
+	_u.mutation.SetBuyerCui(v)
+	return _u
+}
+
+// SetNillableBuyerCui sets the "buyer_cui" field if the given value is not nil.
+func (_u *ContractUpdateOne) SetNillableBuyerCui(v *string) *ContractUpdateOne {
+	if v != nil {
+		_u.SetBuyerCui(*v)
+	}
+	return _u
+}
+
+// ClearBuyerCui clears the value of the "buyer_cui" field.
+func (_u *ContractUpdateOne) ClearBuyerCui() *ContractUpdateOne {
+	_u.mutation.ClearBuyerCui()
+	return _u
+}
+
+// SetNormalizedBuyerCui sets the "normalized_buyer_cui" field.
+func (_u *ContractUpdateOne) SetNormalizedBuyerCui(v string) *ContractUpdateOne {
+	_u.mutation.SetNormalizedBuyerCui(v)
+	return _u
+}
+
+// SetNillableNormalizedBuyerCui sets the "normalized_buyer_cui" field if the given value is not nil.
+func (_u *ContractUpdateOne) SetNillableNormalizedBuyerCui(v *string) *ContractUpdateOne {
+	if v != nil {
+		_u.SetNormalizedBuyerCui(*v)
+	}
+	return _u
+}
+
+// ClearNormalizedBuyerCui clears the value of the "normalized_buyer_cui" field.
+func (_u *ContractUpdateOne) ClearNormalizedBuyerCui() *ContractUpdateOne {
+	_u.mutation.ClearNormalizedBuyerCui()
 	return _u
 }
 
@@ -1239,6 +1377,24 @@ func (_u *ContractUpdateOne) sqlSave(ctx context.Context) (_node *Contract, err 
 	}
 	if value, ok := _u.mutation.NormalizedSupplierCui(); ok {
 		_spec.SetField(contract.FieldNormalizedSupplierCui, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BuyerName(); ok {
+		_spec.SetField(contract.FieldBuyerName, field.TypeString, value)
+	}
+	if _u.mutation.BuyerNameCleared() {
+		_spec.ClearField(contract.FieldBuyerName, field.TypeString)
+	}
+	if value, ok := _u.mutation.BuyerCui(); ok {
+		_spec.SetField(contract.FieldBuyerCui, field.TypeString, value)
+	}
+	if _u.mutation.BuyerCuiCleared() {
+		_spec.ClearField(contract.FieldBuyerCui, field.TypeString)
+	}
+	if value, ok := _u.mutation.NormalizedBuyerCui(); ok {
+		_spec.SetField(contract.FieldNormalizedBuyerCui, field.TypeString, value)
+	}
+	if _u.mutation.NormalizedBuyerCuiCleared() {
+		_spec.ClearField(contract.FieldNormalizedBuyerCui, field.TypeString)
 	}
 	if value, ok := _u.mutation.Reference(); ok {
 		_spec.SetField(contract.FieldReference, field.TypeString, value)

@@ -100,6 +100,21 @@ func NormalizedSupplierCui(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldEQ(FieldNormalizedSupplierCui, v))
 }
 
+// CustomerName applies equality check predicate on the "customer_name" field. It's identical to CustomerNameEQ.
+func CustomerName(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCustomerName, v))
+}
+
+// CustomerIdentifier applies equality check predicate on the "customer_identifier" field. It's identical to CustomerIdentifierEQ.
+func CustomerIdentifier(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifier applies equality check predicate on the "normalized_customer_identifier" field. It's identical to NormalizedCustomerIdentifierEQ.
+func NormalizedCustomerIdentifier(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldNormalizedCustomerIdentifier, v))
+}
+
 // DocumentNumber applies equality check predicate on the "document_number" field. It's identical to DocumentNumberEQ.
 func DocumentNumber(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldEQ(FieldDocumentNumber, v))
@@ -683,6 +698,281 @@ func NormalizedSupplierCuiEqualFold(v string) predicate.Invoice {
 // NormalizedSupplierCuiContainsFold applies the ContainsFold predicate on the "normalized_supplier_cui" field.
 func NormalizedSupplierCuiContainsFold(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldContainsFold(FieldNormalizedSupplierCui, v))
+}
+
+// DirectionEQ applies the EQ predicate on the "direction" field.
+func DirectionEQ(v Direction) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldDirection, v))
+}
+
+// DirectionNEQ applies the NEQ predicate on the "direction" field.
+func DirectionNEQ(v Direction) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldDirection, v))
+}
+
+// DirectionIn applies the In predicate on the "direction" field.
+func DirectionIn(vs ...Direction) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldDirection, vs...))
+}
+
+// DirectionNotIn applies the NotIn predicate on the "direction" field.
+func DirectionNotIn(vs ...Direction) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldDirection, vs...))
+}
+
+// CustomerNameEQ applies the EQ predicate on the "customer_name" field.
+func CustomerNameEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCustomerName, v))
+}
+
+// CustomerNameNEQ applies the NEQ predicate on the "customer_name" field.
+func CustomerNameNEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldCustomerName, v))
+}
+
+// CustomerNameIn applies the In predicate on the "customer_name" field.
+func CustomerNameIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldCustomerName, vs...))
+}
+
+// CustomerNameNotIn applies the NotIn predicate on the "customer_name" field.
+func CustomerNameNotIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldCustomerName, vs...))
+}
+
+// CustomerNameGT applies the GT predicate on the "customer_name" field.
+func CustomerNameGT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGT(FieldCustomerName, v))
+}
+
+// CustomerNameGTE applies the GTE predicate on the "customer_name" field.
+func CustomerNameGTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGTE(FieldCustomerName, v))
+}
+
+// CustomerNameLT applies the LT predicate on the "customer_name" field.
+func CustomerNameLT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLT(FieldCustomerName, v))
+}
+
+// CustomerNameLTE applies the LTE predicate on the "customer_name" field.
+func CustomerNameLTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLTE(FieldCustomerName, v))
+}
+
+// CustomerNameContains applies the Contains predicate on the "customer_name" field.
+func CustomerNameContains(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContains(FieldCustomerName, v))
+}
+
+// CustomerNameHasPrefix applies the HasPrefix predicate on the "customer_name" field.
+func CustomerNameHasPrefix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasPrefix(FieldCustomerName, v))
+}
+
+// CustomerNameHasSuffix applies the HasSuffix predicate on the "customer_name" field.
+func CustomerNameHasSuffix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasSuffix(FieldCustomerName, v))
+}
+
+// CustomerNameIsNil applies the IsNil predicate on the "customer_name" field.
+func CustomerNameIsNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldIsNull(FieldCustomerName))
+}
+
+// CustomerNameNotNil applies the NotNil predicate on the "customer_name" field.
+func CustomerNameNotNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotNull(FieldCustomerName))
+}
+
+// CustomerNameEqualFold applies the EqualFold predicate on the "customer_name" field.
+func CustomerNameEqualFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEqualFold(FieldCustomerName, v))
+}
+
+// CustomerNameContainsFold applies the ContainsFold predicate on the "customer_name" field.
+func CustomerNameContainsFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContainsFold(FieldCustomerName, v))
+}
+
+// CustomerIdentifierEQ applies the EQ predicate on the "customer_identifier" field.
+func CustomerIdentifierEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierNEQ applies the NEQ predicate on the "customer_identifier" field.
+func CustomerIdentifierNEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierIn applies the In predicate on the "customer_identifier" field.
+func CustomerIdentifierIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldCustomerIdentifier, vs...))
+}
+
+// CustomerIdentifierNotIn applies the NotIn predicate on the "customer_identifier" field.
+func CustomerIdentifierNotIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldCustomerIdentifier, vs...))
+}
+
+// CustomerIdentifierGT applies the GT predicate on the "customer_identifier" field.
+func CustomerIdentifierGT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGT(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierGTE applies the GTE predicate on the "customer_identifier" field.
+func CustomerIdentifierGTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGTE(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierLT applies the LT predicate on the "customer_identifier" field.
+func CustomerIdentifierLT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLT(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierLTE applies the LTE predicate on the "customer_identifier" field.
+func CustomerIdentifierLTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLTE(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierContains applies the Contains predicate on the "customer_identifier" field.
+func CustomerIdentifierContains(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContains(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierHasPrefix applies the HasPrefix predicate on the "customer_identifier" field.
+func CustomerIdentifierHasPrefix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasPrefix(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierHasSuffix applies the HasSuffix predicate on the "customer_identifier" field.
+func CustomerIdentifierHasSuffix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasSuffix(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierIsNil applies the IsNil predicate on the "customer_identifier" field.
+func CustomerIdentifierIsNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldIsNull(FieldCustomerIdentifier))
+}
+
+// CustomerIdentifierNotNil applies the NotNil predicate on the "customer_identifier" field.
+func CustomerIdentifierNotNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotNull(FieldCustomerIdentifier))
+}
+
+// CustomerIdentifierEqualFold applies the EqualFold predicate on the "customer_identifier" field.
+func CustomerIdentifierEqualFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEqualFold(FieldCustomerIdentifier, v))
+}
+
+// CustomerIdentifierContainsFold applies the ContainsFold predicate on the "customer_identifier" field.
+func CustomerIdentifierContainsFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContainsFold(FieldCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierEQ applies the EQ predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierNEQ applies the NEQ predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierNEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierIn applies the In predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldNormalizedCustomerIdentifier, vs...))
+}
+
+// NormalizedCustomerIdentifierNotIn applies the NotIn predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierNotIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldNormalizedCustomerIdentifier, vs...))
+}
+
+// NormalizedCustomerIdentifierGT applies the GT predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierGT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGT(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierGTE applies the GTE predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierGTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGTE(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierLT applies the LT predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierLT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLT(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierLTE applies the LTE predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierLTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLTE(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierContains applies the Contains predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierContains(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContains(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierHasPrefix applies the HasPrefix predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierHasPrefix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasPrefix(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierHasSuffix applies the HasSuffix predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierHasSuffix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasSuffix(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierIsNil applies the IsNil predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierIsNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldIsNull(FieldNormalizedCustomerIdentifier))
+}
+
+// NormalizedCustomerIdentifierNotNil applies the NotNil predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierNotNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotNull(FieldNormalizedCustomerIdentifier))
+}
+
+// NormalizedCustomerIdentifierEqualFold applies the EqualFold predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierEqualFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEqualFold(FieldNormalizedCustomerIdentifier, v))
+}
+
+// NormalizedCustomerIdentifierContainsFold applies the ContainsFold predicate on the "normalized_customer_identifier" field.
+func NormalizedCustomerIdentifierContainsFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContainsFold(FieldNormalizedCustomerIdentifier, v))
+}
+
+// CustomerIdentifierKindEQ applies the EQ predicate on the "customer_identifier_kind" field.
+func CustomerIdentifierKindEQ(v CustomerIdentifierKind) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldCustomerIdentifierKind, v))
+}
+
+// CustomerIdentifierKindNEQ applies the NEQ predicate on the "customer_identifier_kind" field.
+func CustomerIdentifierKindNEQ(v CustomerIdentifierKind) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldCustomerIdentifierKind, v))
+}
+
+// CustomerIdentifierKindIn applies the In predicate on the "customer_identifier_kind" field.
+func CustomerIdentifierKindIn(vs ...CustomerIdentifierKind) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldCustomerIdentifierKind, vs...))
+}
+
+// CustomerIdentifierKindNotIn applies the NotIn predicate on the "customer_identifier_kind" field.
+func CustomerIdentifierKindNotIn(vs ...CustomerIdentifierKind) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldCustomerIdentifierKind, vs...))
+}
+
+// CustomerIdentifierKindIsNil applies the IsNil predicate on the "customer_identifier_kind" field.
+func CustomerIdentifierKindIsNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldIsNull(FieldCustomerIdentifierKind))
+}
+
+// CustomerIdentifierKindNotNil applies the NotNil predicate on the "customer_identifier_kind" field.
+func CustomerIdentifierKindNotNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotNull(FieldCustomerIdentifierKind))
 }
 
 // DocumentNumberEQ applies the EQ predicate on the "document_number" field.

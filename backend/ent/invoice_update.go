@@ -773,6 +773,18 @@ func (_u *InvoiceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.NormalizedSupplierCuiCleared() {
 		_spec.ClearField(invoice.FieldNormalizedSupplierCui, field.TypeString)
 	}
+	if _u.mutation.CustomerNameCleared() {
+		_spec.ClearField(invoice.FieldCustomerName, field.TypeString)
+	}
+	if _u.mutation.CustomerIdentifierCleared() {
+		_spec.ClearField(invoice.FieldCustomerIdentifier, field.TypeString)
+	}
+	if _u.mutation.NormalizedCustomerIdentifierCleared() {
+		_spec.ClearField(invoice.FieldNormalizedCustomerIdentifier, field.TypeString)
+	}
+	if _u.mutation.CustomerIdentifierKindCleared() {
+		_spec.ClearField(invoice.FieldCustomerIdentifierKind, field.TypeEnum)
+	}
 	if value, ok := _u.mutation.DocumentNumber(); ok {
 		_spec.SetField(invoice.FieldDocumentNumber, field.TypeString, value)
 	}
@@ -1971,6 +1983,18 @@ func (_u *InvoiceUpdateOne) sqlSave(ctx context.Context) (_node *Invoice, err er
 	}
 	if _u.mutation.NormalizedSupplierCuiCleared() {
 		_spec.ClearField(invoice.FieldNormalizedSupplierCui, field.TypeString)
+	}
+	if _u.mutation.CustomerNameCleared() {
+		_spec.ClearField(invoice.FieldCustomerName, field.TypeString)
+	}
+	if _u.mutation.CustomerIdentifierCleared() {
+		_spec.ClearField(invoice.FieldCustomerIdentifier, field.TypeString)
+	}
+	if _u.mutation.NormalizedCustomerIdentifierCleared() {
+		_spec.ClearField(invoice.FieldNormalizedCustomerIdentifier, field.TypeString)
+	}
+	if _u.mutation.CustomerIdentifierKindCleared() {
+		_spec.ClearField(invoice.FieldCustomerIdentifierKind, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.DocumentNumber(); ok {
 		_spec.SetField(invoice.FieldDocumentNumber, field.TypeString, value)

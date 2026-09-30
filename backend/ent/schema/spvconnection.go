@@ -24,6 +24,7 @@ func (SPVConnection) Fields() []ent.Field {
 		field.Enum("status").Values("ACTIVE", "EXPIRED", "REVOKED", "ERROR").Default("ACTIVE"),
 		field.Time("connected_at").Optional().Nillable(),
 		field.Time("last_successful_sync_at").Optional().Nillable(),
+		field.Time("last_successful_sent_sync_at").Optional().Nillable(),
 		field.Time("last_sync_started_at").Optional().Nillable(),
 		field.Time("last_sync_finished_at").Optional().Nillable(),
 		field.Enum("last_sync_status").Values("NEVER", "RUNNING", "SUCCEEDED", "FAILED").Default("NEVER"),

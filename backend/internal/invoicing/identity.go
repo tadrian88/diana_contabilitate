@@ -32,3 +32,9 @@ func (DuplicatePolicy) IssueDay(value time.Time) time.Time {
 	year, month, day := value.Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
+
+// CustomerIdentity classifies and normalizes the customer of an issued
+// invoice: a CNP, a Romanian CUI with or without RO, or a generic identifier.
+func CustomerIdentity(raw, country string) (fiscalidentity.Kind, string) {
+	return fiscalidentity.Classify(raw, country)
+}

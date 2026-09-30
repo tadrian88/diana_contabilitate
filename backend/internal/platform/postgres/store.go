@@ -307,6 +307,9 @@ func (s *Store) ListInvoices(ctx context.Context, filter invoicing.Filter) ([]in
 	if filter.ClientID != "" {
 		query.Where(invoice.ClientIDEQ(filter.ClientID))
 	}
+	if filter.Direction != "" {
+		query.Where(invoice.DirectionEQ(invoice.Direction(filter.Direction)))
+	}
 	ids, err := query.Order(ent.Desc(invoice.FieldIssueDate), ent.Asc(invoice.FieldID)).IDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list invoice identities: %w", err)
@@ -330,6 +333,8 @@ func invoiceDomain(row *ent.Invoice) (*invoicing.Invoice, error) {
 	result := &invoicing.Invoice{ModelVersion: row.ModelVersion, SourceFacts: row.SourceFacts, AccountingSnapshot: row.AccountingSnapshot, ReadinessReason: row.ReadinessReason, CurrentClassificationRunID: row.CurrentClassificationRunID,
 		ID: row.ID, ClientID: row.ClientID, SupplierName: row.SupplierName,
 		SupplierCUI: row.SupplierCui, NormalizedSupplierCUI: row.NormalizedSupplierCui,
+		Direction: invoicing.Direction(row.Direction), CustomerName: row.CustomerName, CustomerIdentifier: row.CustomerIdentifier,
+		NormalizedCustomerID: row.NormalizedCustomerIdentifier, CustomerIdentifierKind: (*string)(row.CustomerIdentifierKind),
 		DocumentNumber: row.DocumentNumber, NormalizedDocumentNumber: row.NormalizedDocumentNumber,
 		IssueDate: row.IssueDate, IssueDay: row.IssueDay, DueDate: row.DueDate,
 		Total:        money.Money{Amount: amount, Currency: row.Currency},
@@ -434,6 +439,14 @@ func (s *Store) IngestInvoice(ctx context.Context, input invoicing.IngestionInpu
 	}
 	if input.DueDate != nil {
 		create.SetDueDate(*input.DueDate)
+	}
+	create.SetDirection(invoice.Direction(input.Direction))
+	if input.CustomerName != "" && input.CustomerIdentifier != "" {
+		kind, normalizedCustomer := invoicing.CustomerIdentity(input.CustomerIdentifier, input.CustomerCountry)
+		if normalizedCustomer != "" {
+			create.SetCustomerName(input.CustomerName).SetCustomerIdentifier(input.CustomerIdentifier).
+				SetNormalizedCustomerIdentifier(normalizedCustomer).SetCustomerIdentifierKind(invoice.CustomerIdentifierKind(kind))
+		}
 	}
 	if canonical != nil {
 		amountMatches := input.Total.Amount.Equal(canonical.Total.Amount)

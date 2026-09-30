@@ -15,24 +15,38 @@ type Contract struct {
 	SupplierName          string
 	SupplierCUI           string
 	NormalizedSupplierCUI string
-	Reference             string
-	EffectiveFrom         time.Time
-	EffectiveTo           *time.Time
-	PeriodType            string
-	Value                 money.Money
-	HasLegacyTotalValue   bool
-	UnitType              string
-	PaymentTerms          string
-	SourceReference       *string
-	SourceMetadata        *string
-	SourceDocumentID      *string
-	ExtractionAttemptID   *string
-	Revision              uint64
-	LifecycleState        string
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
-	ServiceTerms          []ServiceTerm
+	// ClientRole is BUYER (purchase contract) or SUPPLIER (the client sells or
+	// leases, e.g. as Locator); for SUPPLIER the counterparty is the buyer (D-126).
+	ClientRole          string
+	BuyerName           *string
+	BuyerCUI            *string
+	NormalizedBuyerCUI  *string
+	Reference           string
+	EffectiveFrom       time.Time
+	EffectiveTo         *time.Time
+	PeriodType          string
+	Value               money.Money
+	HasLegacyTotalValue bool
+	UnitType            string
+	PaymentTerms        string
+	SourceReference     *string
+	SourceMetadata      *string
+	SourceDocumentID    *string
+	ExtractionAttemptID *string
+	Revision            uint64
+	LifecycleState      string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	ServiceTerms        []ServiceTerm
 }
+
+const (
+	ClientRoleBuyer    = "BUYER"
+	ClientRoleSupplier = "SUPPLIER"
+)
+
+// ClientIsSupplier reports a sale contract, where the counterparty is the buyer.
+func (c Contract) ClientIsSupplier() bool { return c.ClientRole == ClientRoleSupplier }
 
 type ServiceTerm struct {
 	ID                 string

@@ -26,6 +26,14 @@ type Contract struct {
 	SupplierCui string `json:"supplier_cui,omitempty"`
 	// NormalizedSupplierCui holds the value of the "normalized_supplier_cui" field.
 	NormalizedSupplierCui string `json:"normalized_supplier_cui,omitempty"`
+	// ClientRole holds the value of the "client_role" field.
+	ClientRole contract.ClientRole `json:"client_role,omitempty"`
+	// BuyerName holds the value of the "buyer_name" field.
+	BuyerName *string `json:"buyer_name,omitempty"`
+	// BuyerCui holds the value of the "buyer_cui" field.
+	BuyerCui *string `json:"buyer_cui,omitempty"`
+	// NormalizedBuyerCui holds the value of the "normalized_buyer_cui" field.
+	NormalizedBuyerCui *string `json:"normalized_buyer_cui,omitempty"`
 	// Reference holds the value of the "reference" field.
 	Reference string `json:"reference,omitempty"`
 	// EffectiveFrom holds the value of the "effective_from" field.
@@ -128,7 +136,7 @@ func (*Contract) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case contract.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case contract.FieldID, contract.FieldClientID, contract.FieldSupplierName, contract.FieldSupplierCui, contract.FieldNormalizedSupplierCui, contract.FieldReference, contract.FieldPeriodType, contract.FieldLifecycleState, contract.FieldTotalValue, contract.FieldCurrency, contract.FieldUnitType, contract.FieldPaymentTerms, contract.FieldSourceReference, contract.FieldSourceMetadata, contract.FieldSourceDocumentID, contract.FieldExtractionAttemptID:
+		case contract.FieldID, contract.FieldClientID, contract.FieldSupplierName, contract.FieldSupplierCui, contract.FieldNormalizedSupplierCui, contract.FieldClientRole, contract.FieldBuyerName, contract.FieldBuyerCui, contract.FieldNormalizedBuyerCui, contract.FieldReference, contract.FieldPeriodType, contract.FieldLifecycleState, contract.FieldTotalValue, contract.FieldCurrency, contract.FieldUnitType, contract.FieldPaymentTerms, contract.FieldSourceReference, contract.FieldSourceMetadata, contract.FieldSourceDocumentID, contract.FieldExtractionAttemptID:
 			values[i] = new(sql.NullString)
 		case contract.FieldEffectiveFrom, contract.FieldEffectiveTo, contract.FieldCreatedAt, contract.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -176,6 +184,33 @@ func (_m *Contract) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field normalized_supplier_cui", values[i])
 			} else if value.Valid {
 				_m.NormalizedSupplierCui = value.String
+			}
+		case contract.FieldClientRole:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field client_role", values[i])
+			} else if value.Valid {
+				_m.ClientRole = contract.ClientRole(value.String)
+			}
+		case contract.FieldBuyerName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field buyer_name", values[i])
+			} else if value.Valid {
+				_m.BuyerName = new(string)
+				*_m.BuyerName = value.String
+			}
+		case contract.FieldBuyerCui:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field buyer_cui", values[i])
+			} else if value.Valid {
+				_m.BuyerCui = new(string)
+				*_m.BuyerCui = value.String
+			}
+		case contract.FieldNormalizedBuyerCui:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field normalized_buyer_cui", values[i])
+			} else if value.Valid {
+				_m.NormalizedBuyerCui = new(string)
+				*_m.NormalizedBuyerCui = value.String
 			}
 		case contract.FieldReference:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -351,6 +386,24 @@ func (_m *Contract) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("normalized_supplier_cui=")
 	builder.WriteString(_m.NormalizedSupplierCui)
+	builder.WriteString(", ")
+	builder.WriteString("client_role=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ClientRole))
+	builder.WriteString(", ")
+	if v := _m.BuyerName; v != nil {
+		builder.WriteString("buyer_name=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.BuyerCui; v != nil {
+		builder.WriteString("buyer_cui=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.NormalizedBuyerCui; v != nil {
+		builder.WriteString("normalized_buyer_cui=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("reference=")
 	builder.WriteString(_m.Reference)

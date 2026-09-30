@@ -351,6 +351,10 @@ var (
 		{Name: "supplier_name", Type: field.TypeString},
 		{Name: "supplier_cui", Type: field.TypeString},
 		{Name: "normalized_supplier_cui", Type: field.TypeString},
+		{Name: "client_role", Type: field.TypeEnum, Enums: []string{"BUYER", "SUPPLIER"}, Default: "BUYER"},
+		{Name: "buyer_name", Type: field.TypeString, Nullable: true},
+		{Name: "buyer_cui", Type: field.TypeString, Nullable: true},
+		{Name: "normalized_buyer_cui", Type: field.TypeString, Nullable: true},
 		{Name: "reference", Type: field.TypeString},
 		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
 		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "date"}},
@@ -378,7 +382,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "contracts_clients_contracts",
-				Columns:    []*schema.Column{ContractsColumns[21]},
+				Columns:    []*schema.Column{ContractsColumns[25]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -387,22 +391,30 @@ var (
 			{
 				Name:    "contract_id_client_id",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[0], ContractsColumns[21]},
+				Columns: []*schema.Column{ContractsColumns[0], ContractsColumns[25]},
 			},
 			{
 				Name:    "contract_client_id_normalized_supplier_cui",
 				Unique:  false,
-				Columns: []*schema.Column{ContractsColumns[21], ContractsColumns[3]},
+				Columns: []*schema.Column{ContractsColumns[25], ContractsColumns[3]},
+			},
+			{
+				Name:    "contract_client_id_normalized_buyer_cui",
+				Unique:  false,
+				Columns: []*schema.Column{ContractsColumns[25], ContractsColumns[7]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "client_role = 'SUPPLIER'",
+				},
 			},
 			{
 				Name:    "contract_source_document_id",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[16]},
+				Columns: []*schema.Column{ContractsColumns[20]},
 			},
 			{
 				Name:    "contract_extraction_attempt_id",
 				Unique:  true,
-				Columns: []*schema.Column{ContractsColumns[17]},
+				Columns: []*schema.Column{ContractsColumns[21]},
 			},
 		},
 	}
@@ -660,6 +672,11 @@ var (
 		{Name: "supplier_name", Type: field.TypeString},
 		{Name: "supplier_cui", Type: field.TypeString, Nullable: true},
 		{Name: "normalized_supplier_cui", Type: field.TypeString, Nullable: true},
+		{Name: "direction", Type: field.TypeEnum, Enums: []string{"INCOMING", "OUTGOING"}, Default: "INCOMING"},
+		{Name: "customer_name", Type: field.TypeString, Nullable: true},
+		{Name: "customer_identifier", Type: field.TypeString, Nullable: true},
+		{Name: "normalized_customer_identifier", Type: field.TypeString, Nullable: true},
+		{Name: "customer_identifier_kind", Type: field.TypeEnum, Nullable: true, Enums: []string{"CUI", "CNP", "OTHER"}},
 		{Name: "document_number", Type: field.TypeString},
 		{Name: "normalized_document_number", Type: field.TypeString},
 		{Name: "issue_date", Type: field.TypeTime},
@@ -689,7 +706,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "invoices_clients_invoices",
-				Columns:    []*schema.Column{InvoicesColumns[28]},
+				Columns:    []*schema.Column{InvoicesColumns[33]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -698,32 +715,45 @@ var (
 			{
 				Name:    "invoice_pipeline_status",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[23]},
+				Columns: []*schema.Column{InvoicesColumns[28]},
 			},
 			{
 				Name:    "invoice_issue_date",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[11]},
+				Columns: []*schema.Column{InvoicesColumns[16]},
 			},
 			{
 				Name:    "invoice_client_id",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[28]},
+				Columns: []*schema.Column{InvoicesColumns[33]},
 			},
 			{
 				Name:    "invoice_id_client_id",
 				Unique:  true,
-				Columns: []*schema.Column{InvoicesColumns[0], InvoicesColumns[28]},
+				Columns: []*schema.Column{InvoicesColumns[0], InvoicesColumns[33]},
 			},
 			{
 				Name:    "invoice_client_id_spv_reference",
 				Unique:  true,
-				Columns: []*schema.Column{InvoicesColumns[28], InvoicesColumns[16]},
+				Columns: []*schema.Column{InvoicesColumns[33], InvoicesColumns[21]},
+			},
+			{
+				Name:    "invoice_client_id_direction",
+				Unique:  false,
+				Columns: []*schema.Column{InvoicesColumns[33], InvoicesColumns[9]},
+			},
+			{
+				Name:    "invoice_client_id_normalized_customer_identifier",
+				Unique:  false,
+				Columns: []*schema.Column{InvoicesColumns[33], InvoicesColumns[12]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "direction = 'OUTGOING'",
+				},
 			},
 			{
 				Name:    "invoice_client_id_normalized_supplier_cui_normalized_document_number_issue_day",
 				Unique:  false,
-				Columns: []*schema.Column{InvoicesColumns[28], InvoicesColumns[8], InvoicesColumns[10], InvoicesColumns[12]},
+				Columns: []*schema.Column{InvoicesColumns[33], InvoicesColumns[8], InvoicesColumns[15], InvoicesColumns[17]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "duplicate_of_invoice_id IS NULL AND normalized_supplier_cui IS NOT NULL",
 				},
@@ -731,7 +761,7 @@ var (
 			{
 				Name:    "invoice_client_id_normalized_supplier_cui_normalized_document_number_issue_day",
 				Unique:  true,
-				Columns: []*schema.Column{InvoicesColumns[28], InvoicesColumns[8], InvoicesColumns[10], InvoicesColumns[12]},
+				Columns: []*schema.Column{InvoicesColumns[33], InvoicesColumns[8], InvoicesColumns[15], InvoicesColumns[17]},
 			},
 		},
 	}
@@ -1022,6 +1052,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"ACTIVE", "EXPIRED", "REVOKED", "ERROR"}, Default: "ACTIVE"},
 		{Name: "connected_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_successful_sync_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_successful_sent_sync_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_sync_started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_sync_finished_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_sync_status", Type: field.TypeEnum, Enums: []string{"NEVER", "RUNNING", "SUCCEEDED", "FAILED"}, Default: "NEVER"},
@@ -1039,7 +1070,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "spv_connections_clients_spv_connections",
-				Columns:    []*schema.Column{SpvConnectionsColumns[17]},
+				Columns:    []*schema.Column{SpvConnectionsColumns[18]},
 				RefColumns: []*schema.Column{ClientsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1048,7 +1079,7 @@ var (
 			{
 				Name:    "spvconnection_client_id",
 				Unique:  true,
-				Columns: []*schema.Column{SpvConnectionsColumns[17]},
+				Columns: []*schema.Column{SpvConnectionsColumns[18]},
 			},
 			{
 				Name:    "spvconnection_environment_cif",

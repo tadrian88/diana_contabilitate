@@ -34,6 +34,8 @@ const (
 	FieldConnectedAt = "connected_at"
 	// FieldLastSuccessfulSyncAt holds the string denoting the last_successful_sync_at field in the database.
 	FieldLastSuccessfulSyncAt = "last_successful_sync_at"
+	// FieldLastSuccessfulSentSyncAt holds the string denoting the last_successful_sent_sync_at field in the database.
+	FieldLastSuccessfulSentSyncAt = "last_successful_sent_sync_at"
 	// FieldLastSyncStartedAt holds the string denoting the last_sync_started_at field in the database.
 	FieldLastSyncStartedAt = "last_sync_started_at"
 	// FieldLastSyncFinishedAt holds the string denoting the last_sync_finished_at field in the database.
@@ -83,6 +85,7 @@ var Columns = []string{
 	FieldStatus,
 	FieldConnectedAt,
 	FieldLastSuccessfulSyncAt,
+	FieldLastSuccessfulSentSyncAt,
 	FieldLastSyncStartedAt,
 	FieldLastSyncFinishedAt,
 	FieldLastSyncStatus,
@@ -246,6 +249,11 @@ func ByConnectedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByLastSuccessfulSyncAt orders the results by the last_successful_sync_at field.
 func ByLastSuccessfulSyncAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastSuccessfulSyncAt, opts...).ToFunc()
+}
+
+// ByLastSuccessfulSentSyncAt orders the results by the last_successful_sent_sync_at field.
+func ByLastSuccessfulSentSyncAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastSuccessfulSentSyncAt, opts...).ToFunc()
 }
 
 // ByLastSyncStartedAt orders the results by the last_sync_started_at field.

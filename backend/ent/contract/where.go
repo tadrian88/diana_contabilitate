@@ -85,6 +85,21 @@ func NormalizedSupplierCui(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldEQ(FieldNormalizedSupplierCui, v))
 }
 
+// BuyerName applies equality check predicate on the "buyer_name" field. It's identical to BuyerNameEQ.
+func BuyerName(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldBuyerName, v))
+}
+
+// BuyerCui applies equality check predicate on the "buyer_cui" field. It's identical to BuyerCuiEQ.
+func BuyerCui(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldBuyerCui, v))
+}
+
+// NormalizedBuyerCui applies equality check predicate on the "normalized_buyer_cui" field. It's identical to NormalizedBuyerCuiEQ.
+func NormalizedBuyerCui(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldNormalizedBuyerCui, v))
+}
+
 // Reference applies equality check predicate on the "reference" field. It's identical to ReferenceEQ.
 func Reference(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldEQ(FieldReference, v))
@@ -418,6 +433,251 @@ func NormalizedSupplierCuiEqualFold(v string) predicate.Contract {
 // NormalizedSupplierCuiContainsFold applies the ContainsFold predicate on the "normalized_supplier_cui" field.
 func NormalizedSupplierCuiContainsFold(v string) predicate.Contract {
 	return predicate.Contract(sql.FieldContainsFold(FieldNormalizedSupplierCui, v))
+}
+
+// ClientRoleEQ applies the EQ predicate on the "client_role" field.
+func ClientRoleEQ(v ClientRole) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldClientRole, v))
+}
+
+// ClientRoleNEQ applies the NEQ predicate on the "client_role" field.
+func ClientRoleNEQ(v ClientRole) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldClientRole, v))
+}
+
+// ClientRoleIn applies the In predicate on the "client_role" field.
+func ClientRoleIn(vs ...ClientRole) predicate.Contract {
+	return predicate.Contract(sql.FieldIn(FieldClientRole, vs...))
+}
+
+// ClientRoleNotIn applies the NotIn predicate on the "client_role" field.
+func ClientRoleNotIn(vs ...ClientRole) predicate.Contract {
+	return predicate.Contract(sql.FieldNotIn(FieldClientRole, vs...))
+}
+
+// BuyerNameEQ applies the EQ predicate on the "buyer_name" field.
+func BuyerNameEQ(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldBuyerName, v))
+}
+
+// BuyerNameNEQ applies the NEQ predicate on the "buyer_name" field.
+func BuyerNameNEQ(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldBuyerName, v))
+}
+
+// BuyerNameIn applies the In predicate on the "buyer_name" field.
+func BuyerNameIn(vs ...string) predicate.Contract {
+	return predicate.Contract(sql.FieldIn(FieldBuyerName, vs...))
+}
+
+// BuyerNameNotIn applies the NotIn predicate on the "buyer_name" field.
+func BuyerNameNotIn(vs ...string) predicate.Contract {
+	return predicate.Contract(sql.FieldNotIn(FieldBuyerName, vs...))
+}
+
+// BuyerNameGT applies the GT predicate on the "buyer_name" field.
+func BuyerNameGT(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldGT(FieldBuyerName, v))
+}
+
+// BuyerNameGTE applies the GTE predicate on the "buyer_name" field.
+func BuyerNameGTE(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldGTE(FieldBuyerName, v))
+}
+
+// BuyerNameLT applies the LT predicate on the "buyer_name" field.
+func BuyerNameLT(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldLT(FieldBuyerName, v))
+}
+
+// BuyerNameLTE applies the LTE predicate on the "buyer_name" field.
+func BuyerNameLTE(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldLTE(FieldBuyerName, v))
+}
+
+// BuyerNameContains applies the Contains predicate on the "buyer_name" field.
+func BuyerNameContains(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldContains(FieldBuyerName, v))
+}
+
+// BuyerNameHasPrefix applies the HasPrefix predicate on the "buyer_name" field.
+func BuyerNameHasPrefix(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldHasPrefix(FieldBuyerName, v))
+}
+
+// BuyerNameHasSuffix applies the HasSuffix predicate on the "buyer_name" field.
+func BuyerNameHasSuffix(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldHasSuffix(FieldBuyerName, v))
+}
+
+// BuyerNameIsNil applies the IsNil predicate on the "buyer_name" field.
+func BuyerNameIsNil() predicate.Contract {
+	return predicate.Contract(sql.FieldIsNull(FieldBuyerName))
+}
+
+// BuyerNameNotNil applies the NotNil predicate on the "buyer_name" field.
+func BuyerNameNotNil() predicate.Contract {
+	return predicate.Contract(sql.FieldNotNull(FieldBuyerName))
+}
+
+// BuyerNameEqualFold applies the EqualFold predicate on the "buyer_name" field.
+func BuyerNameEqualFold(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEqualFold(FieldBuyerName, v))
+}
+
+// BuyerNameContainsFold applies the ContainsFold predicate on the "buyer_name" field.
+func BuyerNameContainsFold(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldContainsFold(FieldBuyerName, v))
+}
+
+// BuyerCuiEQ applies the EQ predicate on the "buyer_cui" field.
+func BuyerCuiEQ(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldBuyerCui, v))
+}
+
+// BuyerCuiNEQ applies the NEQ predicate on the "buyer_cui" field.
+func BuyerCuiNEQ(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldBuyerCui, v))
+}
+
+// BuyerCuiIn applies the In predicate on the "buyer_cui" field.
+func BuyerCuiIn(vs ...string) predicate.Contract {
+	return predicate.Contract(sql.FieldIn(FieldBuyerCui, vs...))
+}
+
+// BuyerCuiNotIn applies the NotIn predicate on the "buyer_cui" field.
+func BuyerCuiNotIn(vs ...string) predicate.Contract {
+	return predicate.Contract(sql.FieldNotIn(FieldBuyerCui, vs...))
+}
+
+// BuyerCuiGT applies the GT predicate on the "buyer_cui" field.
+func BuyerCuiGT(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldGT(FieldBuyerCui, v))
+}
+
+// BuyerCuiGTE applies the GTE predicate on the "buyer_cui" field.
+func BuyerCuiGTE(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldGTE(FieldBuyerCui, v))
+}
+
+// BuyerCuiLT applies the LT predicate on the "buyer_cui" field.
+func BuyerCuiLT(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldLT(FieldBuyerCui, v))
+}
+
+// BuyerCuiLTE applies the LTE predicate on the "buyer_cui" field.
+func BuyerCuiLTE(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldLTE(FieldBuyerCui, v))
+}
+
+// BuyerCuiContains applies the Contains predicate on the "buyer_cui" field.
+func BuyerCuiContains(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldContains(FieldBuyerCui, v))
+}
+
+// BuyerCuiHasPrefix applies the HasPrefix predicate on the "buyer_cui" field.
+func BuyerCuiHasPrefix(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldHasPrefix(FieldBuyerCui, v))
+}
+
+// BuyerCuiHasSuffix applies the HasSuffix predicate on the "buyer_cui" field.
+func BuyerCuiHasSuffix(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldHasSuffix(FieldBuyerCui, v))
+}
+
+// BuyerCuiIsNil applies the IsNil predicate on the "buyer_cui" field.
+func BuyerCuiIsNil() predicate.Contract {
+	return predicate.Contract(sql.FieldIsNull(FieldBuyerCui))
+}
+
+// BuyerCuiNotNil applies the NotNil predicate on the "buyer_cui" field.
+func BuyerCuiNotNil() predicate.Contract {
+	return predicate.Contract(sql.FieldNotNull(FieldBuyerCui))
+}
+
+// BuyerCuiEqualFold applies the EqualFold predicate on the "buyer_cui" field.
+func BuyerCuiEqualFold(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEqualFold(FieldBuyerCui, v))
+}
+
+// BuyerCuiContainsFold applies the ContainsFold predicate on the "buyer_cui" field.
+func BuyerCuiContainsFold(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldContainsFold(FieldBuyerCui, v))
+}
+
+// NormalizedBuyerCuiEQ applies the EQ predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiEQ(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEQ(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiNEQ applies the NEQ predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiNEQ(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldNEQ(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiIn applies the In predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiIn(vs ...string) predicate.Contract {
+	return predicate.Contract(sql.FieldIn(FieldNormalizedBuyerCui, vs...))
+}
+
+// NormalizedBuyerCuiNotIn applies the NotIn predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiNotIn(vs ...string) predicate.Contract {
+	return predicate.Contract(sql.FieldNotIn(FieldNormalizedBuyerCui, vs...))
+}
+
+// NormalizedBuyerCuiGT applies the GT predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiGT(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldGT(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiGTE applies the GTE predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiGTE(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldGTE(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiLT applies the LT predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiLT(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldLT(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiLTE applies the LTE predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiLTE(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldLTE(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiContains applies the Contains predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiContains(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldContains(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiHasPrefix applies the HasPrefix predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiHasPrefix(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldHasPrefix(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiHasSuffix applies the HasSuffix predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiHasSuffix(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldHasSuffix(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiIsNil applies the IsNil predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiIsNil() predicate.Contract {
+	return predicate.Contract(sql.FieldIsNull(FieldNormalizedBuyerCui))
+}
+
+// NormalizedBuyerCuiNotNil applies the NotNil predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiNotNil() predicate.Contract {
+	return predicate.Contract(sql.FieldNotNull(FieldNormalizedBuyerCui))
+}
+
+// NormalizedBuyerCuiEqualFold applies the EqualFold predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiEqualFold(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldEqualFold(FieldNormalizedBuyerCui, v))
+}
+
+// NormalizedBuyerCuiContainsFold applies the ContainsFold predicate on the "normalized_buyer_cui" field.
+func NormalizedBuyerCuiContainsFold(v string) predicate.Contract {
+	return predicate.Contract(sql.FieldContainsFold(FieldNormalizedBuyerCui, v))
 }
 
 // ReferenceEQ applies the EQ predicate on the "reference" field.

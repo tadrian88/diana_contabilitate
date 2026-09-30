@@ -40,6 +40,16 @@ type Invoice struct {
 	SupplierCui *string `json:"supplier_cui,omitempty"`
 	// NormalizedSupplierCui holds the value of the "normalized_supplier_cui" field.
 	NormalizedSupplierCui *string `json:"normalized_supplier_cui,omitempty"`
+	// Direction holds the value of the "direction" field.
+	Direction invoice.Direction `json:"direction,omitempty"`
+	// CustomerName holds the value of the "customer_name" field.
+	CustomerName *string `json:"customer_name,omitempty"`
+	// CustomerIdentifier holds the value of the "customer_identifier" field.
+	CustomerIdentifier *string `json:"customer_identifier,omitempty"`
+	// NormalizedCustomerIdentifier holds the value of the "normalized_customer_identifier" field.
+	NormalizedCustomerIdentifier *string `json:"normalized_customer_identifier,omitempty"`
+	// CustomerIdentifierKind holds the value of the "customer_identifier_kind" field.
+	CustomerIdentifierKind *invoice.CustomerIdentifierKind `json:"customer_identifier_kind,omitempty"`
 	// DocumentNumber holds the value of the "document_number" field.
 	DocumentNumber string `json:"document_number,omitempty"`
 	// NormalizedDocumentNumber holds the value of the "normalized_document_number" field.
@@ -207,7 +217,7 @@ func (*Invoice) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case invoice.FieldRevision:
 			values[i] = new(sql.NullInt64)
-		case invoice.FieldID, invoice.FieldModelVersion, invoice.FieldReadinessReason, invoice.FieldCurrentClassificationRunID, invoice.FieldClientID, invoice.FieldSupplierName, invoice.FieldSupplierCui, invoice.FieldNormalizedSupplierCui, invoice.FieldDocumentNumber, invoice.FieldNormalizedDocumentNumber, invoice.FieldTotalAmount, invoice.FieldCurrency, invoice.FieldSpvReference, invoice.FieldIngestionSource, invoice.FieldExternalDeliveryID, invoice.FieldDuplicateOfInvoiceID, invoice.FieldDocumentType, invoice.FieldPipelineStatus, invoice.FieldSagaStatus:
+		case invoice.FieldID, invoice.FieldModelVersion, invoice.FieldReadinessReason, invoice.FieldCurrentClassificationRunID, invoice.FieldClientID, invoice.FieldSupplierName, invoice.FieldSupplierCui, invoice.FieldNormalizedSupplierCui, invoice.FieldDirection, invoice.FieldCustomerName, invoice.FieldCustomerIdentifier, invoice.FieldNormalizedCustomerIdentifier, invoice.FieldCustomerIdentifierKind, invoice.FieldDocumentNumber, invoice.FieldNormalizedDocumentNumber, invoice.FieldTotalAmount, invoice.FieldCurrency, invoice.FieldSpvReference, invoice.FieldIngestionSource, invoice.FieldExternalDeliveryID, invoice.FieldDuplicateOfInvoiceID, invoice.FieldDocumentType, invoice.FieldPipelineStatus, invoice.FieldSagaStatus:
 			values[i] = new(sql.NullString)
 		case invoice.FieldIssueDate, invoice.FieldIssueDay, invoice.FieldDueDate, invoice.FieldCreatedAt, invoice.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -292,6 +302,40 @@ func (_m *Invoice) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.NormalizedSupplierCui = new(string)
 				*_m.NormalizedSupplierCui = value.String
+			}
+		case invoice.FieldDirection:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field direction", values[i])
+			} else if value.Valid {
+				_m.Direction = invoice.Direction(value.String)
+			}
+		case invoice.FieldCustomerName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field customer_name", values[i])
+			} else if value.Valid {
+				_m.CustomerName = new(string)
+				*_m.CustomerName = value.String
+			}
+		case invoice.FieldCustomerIdentifier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field customer_identifier", values[i])
+			} else if value.Valid {
+				_m.CustomerIdentifier = new(string)
+				*_m.CustomerIdentifier = value.String
+			}
+		case invoice.FieldNormalizedCustomerIdentifier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field normalized_customer_identifier", values[i])
+			} else if value.Valid {
+				_m.NormalizedCustomerIdentifier = new(string)
+				*_m.NormalizedCustomerIdentifier = value.String
+			}
+		case invoice.FieldCustomerIdentifierKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field customer_identifier_kind", values[i])
+			} else if value.Valid {
+				_m.CustomerIdentifierKind = new(invoice.CustomerIdentifierKind)
+				*_m.CustomerIdentifierKind = invoice.CustomerIdentifierKind(value.String)
 			}
 		case invoice.FieldDocumentNumber:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -523,6 +567,29 @@ func (_m *Invoice) String() string {
 	if v := _m.NormalizedSupplierCui; v != nil {
 		builder.WriteString("normalized_supplier_cui=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("direction=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Direction))
+	builder.WriteString(", ")
+	if v := _m.CustomerName; v != nil {
+		builder.WriteString("customer_name=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.CustomerIdentifier; v != nil {
+		builder.WriteString("customer_identifier=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.NormalizedCustomerIdentifier; v != nil {
+		builder.WriteString("normalized_customer_identifier=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.CustomerIdentifierKind; v != nil {
+		builder.WriteString("customer_identifier_kind=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("document_number=")

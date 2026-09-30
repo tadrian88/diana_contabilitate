@@ -38,6 +38,8 @@ type SPVConnection struct {
 	ConnectedAt *time.Time `json:"connected_at,omitempty"`
 	// LastSuccessfulSyncAt holds the value of the "last_successful_sync_at" field.
 	LastSuccessfulSyncAt *time.Time `json:"last_successful_sync_at,omitempty"`
+	// LastSuccessfulSentSyncAt holds the value of the "last_successful_sent_sync_at" field.
+	LastSuccessfulSentSyncAt *time.Time `json:"last_successful_sent_sync_at,omitempty"`
 	// LastSyncStartedAt holds the value of the "last_sync_started_at" field.
 	LastSyncStartedAt *time.Time `json:"last_sync_started_at,omitempty"`
 	// LastSyncFinishedAt holds the value of the "last_sync_finished_at" field.
@@ -98,7 +100,7 @@ func (*SPVConnection) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case spvconnection.FieldID, spvconnection.FieldClientID, spvconnection.FieldCif, spvconnection.FieldEnvironment, spvconnection.FieldAccessTokenCiphertext, spvconnection.FieldRefreshTokenCiphertext, spvconnection.FieldStatus, spvconnection.FieldLastSyncStatus, spvconnection.FieldLastError:
 			values[i] = new(sql.NullString)
-		case spvconnection.FieldAccessTokenExpiresAt, spvconnection.FieldRefreshTokenExpiresAt, spvconnection.FieldConnectedAt, spvconnection.FieldLastSuccessfulSyncAt, spvconnection.FieldLastSyncStartedAt, spvconnection.FieldLastSyncFinishedAt, spvconnection.FieldCreatedAt, spvconnection.FieldUpdatedAt:
+		case spvconnection.FieldAccessTokenExpiresAt, spvconnection.FieldRefreshTokenExpiresAt, spvconnection.FieldConnectedAt, spvconnection.FieldLastSuccessfulSyncAt, spvconnection.FieldLastSuccessfulSentSyncAt, spvconnection.FieldLastSyncStartedAt, spvconnection.FieldLastSyncFinishedAt, spvconnection.FieldCreatedAt, spvconnection.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -183,6 +185,13 @@ func (_m *SPVConnection) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.LastSuccessfulSyncAt = new(time.Time)
 				*_m.LastSuccessfulSyncAt = value.Time
+			}
+		case spvconnection.FieldLastSuccessfulSentSyncAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field last_successful_sent_sync_at", values[i])
+			} else if value.Valid {
+				_m.LastSuccessfulSentSyncAt = new(time.Time)
+				*_m.LastSuccessfulSentSyncAt = value.Time
 			}
 		case spvconnection.FieldLastSyncStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -306,6 +315,11 @@ func (_m *SPVConnection) String() string {
 	builder.WriteString(", ")
 	if v := _m.LastSuccessfulSyncAt; v != nil {
 		builder.WriteString("last_successful_sync_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.LastSuccessfulSentSyncAt; v != nil {
+		builder.WriteString("last_successful_sent_sync_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")

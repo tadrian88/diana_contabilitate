@@ -685,3 +685,34 @@ func TestRuleMutationEndpointsMapStaleAndDuplicateCommands(t *testing.T) {
 		})
 	}
 }
+
+func TestListInvoicesMasksCustomerCNP(t *testing.T) {
+	now := time.Date(2026, time.June, 3, 10, 0, 0, 0, time.UTC)
+	customer, customerID, normalized, kind := "PERSOANĂ FIZICĂ TEST", "1800101420010", "1800101420010", "CNP"
+	item := &invoicing.Invoice{ID: "inv-issued", ClientID: "client-alfa", SupplierName: "Client Alfa", DocumentNumber: "VE-1", IssueDate: now,
+		Direction: invoicing.DirectionOutgoing, CustomerName: &customer, CustomerIdentifier: &customerID, NormalizedCustomerID: &normalized, CustomerIdentifierKind: &kind,
+		SourceFacts: &accounting.SourceFacts{BuyerLegalID: "1800101420010", SupplierVATID: "RO51741718"},
+		Total:       money.Money{Amount: money.MustParse("121.0000"), Currency: "RON"}, SPVReference: "SPV-ISSUED", PipelineStatus: invoicing.StatusAwaitingReview, SagaStatus: invoicing.SagaNotReady, Revision: 1, CreatedAt: now, UpdatedAt: now}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/invoices?clientId=client-alfa&direction=OUTGOING", nil)
+	response := httptest.NewRecorder()
+	testHandler(item).ServeHTTP(response, request)
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, `"direction":"OUTGOING"`) || !strings.Contains(body, `"customerIdentifier":"180***"`) || !strings.Contains(body, `"buyerLegalId":"180***"`) {
+		t.Fatalf("status=%d body=%s", response.Code, body)
+	}
+	if strings.Contains(body, "1800101420010") {
+		t.Fatalf("CNP leaked in full: %s", body)
+	}
+	if *item.CustomerIdentifier != "1800101420010" || item.SourceFacts.BuyerLegalID != "1800101420010" {
+		t.Fatal("masking must not mutate the stored invoice")
+	}
+}
+
+func TestListInvoicesRejectsUnknownDirection(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/invoices?direction=SALES", nil)
+	response := httptest.NewRecorder()
+	testHandler(nil).ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "VALIDATION_ERROR") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}

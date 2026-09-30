@@ -114,6 +114,20 @@ func (_c *SPVConnectionCreate) SetNillableLastSuccessfulSyncAt(v *time.Time) *SP
 	return _c
 }
 
+// SetLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field.
+func (_c *SPVConnectionCreate) SetLastSuccessfulSentSyncAt(v time.Time) *SPVConnectionCreate {
+	_c.mutation.SetLastSuccessfulSentSyncAt(v)
+	return _c
+}
+
+// SetNillableLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field if the given value is not nil.
+func (_c *SPVConnectionCreate) SetNillableLastSuccessfulSentSyncAt(v *time.Time) *SPVConnectionCreate {
+	if v != nil {
+		_c.SetLastSuccessfulSentSyncAt(*v)
+	}
+	return _c
+}
+
 // SetLastSyncStartedAt sets the "last_sync_started_at" field.
 func (_c *SPVConnectionCreate) SetLastSyncStartedAt(v time.Time) *SPVConnectionCreate {
 	_c.mutation.SetLastSyncStartedAt(v)
@@ -404,6 +418,10 @@ func (_c *SPVConnectionCreate) createSpec() (*SPVConnection, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.LastSuccessfulSyncAt(); ok {
 		_spec.SetField(spvconnection.FieldLastSuccessfulSyncAt, field.TypeTime, value)
 		_node.LastSuccessfulSyncAt = &value
+	}
+	if value, ok := _c.mutation.LastSuccessfulSentSyncAt(); ok {
+		_spec.SetField(spvconnection.FieldLastSuccessfulSentSyncAt, field.TypeTime, value)
+		_node.LastSuccessfulSentSyncAt = &value
 	}
 	if value, ok := _c.mutation.LastSyncStartedAt(); ok {
 		_spec.SetField(spvconnection.FieldLastSyncStartedAt, field.TypeTime, value)

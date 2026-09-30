@@ -31,6 +31,14 @@ func (Invoice) Fields() []ent.Field {
 		field.String("supplier_name").NotEmpty(),
 		field.String("supplier_cui").Optional().Nillable(),
 		field.String("normalized_supplier_cui").Optional().Nillable(),
+		// D-124: INCOMING (received) or OUTGOING (issued by the client). supplier_*
+		// stays the UBL supplier; an issued invoice also stores its customer. The
+		// identifier is raw (it may be a CNP) and masked only when presented.
+		field.Enum("direction").Values("INCOMING", "OUTGOING").Default("INCOMING").Immutable(),
+		field.String("customer_name").Optional().Nillable().Immutable(),
+		field.String("customer_identifier").Optional().Nillable().Immutable(),
+		field.String("normalized_customer_identifier").Optional().Nillable().Immutable(),
+		field.Enum("customer_identifier_kind").Values("CUI", "CNP", "OTHER").Optional().Nillable().Immutable(),
 		field.String("document_number").NotEmpty(),
 		field.String("normalized_document_number").NotEmpty(),
 		field.Time("issue_date"),
@@ -74,6 +82,8 @@ func (Invoice) Indexes() []ent.Index {
 		index.Fields("client_id"),
 		index.Fields("id", "client_id").Unique(),
 		index.Fields("client_id", "spv_reference").Unique(),
+		index.Fields("client_id", "direction"),
+		index.Fields("client_id", "normalized_customer_identifier").Annotations(entsql.IndexWhere("direction = 'OUTGOING'")),
 		index.Fields("client_id", "normalized_supplier_cui", "normalized_document_number", "issue_day"),
 		index.Fields("client_id", "normalized_supplier_cui", "normalized_document_number", "issue_day").
 			Unique().

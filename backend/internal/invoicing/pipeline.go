@@ -27,6 +27,12 @@ type IngestionInput struct {
 	DocumentType       DocumentType
 	SupplierName       string
 	SupplierCUI        *string
+	// Direction defaults to INCOMING. An OUTGOING invoice requires its customer;
+	// CustomerCountry only guides identifier normalization (D-124).
+	Direction          Direction
+	CustomerName       string
+	CustomerIdentifier string
+	CustomerCountry    string
 	DocumentNumber     string
 	IssueDate          time.Time
 	DueDate            *time.Time
@@ -107,6 +113,19 @@ func (s *Service) Ingest(ctx context.Context, input IngestionInput) (*Invoice, b
 	}
 	if input.DocumentType == "" {
 		input.DocumentType = DocumentTypeInvoice
+	}
+	if input.Direction == "" {
+		input.Direction = DirectionIncoming
+	}
+	if input.Direction != DirectionIncoming && input.Direction != DirectionOutgoing {
+		return nil, false, apperrors.ErrValidation
+	}
+	input.CustomerName = strings.TrimSpace(input.CustomerName)
+	input.CustomerIdentifier = strings.TrimSpace(input.CustomerIdentifier)
+	if input.Direction == DirectionOutgoing {
+		if _, normalized := CustomerIdentity(input.CustomerIdentifier, input.CustomerCountry); input.CustomerName == "" || normalized == "" {
+			return nil, false, apperrors.ErrValidation
+		}
 	}
 	if input.ClientID == "" || input.Source == "" || input.ExternalDeliveryID == "" || input.SupplierName == "" || input.SupplierCUI == nil || NormalizeBusinessIdentifier(*input.SupplierCUI) == "" || input.SPVReference == "" || NormalizeBusinessIdentifier(input.DocumentNumber) == "" || !input.Total.Amount.Valid() || len(input.Total.Currency) != 3 || input.Total.Currency != strings.ToUpper(input.Total.Currency) || (input.DocumentType != DocumentTypeInvoice && input.DocumentType != DocumentTypeCreditNote) {
 		return nil, false, apperrors.ErrValidation

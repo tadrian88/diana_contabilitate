@@ -124,6 +124,76 @@ func (_c *InvoiceCreate) SetNillableNormalizedSupplierCui(v *string) *InvoiceCre
 	return _c
 }
 
+// SetDirection sets the "direction" field.
+func (_c *InvoiceCreate) SetDirection(v invoice.Direction) *InvoiceCreate {
+	_c.mutation.SetDirection(v)
+	return _c
+}
+
+// SetNillableDirection sets the "direction" field if the given value is not nil.
+func (_c *InvoiceCreate) SetNillableDirection(v *invoice.Direction) *InvoiceCreate {
+	if v != nil {
+		_c.SetDirection(*v)
+	}
+	return _c
+}
+
+// SetCustomerName sets the "customer_name" field.
+func (_c *InvoiceCreate) SetCustomerName(v string) *InvoiceCreate {
+	_c.mutation.SetCustomerName(v)
+	return _c
+}
+
+// SetNillableCustomerName sets the "customer_name" field if the given value is not nil.
+func (_c *InvoiceCreate) SetNillableCustomerName(v *string) *InvoiceCreate {
+	if v != nil {
+		_c.SetCustomerName(*v)
+	}
+	return _c
+}
+
+// SetCustomerIdentifier sets the "customer_identifier" field.
+func (_c *InvoiceCreate) SetCustomerIdentifier(v string) *InvoiceCreate {
+	_c.mutation.SetCustomerIdentifier(v)
+	return _c
+}
+
+// SetNillableCustomerIdentifier sets the "customer_identifier" field if the given value is not nil.
+func (_c *InvoiceCreate) SetNillableCustomerIdentifier(v *string) *InvoiceCreate {
+	if v != nil {
+		_c.SetCustomerIdentifier(*v)
+	}
+	return _c
+}
+
+// SetNormalizedCustomerIdentifier sets the "normalized_customer_identifier" field.
+func (_c *InvoiceCreate) SetNormalizedCustomerIdentifier(v string) *InvoiceCreate {
+	_c.mutation.SetNormalizedCustomerIdentifier(v)
+	return _c
+}
+
+// SetNillableNormalizedCustomerIdentifier sets the "normalized_customer_identifier" field if the given value is not nil.
+func (_c *InvoiceCreate) SetNillableNormalizedCustomerIdentifier(v *string) *InvoiceCreate {
+	if v != nil {
+		_c.SetNormalizedCustomerIdentifier(*v)
+	}
+	return _c
+}
+
+// SetCustomerIdentifierKind sets the "customer_identifier_kind" field.
+func (_c *InvoiceCreate) SetCustomerIdentifierKind(v invoice.CustomerIdentifierKind) *InvoiceCreate {
+	_c.mutation.SetCustomerIdentifierKind(v)
+	return _c
+}
+
+// SetNillableCustomerIdentifierKind sets the "customer_identifier_kind" field if the given value is not nil.
+func (_c *InvoiceCreate) SetNillableCustomerIdentifierKind(v *invoice.CustomerIdentifierKind) *InvoiceCreate {
+	if v != nil {
+		_c.SetCustomerIdentifierKind(*v)
+	}
+	return _c
+}
+
 // SetDocumentNumber sets the "document_number" field.
 func (_c *InvoiceCreate) SetDocumentNumber(v string) *InvoiceCreate {
 	_c.mutation.SetDocumentNumber(v)
@@ -468,6 +538,10 @@ func (_c *InvoiceCreate) defaults() {
 		v := invoice.DefaultReadinessReason
 		_c.mutation.SetReadinessReason(v)
 	}
+	if _, ok := _c.mutation.Direction(); !ok {
+		v := invoice.DefaultDirection
+		_c.mutation.SetDirection(v)
+	}
 	if _, ok := _c.mutation.DocumentType(); !ok {
 		v := invoice.DefaultDocumentType
 		_c.mutation.SetDocumentType(v)
@@ -495,6 +569,19 @@ func (_c *InvoiceCreate) check() error {
 	if v, ok := _c.mutation.SupplierName(); ok {
 		if err := invoice.SupplierNameValidator(v); err != nil {
 			return &ValidationError{Name: "supplier_name", err: fmt.Errorf(`ent: validator failed for field "Invoice.supplier_name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Direction(); !ok {
+		return &ValidationError{Name: "direction", err: errors.New(`ent: missing required field "Invoice.direction"`)}
+	}
+	if v, ok := _c.mutation.Direction(); ok {
+		if err := invoice.DirectionValidator(v); err != nil {
+			return &ValidationError{Name: "direction", err: fmt.Errorf(`ent: validator failed for field "Invoice.direction": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.CustomerIdentifierKind(); ok {
+		if err := invoice.CustomerIdentifierKindValidator(v); err != nil {
+			return &ValidationError{Name: "customer_identifier_kind", err: fmt.Errorf(`ent: validator failed for field "Invoice.customer_identifier_kind": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.DocumentNumber(); !ok {
@@ -661,6 +748,26 @@ func (_c *InvoiceCreate) createSpec() (*Invoice, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.NormalizedSupplierCui(); ok {
 		_spec.SetField(invoice.FieldNormalizedSupplierCui, field.TypeString, value)
 		_node.NormalizedSupplierCui = &value
+	}
+	if value, ok := _c.mutation.Direction(); ok {
+		_spec.SetField(invoice.FieldDirection, field.TypeEnum, value)
+		_node.Direction = value
+	}
+	if value, ok := _c.mutation.CustomerName(); ok {
+		_spec.SetField(invoice.FieldCustomerName, field.TypeString, value)
+		_node.CustomerName = &value
+	}
+	if value, ok := _c.mutation.CustomerIdentifier(); ok {
+		_spec.SetField(invoice.FieldCustomerIdentifier, field.TypeString, value)
+		_node.CustomerIdentifier = &value
+	}
+	if value, ok := _c.mutation.NormalizedCustomerIdentifier(); ok {
+		_spec.SetField(invoice.FieldNormalizedCustomerIdentifier, field.TypeString, value)
+		_node.NormalizedCustomerIdentifier = &value
+	}
+	if value, ok := _c.mutation.CustomerIdentifierKind(); ok {
+		_spec.SetField(invoice.FieldCustomerIdentifierKind, field.TypeEnum, value)
+		_node.CustomerIdentifierKind = &value
 	}
 	if value, ok := _c.mutation.DocumentNumber(); ok {
 		_spec.SetField(invoice.FieldDocumentNumber, field.TypeString, value)

@@ -272,15 +272,15 @@ func init() {
 	// contract.NormalizedSupplierCuiValidator is a validator for the "normalized_supplier_cui" field. It is called by the builders before save.
 	contract.NormalizedSupplierCuiValidator = contractDescNormalizedSupplierCui.Validators[0].(func(string) error)
 	// contractDescReference is the schema descriptor for reference field.
-	contractDescReference := contractFields[5].Descriptor()
+	contractDescReference := contractFields[9].Descriptor()
 	// contract.ReferenceValidator is a validator for the "reference" field. It is called by the builders before save.
 	contract.ReferenceValidator = contractDescReference.Validators[0].(func(string) error)
 	// contractDescHasLegacyTotalValue is the schema descriptor for has_legacy_total_value field.
-	contractDescHasLegacyTotalValue := contractFields[11].Descriptor()
+	contractDescHasLegacyTotalValue := contractFields[15].Descriptor()
 	// contract.DefaultHasLegacyTotalValue holds the default value on creation for the has_legacy_total_value field.
 	contract.DefaultHasLegacyTotalValue = contractDescHasLegacyTotalValue.Default.(bool)
 	// contractDescCurrency is the schema descriptor for currency field.
-	contractDescCurrency := contractFields[12].Descriptor()
+	contractDescCurrency := contractFields[16].Descriptor()
 	// contract.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	contract.CurrencyValidator = func() func(string) error {
 		validators := contractDescCurrency.Validators
@@ -298,15 +298,15 @@ func init() {
 		}
 	}()
 	// contractDescUnitType is the schema descriptor for unit_type field.
-	contractDescUnitType := contractFields[13].Descriptor()
+	contractDescUnitType := contractFields[17].Descriptor()
 	// contract.UnitTypeValidator is a validator for the "unit_type" field. It is called by the builders before save.
 	contract.UnitTypeValidator = contractDescUnitType.Validators[0].(func(string) error)
 	// contractDescPaymentTerms is the schema descriptor for payment_terms field.
-	contractDescPaymentTerms := contractFields[14].Descriptor()
+	contractDescPaymentTerms := contractFields[18].Descriptor()
 	// contract.PaymentTermsValidator is a validator for the "payment_terms" field. It is called by the builders before save.
 	contract.PaymentTermsValidator = contractDescPaymentTerms.Validators[0].(func(string) error)
 	// contractDescRevision is the schema descriptor for revision field.
-	contractDescRevision := contractFields[19].Descriptor()
+	contractDescRevision := contractFields[23].Descriptor()
 	// contract.DefaultRevision holds the default value on creation for the revision field.
 	contract.DefaultRevision = contractDescRevision.Default.(uint64)
 	// contract.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
@@ -424,15 +424,15 @@ func init() {
 	// invoice.SupplierNameValidator is a validator for the "supplier_name" field. It is called by the builders before save.
 	invoice.SupplierNameValidator = invoiceDescSupplierName.Validators[0].(func(string) error)
 	// invoiceDescDocumentNumber is the schema descriptor for document_number field.
-	invoiceDescDocumentNumber := invoiceFields[10].Descriptor()
+	invoiceDescDocumentNumber := invoiceFields[15].Descriptor()
 	// invoice.DocumentNumberValidator is a validator for the "document_number" field. It is called by the builders before save.
 	invoice.DocumentNumberValidator = invoiceDescDocumentNumber.Validators[0].(func(string) error)
 	// invoiceDescNormalizedDocumentNumber is the schema descriptor for normalized_document_number field.
-	invoiceDescNormalizedDocumentNumber := invoiceFields[11].Descriptor()
+	invoiceDescNormalizedDocumentNumber := invoiceFields[16].Descriptor()
 	// invoice.NormalizedDocumentNumberValidator is a validator for the "normalized_document_number" field. It is called by the builders before save.
 	invoice.NormalizedDocumentNumberValidator = invoiceDescNormalizedDocumentNumber.Validators[0].(func(string) error)
 	// invoiceDescCurrency is the schema descriptor for currency field.
-	invoiceDescCurrency := invoiceFields[16].Descriptor()
+	invoiceDescCurrency := invoiceFields[21].Descriptor()
 	// invoice.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	invoice.CurrencyValidator = func() func(string) error {
 		validators := invoiceDescCurrency.Validators
@@ -450,19 +450,19 @@ func init() {
 		}
 	}()
 	// invoiceDescSpvReference is the schema descriptor for spv_reference field.
-	invoiceDescSpvReference := invoiceFields[17].Descriptor()
+	invoiceDescSpvReference := invoiceFields[22].Descriptor()
 	// invoice.SpvReferenceValidator is a validator for the "spv_reference" field. It is called by the builders before save.
 	invoice.SpvReferenceValidator = invoiceDescSpvReference.Validators[0].(func(string) error)
 	// invoiceDescIngestionSource is the schema descriptor for ingestion_source field.
-	invoiceDescIngestionSource := invoiceFields[18].Descriptor()
+	invoiceDescIngestionSource := invoiceFields[23].Descriptor()
 	// invoice.IngestionSourceValidator is a validator for the "ingestion_source" field. It is called by the builders before save.
 	invoice.IngestionSourceValidator = invoiceDescIngestionSource.Validators[0].(func(string) error)
 	// invoiceDescExternalDeliveryID is the schema descriptor for external_delivery_id field.
-	invoiceDescExternalDeliveryID := invoiceFields[19].Descriptor()
+	invoiceDescExternalDeliveryID := invoiceFields[24].Descriptor()
 	// invoice.ExternalDeliveryIDValidator is a validator for the "external_delivery_id" field. It is called by the builders before save.
 	invoice.ExternalDeliveryIDValidator = invoiceDescExternalDeliveryID.Validators[0].(func(string) error)
 	// invoiceDescRevision is the schema descriptor for revision field.
-	invoiceDescRevision := invoiceFields[26].Descriptor()
+	invoiceDescRevision := invoiceFields[31].Descriptor()
 	// invoice.DefaultRevision holds the default value on creation for the revision field.
 	invoice.DefaultRevision = invoiceDescRevision.Default.(uint64)
 	// invoice.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
@@ -628,7 +628,7 @@ func init() {
 	// spvconnection.CifValidator is a validator for the "cif" field. It is called by the builders before save.
 	spvconnection.CifValidator = spvconnectionDescCif.Validators[0].(func(string) error)
 	// spvconnectionDescRevision is the schema descriptor for revision field.
-	spvconnectionDescRevision := spvconnectionFields[15].Descriptor()
+	spvconnectionDescRevision := spvconnectionFields[16].Descriptor()
 	// spvconnection.DefaultRevision holds the default value on creation for the revision field.
 	spvconnection.DefaultRevision = spvconnectionDescRevision.Default.(uint64)
 	// spvconnection.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.

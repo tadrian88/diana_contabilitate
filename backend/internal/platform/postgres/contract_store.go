@@ -726,6 +726,7 @@ func contractDomain(row *ent.Contract) (*contracts.Contract, error) {
 	result := &contracts.Contract{
 		ID: row.ID, ClientID: row.ClientID, SupplierName: row.SupplierName, SupplierCUI: row.SupplierCui,
 		NormalizedSupplierCUI: row.NormalizedSupplierCui, Reference: row.Reference,
+		ClientRole: string(row.ClientRole), BuyerName: row.BuyerName, BuyerCUI: row.BuyerCui, NormalizedBuyerCUI: row.NormalizedBuyerCui,
 		SourceDocumentID: row.SourceDocumentID, ExtractionAttemptID: row.ExtractionAttemptID,
 		EffectiveFrom: row.EffectiveFrom, EffectiveTo: row.EffectiveTo, PeriodType: string(row.PeriodType),
 		Value: money.Money{Amount: value, Currency: row.Currency}, UnitType: row.UnitType, PaymentTerms: row.PaymentTerms,

@@ -3,6 +3,7 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -17,6 +18,13 @@ func (Contract) Fields() []ent.Field {
 		field.String("supplier_name").NotEmpty(),
 		field.String("supplier_cui").NotEmpty(),
 		field.String("normalized_supplier_cui").NotEmpty(),
+		// D-126: the accounting client is the buyer (purchase contracts) or the
+		// supplier (sale contracts, e.g. a lease where it is the Locator). For
+		// SUPPLIER contracts the counterparty is the buyer.
+		field.Enum("client_role").Values("BUYER", "SUPPLIER").Default("BUYER").Immutable(),
+		field.String("buyer_name").Optional().Nillable(),
+		field.String("buyer_cui").Optional().Nillable(),
+		field.String("normalized_buyer_cui").Optional().Nillable(),
 		field.String("reference").NotEmpty(),
 		field.Time("effective_from").SchemaType(map[string]string{dialect.Postgres: "date"}),
 		field.Time("effective_to").SchemaType(map[string]string{dialect.Postgres: "date"}).Optional().Nillable(),
@@ -51,6 +59,7 @@ func (Contract) Indexes() []ent.Index {
 		// Active-only uniqueness is enforced by migration 000019.
 		index.Fields("id", "client_id").Unique(),
 		index.Fields("client_id", "normalized_supplier_cui"),
+		index.Fields("client_id", "normalized_buyer_cui").Annotations(entsql.IndexWhere("client_role = 'SUPPLIER'")),
 		index.Fields("source_document_id").Unique(),
 		index.Fields("extraction_attempt_id").Unique(),
 	}

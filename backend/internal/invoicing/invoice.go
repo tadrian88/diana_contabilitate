@@ -58,8 +58,17 @@ const (
 	DocumentTypeCreditNote DocumentType = "CREDIT_NOTE"
 )
 
+// Direction tells whether the client received the invoice or issued it (D-124).
+type Direction string
+
+const (
+	DirectionIncoming Direction = "INCOMING"
+	DirectionOutgoing Direction = "OUTGOING"
+)
+
 type Filter struct {
-	ClientID string
+	ClientID  string
+	Direction Direction
 }
 
 type Invoice struct {
@@ -75,6 +84,11 @@ type Invoice struct {
 	SupplierName               string
 	SupplierCUI                *string
 	NormalizedSupplierCUI      *string
+	Direction                  Direction
+	CustomerName               *string
+	CustomerIdentifier         *string
+	NormalizedCustomerID       *string
+	CustomerIdentifierKind     *string
 	DocumentNumber             string
 	NormalizedDocumentNumber   string
 	IssueDate                  time.Time
@@ -98,6 +112,33 @@ type Invoice struct {
 	ActiveTask                 *validationtasks.Task
 	ContractAssociation        *contracts.AssociationSnapshot
 	ContractWaiver             *contracts.WaiverSnapshot
+}
+
+// Party is the other side of the invoice: the supplier of a received
+// invoice, the customer of an issued one.
+type Party struct {
+	Name                 string
+	Identifier           *string
+	NormalizedIdentifier *string
+	IdentifierKind       string
+}
+
+func (i Invoice) Outgoing() bool { return i.Direction == DirectionOutgoing }
+
+// Counterparty returns the supplier of a received invoice and the customer of
+// an issued one. The identifier is raw (a CNP is not masked here).
+func (i Invoice) Counterparty() Party {
+	if i.Outgoing() {
+		party := Party{Identifier: i.CustomerIdentifier, NormalizedIdentifier: i.NormalizedCustomerID}
+		if i.CustomerName != nil {
+			party.Name = *i.CustomerName
+		}
+		if i.CustomerIdentifierKind != nil {
+			party.IdentifierKind = *i.CustomerIdentifierKind
+		}
+		return party
+	}
+	return Party{Name: i.SupplierName, Identifier: i.SupplierCUI, NormalizedIdentifier: i.NormalizedSupplierCUI, IdentifierKind: "CUI"}
 }
 
 type ClassificationContext struct {

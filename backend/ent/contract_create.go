@@ -48,6 +48,62 @@ func (_c *ContractCreate) SetNormalizedSupplierCui(v string) *ContractCreate {
 	return _c
 }
 
+// SetClientRole sets the "client_role" field.
+func (_c *ContractCreate) SetClientRole(v contract.ClientRole) *ContractCreate {
+	_c.mutation.SetClientRole(v)
+	return _c
+}
+
+// SetNillableClientRole sets the "client_role" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableClientRole(v *contract.ClientRole) *ContractCreate {
+	if v != nil {
+		_c.SetClientRole(*v)
+	}
+	return _c
+}
+
+// SetBuyerName sets the "buyer_name" field.
+func (_c *ContractCreate) SetBuyerName(v string) *ContractCreate {
+	_c.mutation.SetBuyerName(v)
+	return _c
+}
+
+// SetNillableBuyerName sets the "buyer_name" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableBuyerName(v *string) *ContractCreate {
+	if v != nil {
+		_c.SetBuyerName(*v)
+	}
+	return _c
+}
+
+// SetBuyerCui sets the "buyer_cui" field.
+func (_c *ContractCreate) SetBuyerCui(v string) *ContractCreate {
+	_c.mutation.SetBuyerCui(v)
+	return _c
+}
+
+// SetNillableBuyerCui sets the "buyer_cui" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableBuyerCui(v *string) *ContractCreate {
+	if v != nil {
+		_c.SetBuyerCui(*v)
+	}
+	return _c
+}
+
+// SetNormalizedBuyerCui sets the "normalized_buyer_cui" field.
+func (_c *ContractCreate) SetNormalizedBuyerCui(v string) *ContractCreate {
+	_c.mutation.SetNormalizedBuyerCui(v)
+	return _c
+}
+
+// SetNillableNormalizedBuyerCui sets the "normalized_buyer_cui" field if the given value is not nil.
+func (_c *ContractCreate) SetNillableNormalizedBuyerCui(v *string) *ContractCreate {
+	if v != nil {
+		_c.SetNormalizedBuyerCui(*v)
+	}
+	return _c
+}
+
 // SetReference sets the "reference" field.
 func (_c *ContractCreate) SetReference(v string) *ContractCreate {
 	_c.mutation.SetReference(v)
@@ -313,6 +369,10 @@ func (_c *ContractCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *ContractCreate) defaults() {
+	if _, ok := _c.mutation.ClientRole(); !ok {
+		v := contract.DefaultClientRole
+		_c.mutation.SetClientRole(v)
+	}
 	if _, ok := _c.mutation.PeriodType(); !ok {
 		v := contract.DefaultPeriodType
 		_c.mutation.SetPeriodType(v)
@@ -358,6 +418,14 @@ func (_c *ContractCreate) check() error {
 	if v, ok := _c.mutation.NormalizedSupplierCui(); ok {
 		if err := contract.NormalizedSupplierCuiValidator(v); err != nil {
 			return &ValidationError{Name: "normalized_supplier_cui", err: fmt.Errorf(`ent: validator failed for field "Contract.normalized_supplier_cui": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ClientRole(); !ok {
+		return &ValidationError{Name: "client_role", err: errors.New(`ent: missing required field "Contract.client_role"`)}
+	}
+	if v, ok := _c.mutation.ClientRole(); ok {
+		if err := contract.ClientRoleValidator(v); err != nil {
+			return &ValidationError{Name: "client_role", err: fmt.Errorf(`ent: validator failed for field "Contract.client_role": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Reference(); !ok {
@@ -480,6 +548,22 @@ func (_c *ContractCreate) createSpec() (*Contract, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.NormalizedSupplierCui(); ok {
 		_spec.SetField(contract.FieldNormalizedSupplierCui, field.TypeString, value)
 		_node.NormalizedSupplierCui = value
+	}
+	if value, ok := _c.mutation.ClientRole(); ok {
+		_spec.SetField(contract.FieldClientRole, field.TypeEnum, value)
+		_node.ClientRole = value
+	}
+	if value, ok := _c.mutation.BuyerName(); ok {
+		_spec.SetField(contract.FieldBuyerName, field.TypeString, value)
+		_node.BuyerName = &value
+	}
+	if value, ok := _c.mutation.BuyerCui(); ok {
+		_spec.SetField(contract.FieldBuyerCui, field.TypeString, value)
+		_node.BuyerCui = &value
+	}
+	if value, ok := _c.mutation.NormalizedBuyerCui(); ok {
+		_spec.SetField(contract.FieldNormalizedBuyerCui, field.TypeString, value)
+		_node.NormalizedBuyerCui = &value
 	}
 	if value, ok := _c.mutation.Reference(); ok {
 		_spec.SetField(contract.FieldReference, field.TypeString, value)

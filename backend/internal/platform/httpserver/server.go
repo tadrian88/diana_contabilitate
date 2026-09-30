@@ -802,7 +802,12 @@ func (s *Server) listInvoices(w http.ResponseWriter, r *http.Request) {
 	if id := strings.TrimSpace(r.URL.Query().Get("clientId")); id != "" && !s.allowClient(w, r, id) {
 		return
 	}
-	items, err := s.invoices.List(r.Context(), invoicing.Filter{ClientID: strings.TrimSpace(r.URL.Query().Get("clientId"))})
+	direction := invoicing.Direction(strings.TrimSpace(r.URL.Query().Get("direction")))
+	if direction != "" && direction != invoicing.DirectionIncoming && direction != invoicing.DirectionOutgoing {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Direcția trebuie să fie INCOMING sau OUTGOING.")
+		return
+	}
+	items, err := s.invoices.List(r.Context(), invoicing.Filter{ClientID: strings.TrimSpace(r.URL.Query().Get("clientId")), Direction: direction})
 	if err != nil {
 		s.internalError(w, r, err)
 		return

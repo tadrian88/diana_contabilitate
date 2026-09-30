@@ -32,6 +32,16 @@ const (
 	FieldSupplierCui = "supplier_cui"
 	// FieldNormalizedSupplierCui holds the string denoting the normalized_supplier_cui field in the database.
 	FieldNormalizedSupplierCui = "normalized_supplier_cui"
+	// FieldDirection holds the string denoting the direction field in the database.
+	FieldDirection = "direction"
+	// FieldCustomerName holds the string denoting the customer_name field in the database.
+	FieldCustomerName = "customer_name"
+	// FieldCustomerIdentifier holds the string denoting the customer_identifier field in the database.
+	FieldCustomerIdentifier = "customer_identifier"
+	// FieldNormalizedCustomerIdentifier holds the string denoting the normalized_customer_identifier field in the database.
+	FieldNormalizedCustomerIdentifier = "normalized_customer_identifier"
+	// FieldCustomerIdentifierKind holds the string denoting the customer_identifier_kind field in the database.
+	FieldCustomerIdentifierKind = "customer_identifier_kind"
 	// FieldDocumentNumber holds the string denoting the document_number field in the database.
 	FieldDocumentNumber = "document_number"
 	// FieldNormalizedDocumentNumber holds the string denoting the normalized_document_number field in the database.
@@ -167,6 +177,11 @@ var Columns = []string{
 	FieldSupplierName,
 	FieldSupplierCui,
 	FieldNormalizedSupplierCui,
+	FieldDirection,
+	FieldCustomerName,
+	FieldCustomerIdentifier,
+	FieldNormalizedCustomerIdentifier,
+	FieldCustomerIdentifierKind,
 	FieldDocumentNumber,
 	FieldNormalizedDocumentNumber,
 	FieldIssueDate,
@@ -222,6 +237,56 @@ var (
 	// RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
 	RevisionValidator func(uint64) error
 )
+
+// Direction defines the type for the "direction" enum field.
+type Direction string
+
+// DirectionINCOMING is the default value of the Direction enum.
+const DefaultDirection = DirectionINCOMING
+
+// Direction values.
+const (
+	DirectionINCOMING Direction = "INCOMING"
+	DirectionOUTGOING Direction = "OUTGOING"
+)
+
+func (d Direction) String() string {
+	return string(d)
+}
+
+// DirectionValidator is a validator for the "direction" field enum values. It is called by the builders before save.
+func DirectionValidator(d Direction) error {
+	switch d {
+	case DirectionINCOMING, DirectionOUTGOING:
+		return nil
+	default:
+		return fmt.Errorf("invoice: invalid enum value for direction field: %q", d)
+	}
+}
+
+// CustomerIdentifierKind defines the type for the "customer_identifier_kind" enum field.
+type CustomerIdentifierKind string
+
+// CustomerIdentifierKind values.
+const (
+	CustomerIdentifierKindCUI   CustomerIdentifierKind = "CUI"
+	CustomerIdentifierKindCNP   CustomerIdentifierKind = "CNP"
+	CustomerIdentifierKindOTHER CustomerIdentifierKind = "OTHER"
+)
+
+func (cik CustomerIdentifierKind) String() string {
+	return string(cik)
+}
+
+// CustomerIdentifierKindValidator is a validator for the "customer_identifier_kind" field enum values. It is called by the builders before save.
+func CustomerIdentifierKindValidator(cik CustomerIdentifierKind) error {
+	switch cik {
+	case CustomerIdentifierKindCUI, CustomerIdentifierKindCNP, CustomerIdentifierKindOTHER:
+		return nil
+	default:
+		return fmt.Errorf("invoice: invalid enum value for customer_identifier_kind field: %q", cik)
+	}
+}
 
 // DocumentType defines the type for the "document_type" enum field.
 type DocumentType string
@@ -354,6 +419,31 @@ func BySupplierCui(opts ...sql.OrderTermOption) OrderOption {
 // ByNormalizedSupplierCui orders the results by the normalized_supplier_cui field.
 func ByNormalizedSupplierCui(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNormalizedSupplierCui, opts...).ToFunc()
+}
+
+// ByDirection orders the results by the direction field.
+func ByDirection(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDirection, opts...).ToFunc()
+}
+
+// ByCustomerName orders the results by the customer_name field.
+func ByCustomerName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomerName, opts...).ToFunc()
+}
+
+// ByCustomerIdentifier orders the results by the customer_identifier field.
+func ByCustomerIdentifier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomerIdentifier, opts...).ToFunc()
+}
+
+// ByNormalizedCustomerIdentifier orders the results by the normalized_customer_identifier field.
+func ByNormalizedCustomerIdentifier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNormalizedCustomerIdentifier, opts...).ToFunc()
+}
+
+// ByCustomerIdentifierKind orders the results by the customer_identifier_kind field.
+func ByCustomerIdentifierKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomerIdentifierKind, opts...).ToFunc()
 }
 
 // ByDocumentNumber orders the results by the document_number field.

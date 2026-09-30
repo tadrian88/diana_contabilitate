@@ -188,6 +188,26 @@ func (_u *SPVConnectionUpdate) ClearLastSuccessfulSyncAt() *SPVConnectionUpdate 
 	return _u
 }
 
+// SetLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field.
+func (_u *SPVConnectionUpdate) SetLastSuccessfulSentSyncAt(v time.Time) *SPVConnectionUpdate {
+	_u.mutation.SetLastSuccessfulSentSyncAt(v)
+	return _u
+}
+
+// SetNillableLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field if the given value is not nil.
+func (_u *SPVConnectionUpdate) SetNillableLastSuccessfulSentSyncAt(v *time.Time) *SPVConnectionUpdate {
+	if v != nil {
+		_u.SetLastSuccessfulSentSyncAt(*v)
+	}
+	return _u
+}
+
+// ClearLastSuccessfulSentSyncAt clears the value of the "last_successful_sent_sync_at" field.
+func (_u *SPVConnectionUpdate) ClearLastSuccessfulSentSyncAt() *SPVConnectionUpdate {
+	_u.mutation.ClearLastSuccessfulSentSyncAt()
+	return _u
+}
+
 // SetLastSyncStartedAt sets the "last_sync_started_at" field.
 func (_u *SPVConnectionUpdate) SetLastSyncStartedAt(v time.Time) *SPVConnectionUpdate {
 	_u.mutation.SetLastSyncStartedAt(v)
@@ -456,6 +476,12 @@ func (_u *SPVConnectionUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	}
 	if _u.mutation.LastSuccessfulSyncAtCleared() {
 		_spec.ClearField(spvconnection.FieldLastSuccessfulSyncAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.LastSuccessfulSentSyncAt(); ok {
+		_spec.SetField(spvconnection.FieldLastSuccessfulSentSyncAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastSuccessfulSentSyncAtCleared() {
+		_spec.ClearField(spvconnection.FieldLastSuccessfulSentSyncAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.LastSyncStartedAt(); ok {
 		_spec.SetField(spvconnection.FieldLastSyncStartedAt, field.TypeTime, value)
@@ -736,6 +762,26 @@ func (_u *SPVConnectionUpdateOne) SetNillableLastSuccessfulSyncAt(v *time.Time) 
 // ClearLastSuccessfulSyncAt clears the value of the "last_successful_sync_at" field.
 func (_u *SPVConnectionUpdateOne) ClearLastSuccessfulSyncAt() *SPVConnectionUpdateOne {
 	_u.mutation.ClearLastSuccessfulSyncAt()
+	return _u
+}
+
+// SetLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field.
+func (_u *SPVConnectionUpdateOne) SetLastSuccessfulSentSyncAt(v time.Time) *SPVConnectionUpdateOne {
+	_u.mutation.SetLastSuccessfulSentSyncAt(v)
+	return _u
+}
+
+// SetNillableLastSuccessfulSentSyncAt sets the "last_successful_sent_sync_at" field if the given value is not nil.
+func (_u *SPVConnectionUpdateOne) SetNillableLastSuccessfulSentSyncAt(v *time.Time) *SPVConnectionUpdateOne {
+	if v != nil {
+		_u.SetLastSuccessfulSentSyncAt(*v)
+	}
+	return _u
+}
+
+// ClearLastSuccessfulSentSyncAt clears the value of the "last_successful_sent_sync_at" field.
+func (_u *SPVConnectionUpdateOne) ClearLastSuccessfulSentSyncAt() *SPVConnectionUpdateOne {
+	_u.mutation.ClearLastSuccessfulSentSyncAt()
 	return _u
 }
 
@@ -1037,6 +1083,12 @@ func (_u *SPVConnectionUpdateOne) sqlSave(ctx context.Context) (_node *SPVConnec
 	}
 	if _u.mutation.LastSuccessfulSyncAtCleared() {
 		_spec.ClearField(spvconnection.FieldLastSuccessfulSyncAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.LastSuccessfulSentSyncAt(); ok {
+		_spec.SetField(spvconnection.FieldLastSuccessfulSentSyncAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastSuccessfulSentSyncAtCleared() {
+		_spec.ClearField(spvconnection.FieldLastSuccessfulSentSyncAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.LastSyncStartedAt(); ok {
 		_spec.SetField(spvconnection.FieldLastSyncStartedAt, field.TypeTime, value)
