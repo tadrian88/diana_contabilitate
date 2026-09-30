@@ -20,7 +20,6 @@ import (
 	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contracts"
-	"diana-contabilitate/backend/internal/fiscalidentity"
 	"diana-contabilitate/backend/internal/outbox"
 )
 
@@ -434,7 +433,14 @@ func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDoc
 	if attempt != nil && attempt.Proposal != nil && attempt.Proposal.BuyerCUI.Value != nil {
 		client, err := s.Client.AccountingClient.Get(ctx, row.ClientID)
 		if err == nil {
-			doc.BuyerMismatch = !fiscalidentity.Same(*attempt.Proposal.BuyerCUI.Value, client.Cui)
+			// A contract where the client is the supplier (Locator) is not a
+			// mismatch (D-126); only a document naming neither party is.
+			supplier := ""
+			if attempt.Proposal.SupplierCUI.Value != nil {
+				supplier = *attempt.Proposal.SupplierCUI.Value
+			}
+			_, clientFound := contractingestion.ClientRoleFor(contractingestion.ReviewedContract{BuyerCUI: *attempt.Proposal.BuyerCUI.Value, SupplierCUI: supplier}, client.Cui)
+			doc.BuyerMismatch = !clientFound
 		}
 	}
 	return doc, nil
