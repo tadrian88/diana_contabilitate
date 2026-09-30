@@ -97,6 +97,7 @@ type Invoice struct {
 	Lines                      []Line
 	ActiveTask                 *validationtasks.Task
 	ContractAssociation        *contracts.AssociationSnapshot
+	ContractWaiver             *contracts.WaiverSnapshot
 }
 
 type ClassificationContext struct {

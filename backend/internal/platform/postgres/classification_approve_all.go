@@ -86,10 +86,35 @@ func (s *Store) ApproveAllClassifications(ctx context.Context, command classific
 		resolution = append(resolution, accounting.ClassificationResolutionItem{Dimension: string(row.Dimension), Effective: row.EffectiveTypedValue, Proposed: row.ProposedTypedValue, Source: string(row.Source), ReviewStatus: string(row.ReviewStatus)})
 	}
 	complete := accounting.IsAccountingClassificationComplete(resolution, len(item.Edges.Lines)*len(accounting.Dimensions))
+	// Approve-all uses the same single readiness authority as per-decision
+	// review: four final decisions do not by themselves imply READY_FOR_SAGA.
+	readinessReason := ""
+	if complete {
+		ready, readyErr := evaluateAccountingReadiness(ctx, tx, item.ID, item.AccountingSnapshot != nil && item.AccountingSnapshot.TestOnly)
+		if readyErr != nil {
+			return rollback(readyErr)
+		}
+		if s.AccountingReadinessObserver != nil {
+			s.AccountingReadinessObserver.AccountingReadinessEvaluated(ready.Ready)
+		}
+		complete = ready.Ready
+		readinessReason = ready.Reason
+		if _, err = tx.Invoice.UpdateOneID(item.ID).Where(invoice.RevisionEQ(command.ExpectedInvoiceRevision)).SetReadinessReason(readinessReason).Save(ctx); ent.IsNotFound(err) {
+			return rollback(classificationdomain.ErrStaleReview)
+		} else if err != nil {
+			return rollback(err)
+		}
+		if err = createAudit(tx, ctx, auditRecord{key: eventKey + ":readiness", invoiceID: item.ID, taskID: task.ID, clientID: item.ClientID, eventType: "ACCOUNTING_READINESS_EVALUATED", trigger: "APPROVE_ALL", detail: fmt.Sprintf("Accounting readiness blocker: %s", readinessReason), actor: audit.ActorUser, actorID: command.ActorID, actorDisplay: command.ActorDisplay, correlationID: command.CorrelationID, at: now}); err != nil {
+			return rollback(err)
+		}
+	}
 	taskUpdate := tx.ValidationTask.UpdateOneID(task.ID).Where(validationtask.RevisionEQ(command.ExpectedTaskRevision), validationtask.StatusEQ(validationtask.StatusOPEN)).AddRevision(1).SetUpdatedAt(now)
 	if complete {
 		metadata, _ := json.Marshal(map[string]string{"action": "APPROVE_ALL"})
 		taskUpdate.SetStatus(validationtask.StatusRESOLVED).SetResolvedAt(now).SetResolutionMetadata(metadata)
+	} else if readinessReason != "" {
+		metadata, _ := json.Marshal(map[string]string{"readinessBlocker": readinessReason})
+		taskUpdate.SetResolutionMetadata(metadata)
 	}
 	if _, err = taskUpdate.Save(ctx); ent.IsNotFound(err) {
 		return rollback(classificationdomain.ErrStaleReview)

@@ -13,7 +13,7 @@ Each confirmed contract may have ordered service terms with:
 - evidenced billing frequency or `UNKNOWN`;
 - immutable extraction evidence.
 
-No formula is executable and no HR integration or fuzzy/LLM invoice-line matching is introduced. Unknown remains unknown. Pricing completeness does not block contract identity/matching unless a submitted term itself is invalid.
+No formula is executable and no HR integration or fuzzy/LLM invoice-line matching is introduced (D-116 adds deterministic, human-confirmed suggestions for uncovered lines; matching itself still uses only confirmed aliases). Unknown remains unknown. Pricing completeness does not block contract identity/matching unless a submitted term itself is invalid.
 
 The sanitized `service-indefinite` fixture represents:
 

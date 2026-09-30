@@ -1,5 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { AlertTriangle, ArrowLeft, Building2, CalendarDays, CircleDollarSign, FileText, ShieldCheck } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/ui/badge'
 import type { Invoice } from '../../domain/invoice'
@@ -9,21 +10,43 @@ import { PipelineStepper } from './PipelineStepper'
 import { ContractTask } from './ContractTask'
 import { ClassificationWorkspace } from './ClassificationWorkspace'
 import { AttentionBadge, PipelineBadge, SagaBadge } from './InvoiceStatusBadges'
-import { getUnresolvedIssueCount, SAGA_LABELS } from './invoice-view'
+import { actionTab, getUnresolvedIssueCount, invoiceTabs, SAGA_LABELS, type InvoiceTab } from './invoice-view'
+import { NextStepsCard, useActionCount } from './NextStepsCard'
 import { SagaExportCard } from './SagaExportCard'
 import { CommercialValidationCard } from './CommercialValidationCard'
 import { AccountingAnalysisCard } from './AccountingAnalysisCard'
-
-const tabValues = ['summary', 'contract', 'lines', 'classification', 'history'] as const
-type InvoiceTab = typeof tabValues[number]
 
 export function InvoiceDetailPage() {
   const { invoiceId = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: invoice, isLoading } = useInvoice(invoiceId)
   const { data: clients = [] } = useClients()
-  const tab = parseTab(searchParams.get('tab'))
+  const requestedTab = parseTab(searchParams.get('tab'))
+  const tab = requestedTab ?? (invoice ? actionTab(invoice) : 'summary')
+  const actionCount = useActionCount(invoice ?? undefined)
   useStartHappyPath(invoice ?? undefined)
+  // Without a requested tab the invoice opens where its next action is, and
+  // the URL keeps that tab so the page does not move as the status changes.
+  useEffect(() => {
+    if (!invoice || requestedTab) return
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', actionTab(invoice))
+    setSearchParams(next, { replace: true })
+  }, [invoice, requestedTab, searchParams, setSearchParams])
+  // When review completes while the accountant is on Clasificare, the next
+  // action (download XML, import, confirm) lives on Rezumat: move there once.
+  const previousStatus = useRef(invoice?.pipelineStatus)
+  useEffect(() => {
+    const current = invoice?.pipelineStatus
+    const before = previousStatus.current
+    previousStatus.current = current
+    if (!current || !before || before === current || tab !== 'classification') return
+    if (before === 'AWAITING_REVIEW' && (current === 'READY_FOR_SAGA' || current === 'EXPORTING')) {
+      const next = new URLSearchParams(searchParams)
+      next.set('tab', 'summary')
+      setSearchParams(next, { replace: true })
+    }
+  }, [invoice?.pipelineStatus, tab, searchParams, setSearchParams])
 
   const client = clients.find((candidate) => candidate.id === invoice?.clientId)
   const requestedReturnPath = searchParams.get('returnTo')
@@ -67,7 +90,7 @@ export function InvoiceDetailPage() {
         <Tabs.List aria-label="Secțiuni factură" className="flex border-b border-[var(--border)] bg-[var(--surface-raised)] px-5">
           {[
             ['summary', 'Rezumat'], ['contract', 'Contract'], ['lines', 'Linii factură'], ['classification', 'Clasificare'], ['history', 'Istoric'],
-          ].map(([value, label]) => <Tabs.Trigger key={value} value={value} className="tab-trigger px-4 py-4 text-sm font-semibold text-[var(--text-secondary)] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]">{label}</Tabs.Trigger>)}
+          ].map(([value, label]) => <Tabs.Trigger key={value} value={value} className="tab-trigger px-4 py-4 text-sm font-semibold text-[var(--text-secondary)] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]">{label}{value !== 'summary' && value === actionTab(invoice) && actionCount > 0 && <span aria-hidden="true" className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--warning-soft)] px-1.5 text-xs text-[var(--warning)]">{actionCount}</span>}</Tabs.Trigger>)}
         </Tabs.List>
         <div className="bg-[var(--app-background)] p-5">
           <Tabs.Content value="summary" className="outline-none"><SummaryTab invoice={invoice} /></Tabs.Content>
@@ -90,6 +113,7 @@ function SummaryTab({ invoice }: { invoice: Invoice }) {
   ]
   return (
     <div className="space-y-4">
+      <NextStepsCard invoice={invoice} />
       <div className="grid grid-cols-4 gap-4">{cards.map(({ label, value, icon: Icon }) => <div key={label} className="card p-4"><Icon className="size-5 text-[var(--accent)]" /><div className="mt-4 text-xs text-[var(--text-muted)]">{label}</div><div className="mt-1 text-sm font-bold">{value}</div></div>)}</div>
       <div className="grid grid-cols-2 gap-4">
         <div className={`card p-5 ${getUnresolvedIssueCount(invoice) ? 'border-[var(--warning-border)]' : ''}`}><div className="eyebrow">Ce se întâmplă acum</div><p className="mt-2 text-sm font-medium">{nextAction(invoice)}</p>{invoice.task && invoice.task.status !== 'RESOLVED' && <div className="mt-3 flex items-start gap-2 text-xs text-[var(--text-secondary)]"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--warning)]" />{invoice.task.reason}</div>}</div>
@@ -122,18 +146,19 @@ function sagaLabel(invoice: Invoice) {
 
 function nextAction(invoice: Invoice) {
   if (invoice.sagaStatus === 'FAILED') return 'Exportul SAGA simulat a eșuat. Nu există comportament de reîncercare aprobat.'
-  if (invoice.pipelineStatus === 'AWAITING_CONTRACT') return 'Așteaptă furnizarea externă a contractului.'
-  if (invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM') return 'Contabilul confirmă contractul recomandat sau selectează o alternativă.'
-  if (invoice.pipelineStatus === 'AWAITING_COMMERCIAL_REVIEW') return 'Contabilul verifică abaterile comerciale, completează datele lipsă sau aprobă motivat o excepție.'
-  if (invoice.pipelineStatus === 'AWAITING_REVIEW') return 'Contabilul revizuiește numai clasificările incerte.'
-  if (invoice.pipelineStatus === 'EXPORTING' && invoice.sagaExport?.artifactStatus === 'GENERATED') return 'Fișierul este pregătit. Importă-l în SAGA și confirmă manual importul.'
+  if (invoice.pipelineStatus === 'AWAITING_CONTRACT') return 'Lipsește contractul furnizorului. Încarcă-l, solicită-l sau continuă fără contract, cu motiv, din tab-ul Contract; după asociere factura continuă automat.'
+  if (invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM') return 'Confirmă în tab-ul Contract contractul recomandat sau alege o alternativă.'
+  if (invoice.pipelineStatus === 'AWAITING_COMMERCIAL_REVIEW') return 'Verifică factura față de contract în tab-ul Contract: asociază serviciile, completează datele lipsă sau aprobă motivat o excepție.'
+  if (invoice.pipelineStatus === 'AWAITING_REVIEW') return 'Revizuiește în tab-ul Clasificare numai clasificările incerte.'
+  if (invoice.pipelineStatus === 'EXPORTING' && invoice.sagaExport?.artifactStatus === 'GENERATED') return 'Fișierul este pregătit. Descarcă XML-ul din secțiunea Export SAGA de mai jos, importă-l în SAGA și confirmă manual importul.'
+  if (invoice.pipelineStatus === 'READY_FOR_SAGA' || invoice.pipelineStatus === 'EXPORTING') return 'Diana generează fișierul XML pentru SAGA. Pagina se actualizează automat; apoi vei descărca fișierul și vei confirma importul.'
   if (invoice.pipelineStatus === 'EXPORTED' && invoice.sagaExport?.confirmationType === 'HUMAN') return 'Procesare finalizată prin confirmarea manuală a importului în SAGA.'
   if (invoice.pipelineStatus === 'EXPORTED') return 'Procesare finalizată. Factura a ajuns în starea SAGA simulată.'
   if (invoice.pipelineStatus === 'DUPLICATE') return 'Stare terminală. Factura nu continuă către SAGA.'
   return 'Procesarea automată continuă fără intervenția contabilului.'
 }
 
-function parseTab(value: string | null): InvoiceTab { return tabValues.includes(value as InvoiceTab) ? value as InvoiceTab : 'summary' }
+function parseTab(value: string | null): InvoiceTab | undefined { return invoiceTabs.includes(value as InvoiceTab) ? value as InvoiceTab : undefined }
 
 function formatMoney(amount: number, currency: string) { return new Intl.NumberFormat('ro-RO', { style: 'currency', currency }).format(amount) }
 function formatDate(value: string) { return new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeZone: 'Europe/Bucharest' }).format(new Date(value)) }

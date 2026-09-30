@@ -12,6 +12,7 @@ import { RuleDetailPage } from '../features/rules/RuleDetailPage'
 import { ClientsListPage } from '../features/clients/ClientsListPage'
 import { CreateClientPage } from '../features/clients/CreateClientPage'
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
+import { AIUsagePage } from '../features/ai-usage/AIUsagePage'
 import { AppShell } from './AppShell'
 import { LoginPage } from '../features/auth/LoginPage'
 import { ProtectedRoute } from '../features/auth/ProtectedRoute'
@@ -36,6 +37,7 @@ export function App() {
           <Route path="clients" element={<ClientsListPage />} />
           <Route path="clients/new" element={<CreateClientPage />} />
           <Route path="clients/:clientId" element={<ClientDetailPage />} />
+          <Route path="ai-usage" element={<AIUsagePage />} />
         </Route>
         </Route>
       </Routes>

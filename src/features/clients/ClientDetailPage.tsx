@@ -7,12 +7,14 @@ import { PIPELINE_LABELS, TASK_TYPE_LABELS } from '../../domain/invoice'
 import { useContracts } from '../contracts/contract-hooks'
 import { PipelineBadge, SagaBadge } from '../invoices/InvoiceStatusBadges'
 import { useClients, useInvoices } from '../invoices/invoice-hooks'
+import { actionTab } from '../invoices/invoice-view'
 import { useRules } from '../rules/rule-hooks'
 import { RULE_CATEGORY_LABELS } from '../rules/rule-view'
 import { selectClientOperations } from './client-selectors'
 import { lifecycleLabels } from '../../domain/client-management'
 import { ClientSettings } from './ClientSettings'
 import { SPVConnectionCard } from './SPVConnectionCard'
+import { ClientAIUsageCard } from '../ai-usage/ClientAIUsageCard'
 
 export function ClientDetailPage() {
   const { clientId = '' } = useParams()
@@ -42,6 +44,7 @@ export function ClientDetailPage() {
 
     <ClientSettings clientId={client.id} />
     <SPVConnectionCard clientId={client.id} clientName={client.name} clientCUI={client.cui} />
+    <ClientAIUsageCard clientId={client.id} />
 
     <div className="grid grid-cols-2 gap-5">
       <Section title="Facturi" action="Vezi toate facturile" to="/invoices">{operations.invoices.length === 0 ? <Empty text="Nu există facturi pentru acest client." /> : operations.invoices.slice(0, 5).map((invoice) => <Link key={invoice.id} to={`/invoices/${invoice.id}`} className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-3 last:border-0 hover:bg-[var(--surface-subtle)]"><div><div className="text-sm font-bold">{invoice.documentNumber}</div><div className="mt-1 text-xs text-[var(--text-secondary)]">{invoice.supplierName}</div></div><div className="flex items-center gap-2"><PipelineBadge status={invoice.pipelineStatus} /><SagaBadge status={invoice.sagaStatus} /></div></Link>)}</Section>
@@ -55,5 +58,5 @@ export function ClientDetailPage() {
 function ContextLink({ to, label, detail, icon: Icon }: { to: string; label: string; detail: string; icon: typeof FileText }) { return <Link to={to} className="card group flex items-center gap-3 p-4 outline-none hover:border-[var(--border-strong)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><span className="grid size-9 place-items-center rounded-lg bg-[var(--info-soft)] text-[var(--info)]"><Icon className="size-4" /></span><span><span className="block text-sm font-bold">{label}</span><span className="text-xs text-[var(--text-muted)]">{detail}</span></span><ArrowRight className="ml-auto size-4 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5" /></Link> }
 function Metric({ label, value, danger = false }: { label: string; value: number; danger?: boolean }) { return <div className="card p-4"><div className="text-xs font-semibold text-[var(--text-secondary)]">{label}</div><div className={`mt-2 text-2xl font-bold tabular-nums ${danger ? 'text-[var(--danger)]' : ''}`}>{value}</div></div> }
 function Section({ title, action, to, children }: { title: string; action: string; to: string; children: React.ReactNode }) { return <section className="card overflow-hidden"><div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4"><h3 className="font-bold">{title}</h3><Link to={to} className="rounded text-xs font-semibold text-[var(--accent)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{action}</Link></div>{children}</section> }
-function TaskSection({ title, items }: { title: string; items: ReturnType<typeof selectClientOperations>['openInvoices'] }) { return <Section title={title} action="Vezi task-urile" to={`/tasks?status=${title === 'În așteptare' ? 'WAITING' : 'OPEN'}&type=ALL`}>{items.length === 0 ? <Empty text={`Nu există task-uri ${title.toLocaleLowerCase('ro-RO')}.`} /> : items.map((invoice) => <Link key={invoice.id} to={`/invoices/${invoice.id}?tab=${invoice.task?.type === 'CLASSIFICATION' ? 'classification' : 'contract'}`} className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 text-sm last:border-0 hover:bg-[var(--surface-subtle)]"><span><strong>{invoice.documentNumber}</strong><span className="mt-1 block text-xs text-[var(--text-secondary)]">{invoice.task ? TASK_TYPE_LABELS[invoice.task.type] : 'Task indisponibil'}</span></span><Badge tone={invoice.task?.status === 'WAITING' ? 'info' : 'warning'}>{invoice.task?.status === 'WAITING' ? 'În așteptare' : PIPELINE_LABELS[invoice.pipelineStatus]}</Badge></Link>)}</Section> }
+function TaskSection({ title, items }: { title: string; items: ReturnType<typeof selectClientOperations>['openInvoices'] }) { return <Section title={title} action="Vezi task-urile" to={`/tasks?status=${title === 'În așteptare' ? 'WAITING' : 'OPEN'}&type=ALL`}>{items.length === 0 ? <Empty text={`Nu există task-uri ${title.toLocaleLowerCase('ro-RO')}.`} /> : items.map((invoice) => <Link key={invoice.id} to={`/invoices/${invoice.id}?tab=${actionTab(invoice)}`} className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 text-sm last:border-0 hover:bg-[var(--surface-subtle)]"><span><strong>{invoice.documentNumber}</strong><span className="mt-1 block text-xs text-[var(--text-secondary)]">{invoice.task ? TASK_TYPE_LABELS[invoice.task.type] : 'Task indisponibil'}</span></span><Badge tone={invoice.task?.status === 'WAITING' ? 'info' : 'warning'}>{invoice.task?.status === 'WAITING' ? 'În așteptare' : PIPELINE_LABELS[invoice.pipelineStatus]}</Badge></Link>)}</Section> }
 function Empty({ text }: { text: string }) { return <p className="px-5 py-6 text-sm text-[var(--text-muted)]">{text}</p> }

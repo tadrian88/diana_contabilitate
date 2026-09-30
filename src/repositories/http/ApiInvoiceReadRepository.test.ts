@@ -98,6 +98,28 @@ describe('ApiInvoiceReadRepository', () => {
     expect(updated).toMatchObject({ pipelineStatus: 'AWAITING_CONTRACT', task: { status: 'WAITING', contractRequested: true } })
   })
 
+  it('continues without a contract with task revision, reason and idempotency key', async () => {
+    let posted: { url?: string; body?: unknown; key?: string } = {}
+    const blocked = {
+      id: 'inv-1', clientId: 'client-alfa', supplierName: 'Furnizor', documentNumber: 'INV-1',
+      issueDate: '2026-09-11T10:00:00Z', total: { amount: 119, currency: 'RON' }, spvReference: 'SPV-1',
+      pipelineStatus: 'AWAITING_CONTRACT', sagaStatus: 'NOT_READY', revision: 1, lines: [], activity: [],
+      task: { id: 'task-1', type: 'MISSING_CONTRACT', status: 'WAITING', createdAt: '2026-09-11T10:00:00Z', updatedAt: '2026-09-11T11:00:00Z', title: 'Contract lipsă', reason: 'Solicitat.', revision: 2, contractRequested: true },
+    }
+    const resumed = { ...blocked, pipelineStatus: 'DEDUPE_CHECKED', revision: 2, task: undefined, contractWaiver: { reason: 'Achiziție punctuală fără contract', actor: 'Contabil', waivedAt: '2026-09-30T10:00:00Z' } }
+    const http = {
+      get: async () => ({ status: 200, data: blocked }),
+      post: async (url: string, body: unknown, config: { headers: Record<string, string> }) => {
+        posted = { url, body, key: config.headers['Idempotency-Key'] }
+        return { status: 200, data: resumed }
+      },
+    } as Pick<AxiosInstance, 'get' | 'post'>
+    const repository = new ApiInvoiceReadRepository(http)
+    const updated = await repository.continueWithoutContract('inv-1', 'Achiziție punctuală fără contract', 'waiver-key')
+    expect(posted).toEqual({ url: '/invoices/inv-1/contract-waivers', body: { taskId: 'task-1', expectedRevision: 2, reason: 'Achiziție punctuală fără contract' }, key: 'waiver-key' })
+    expect(updated).toMatchObject({ pipelineStatus: 'DEDUPE_CHECKED', contractWaiver: { reason: 'Achiziție punctuală fără contract', actor: 'Contabil' } })
+  })
+
   it('maps API-backed contract reads and associated invoice context', async () => {
     const contract = {
       id: 'contract-1', clientId: 'client-alfa', supplierName: 'Furnizor', supplierCui: 'RO-1', reference: 'CTR-1',

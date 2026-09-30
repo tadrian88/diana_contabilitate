@@ -81,9 +81,19 @@ Low-cardinality counters cover arrival events, evaluated invoices, automatic res
 confirmation transitions, still-missing results, and failures. Contract contents are
 never placed in Redis or logs.
 
+## Continuare fără contract (D-120) — 2026-09-30
+
+Pe task-ul `MISSING_CONTRACT`, OPEN sau WAITING, contabilul poate alege „Continuă fără contract”, cu un motiv de 10–500 caractere
+(`POST /api/v1/invoices/{id}/contract-waivers`). Task-ul devine RESOLVED cu `resolution_metadata.reason = CONTRACT_WAIVED`,
+iar factura trece `AWAITING_CONTRACT → DEDUPE_CHECKED` și continuă în pipeline, în aceeași tranzacție cu auditul și outbox-ul.
+Validarea comercială înregistrează o constatare `CONTRACT_WAIVED` (CONFORM), după care factura ajunge la clasificare.
+
+O factură continuată fără contract nu mai este candidată pentru reevaluare. Selecția de mai sus cere `AWAITING_CONTRACT` și
+un task MISSING_CONTRACT activ, iar `ApplyResumeDecision` întoarce conflict (tratat ca no-op) pentru orice altă stare.
+
 ## Explicit boundaries
 
-No frontend or API endpoint was added. Contract upload, storage, OCR/parsing, AI
+At the time of this module, no frontend or API endpoint was added (the D-120 waiver above came later). Contract upload, storage, OCR/parsing, AI
 extraction, CRUD, advanced matching, expired-contract semantics, deletion, and
 rematching already-associated invoices remain outside this module.
 

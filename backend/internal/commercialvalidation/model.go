@@ -11,7 +11,7 @@ import (
 
 const (
 	RuleSchemaVersion = "COMMERCIAL_RULE_V1"
-	EngineVersion     = "COMMERCIAL_VALIDATION_V1"
+	EngineVersion     = "COMMERCIAL_VALIDATION_V2"
 )
 
 type Outcome string
@@ -118,6 +118,12 @@ type Rule struct {
 	RequiredVariables []string      `json:"requiredVariables,omitempty"`
 	Evidence          []Evidence    `json:"evidence"`
 	Blocking          bool          `json:"blocking"`
+	// Origin is server-owned provenance. RuleOriginSourceText marks a rule
+	// completed deterministically from its cited clause and auto-confirmed.
+	Origin string `json:"origin,omitempty"`
+	// Unit is the contractual unit of measure of a priced service ("lună",
+	// "oră"). It is descriptive only and never changes the calculation.
+	Unit string `json:"unit,omitempty"`
 }
 
 type Snapshot struct {
@@ -148,6 +154,26 @@ type Alias struct {
 	ConfirmedAt                                                                         time.Time
 }
 
+// LearnedAlias is a confirmed invoice wording → contractual service
+// association as a reviewer sees it. InvoiceID is set when the association
+// applies to one invoice only; revoked associations remain as history.
+type LearnedAlias struct {
+	ID              string     `json:"id"`
+	DossierID       string     `json:"dossierId"`
+	ServiceID       string     `json:"serviceId"`
+	ServiceLabel    string     `json:"serviceLabel,omitempty"`
+	NormalizedLabel string     `json:"normalizedLabel"`
+	InvoiceID       string     `json:"invoiceId,omitempty"`
+	ConfirmedBy     string     `json:"confirmedBy"`
+	ConfirmedAt     time.Time  `json:"confirmedAt"`
+	RevokedAt       *time.Time `json:"revokedAt,omitempty"`
+	RevokedBy       string     `json:"revokedBy,omitempty"`
+}
+
+type AliasRevocation struct {
+	ClientID, AliasID, ActorID, ActorDisplay, CommandID string
+}
+
 type Finding struct {
 	ID                string             `json:"id"`
 	RuleID            string             `json:"ruleId"`
@@ -165,10 +191,31 @@ type Finding struct {
 	Override          *Override          `json:"override,omitempty"`
 }
 
+// ServiceCandidate is one contractual service a reviewer may map an uncovered
+// invoice line to. Ranking signals are wording and unit of measure only; the
+// tariff is never a signal (see suggest.go).
 type ServiceCandidate struct {
-	RuleID string `json:"ruleId"`
-	Label  string `json:"label"`
+	RuleID           string     `json:"ruleId"`
+	Label            string     `json:"label"`
+	PricingKind      RuleKind   `json:"pricingKind,omitempty"`
+	Unit             string     `json:"unit,omitempty"`
+	BillingFrequency string     `json:"billingFrequency,omitempty"`
+	Evidence         []Evidence `json:"evidence,omitempty"`
+	Score            float64    `json:"score"`
+	SharedWords      []string   `json:"sharedWords,omitempty"`
+	LineWordCount    int        `json:"lineWordCount,omitempty"`
+	LineUnit         string     `json:"lineUnit,omitempty"`
+	UnitMatch        UnitMatch  `json:"unitMatch,omitempty"`
+	Suggested        bool       `json:"suggested,omitempty"`
 }
+
+type UnitMatch string
+
+const (
+	UnitCompatible   UnitMatch = "COMPATIBLE"
+	UnitIncompatible UnitMatch = "INCOMPATIBLE"
+	UnitUnknown      UnitMatch = "UNKNOWN"
+)
 
 type Override struct {
 	Reason       string    `json:"reason"`
@@ -189,6 +236,9 @@ type Run struct {
 	Findings        []Finding `json:"findings"`
 	CreatedAt       time.Time `json:"createdAt"`
 	CompletedAt     time.Time `json:"completedAt"`
+	// ActiveSnapshotVersion is read with the run, never stored: the dossier's
+	// version now, so a reader sees the contract changed since the run.
+	ActiveSnapshotVersion uint64 `json:"activeSnapshotVersion,omitempty"`
 }
 
 type Input struct {
@@ -204,6 +254,13 @@ type Input struct {
 	RemittanceDate       *time.Time
 	RemittanceSource     string
 	AcceptanceDate       *time.Time
+	// PendingClauses cites the dossier's clauses still to settle, which keep
+	// its coverage partial, so the reviewer is sent to them.
+	PendingClauses []Evidence
+	// ContractWaived is set only when no contract snapshot exists and the
+	// accountant chose to continue without a contract (D-120); the reasoned
+	// decision is Invoice.ContractWaiver.
+	ContractWaived bool
 }
 
 type InvoiceDateFact struct {
@@ -223,6 +280,87 @@ type RuleConfirmation struct {
 	ClientID, DocumentID, RuleID, CommandID string
 	ActorID, ActorDisplay                   string
 	Rule                                    *Rule
+	// Revise replaces an already-confirmed narrative-completed rule with the
+	// reviewer's correction instead of confirming a proposal.
+	Revise bool
+	// Automatic records a source-text recognition confirmed without a click.
+	Automatic bool
+}
+
+// ServicePriceActivation reports which confirmed service prices became
+// enforceable rules and which could not, so none disappears silently.
+type ServicePriceActivation struct {
+	Activated int                   `json:"activated"`
+	Skipped   []SkippedServicePrice `json:"skipped,omitempty"`
+}
+
+type SkippedServicePrice struct {
+	Position    int    `json:"position"`
+	Description string `json:"description"`
+	UnitPrice   string `json:"unitPrice,omitempty"`
+	Currency    string `json:"currency,omitempty"`
+	Reason      string `json:"reason"`
+}
+
+const (
+	SkipPriceMissing            = "PRICE_MISSING"
+	SkipPricingModelUnsupported = "PRICING_MODEL_UNSUPPORTED"
+	SkipSourceMissing           = "SOURCE_EVIDENCE_MISSING"
+	SkipPriceChangedFromSource  = "PRICE_CHANGED_FROM_SOURCE"
+	SkipRuleInvalid             = "RULE_INVALID"
+	SkipPriceNotInSource        = "PRICE_NOT_IN_SOURCE"
+	// SkipPricedByClauses: the dossier already checks prices with rules
+	// confirmed from contract clauses, so service tariffs are not added.
+	SkipPricedByClauses = "PRICED_BY_CONTRACT_CLAUSES"
+)
+
+// A proposed clause closed without becoming a rule keeps why it was closed.
+// ClauseCoveredByPartyIdentity: an identity clause naming the client's CUI
+// (alone or next to the supplier's). ClauseCoveredByServiceTariff: a pricing
+// clause restating a reviewed service tariff; only the system closes it.
+const (
+	ClauseCoveredByContractReference = "COVERED_BY_CONTRACT_REFERENCE"
+	ClauseCoveredBySupplierIdentity  = "COVERED_BY_SUPPLIER_IDENTITY"
+	ClauseCoveredByPartyIdentity     = "COVERED_BY_PARTY_IDENTITY"
+	ClauseCoveredByServiceTariff     = "COVERED_BY_SERVICE_TARIFF"
+	ClauseNotInvoiceVerifiable       = "NOT_INVOICE_VERIFIABLE"
+)
+
+// ClauseDismissal closes one proposed clause of a confirmed document so it no
+// longer keeps the dossier's coverage partial.
+type ClauseDismissal struct {
+	ClientID, DocumentID, RuleID, CommandID string
+	ActorID, ActorDisplay                   string
+	ReasonCode                              string
+	Reason                                  string
+}
+
+// DocumentCommercialState is what a confirmed contract document contributes
+// to invoice checks right now, read from the dossier's active snapshot.
+type DocumentCommercialState struct {
+	DossierID       string                 `json:"dossierId"`
+	SnapshotVersion uint64                 `json:"snapshotVersion"`
+	Coverage        Coverage               `json:"coverage"`
+	ActiveRuleIDs   []string               `json:"activeRuleIds"`
+	Services        []DocumentServiceState `json:"services"`
+	Clauses         []DocumentClauseState  `json:"clauses"`
+}
+
+type DocumentServiceState struct {
+	Position   int    `json:"position"`
+	RuleID     string `json:"ruleId,omitempty"`
+	Active     bool   `json:"active"`
+	SkipReason string `json:"skipReason,omitempty"`
+}
+
+type DocumentClauseState struct {
+	RuleID     string     `json:"ruleId"`
+	Kind       RuleKind   `json:"kind"`
+	Status     string     `json:"status"`
+	ReasonCode string     `json:"reasonCode,omitempty"`
+	Reason     string     `json:"reason,omitempty"`
+	ReviewedBy string     `json:"reviewedBy,omitempty"`
+	ReviewedAt *time.Time `json:"reviewedAt,omitempty"`
 }
 
 type RevalidationCandidate struct {
@@ -254,8 +392,13 @@ type Store interface {
 	Resolve(context.Context, ReviewResolution, time.Time) (bool, error)
 	PutVariable(context.Context, string, string, VariableValue, string) (bool, error)
 	ConfirmAlias(context.Context, Alias, string) (bool, error)
+	ListAliases(context.Context, string, string) ([]LearnedAlias, error)
+	DocumentDossierID(context.Context, string, string) (string, error)
+	RevokeAlias(context.Context, AliasRevocation, time.Time) (bool, error)
 	ConfirmProposedRule(context.Context, RuleConfirmation, time.Time) (bool, error)
-	ActivateReviewedServicePrices(context.Context, string, string, string, string, time.Time) (int, error)
+	DismissProposedClause(context.Context, ClauseDismissal, time.Time) (bool, error)
+	DocumentCommercialState(context.Context, string, string) (*DocumentCommercialState, error)
+	ActivateReviewedServicePrices(context.Context, string, string, string, string, time.Time) (ServicePriceActivation, error)
 	PutInvoiceDateFact(context.Context, InvoiceDateFact, time.Time) (bool, error)
 	PreviewRevalidation(context.Context, string, string) ([]RevalidationCandidate, error)
 	CreateDossier(context.Context, Dossier, string) (Dossier, bool, error)

@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,4 +42,19 @@ func (s *Store) IngestLegislation(ctx context.Context, manifest legislation.Mani
 		}
 	}
 	return tx.Commit()
+}
+
+// LegislationVersionHash reports the stored content hash of an immutable
+// legislation version so repeatable local seeding can skip identical imports
+// and reject divergent content under an existing version identity.
+func (s *Store) LegislationVersionHash(ctx context.Context, versionID string) (string, bool, error) {
+	var hash string
+	err := s.DB.QueryRowContext(ctx, `SELECT content_hash FROM legislation_versions WHERE id=$1`, versionID).Scan(&hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("read legislation version: %w", err)
+	}
+	return hash, true, nil
 }

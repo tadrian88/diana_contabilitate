@@ -6,6 +6,8 @@ import { Button } from '../../components/ui/button'
 import type { TaskStatus, TaskType } from '../../domain/invoice'
 import { PIPELINE_LABELS, TASK_STATUS_LABELS, TASK_TYPE_LABELS } from '../../domain/invoice'
 import { useRequestContract } from '../invoices/invoice-mutations'
+import { ContinueWithoutContractDialog } from '../invoices/ContinueWithoutContractDialog'
+import { taskTab } from '../invoices/invoice-view'
 import { useTaskInbox, type TaskInboxItem } from './task-inbox-hooks'
 
 type TypeFilter = 'ALL' | TaskType
@@ -55,6 +57,7 @@ export function TaskInboxPage() {
               <option value="ALL">Toate tipurile</option>
               <option value="CONTRACT_MATCH">Verificare contract</option>
               <option value="MISSING_CONTRACT">Contract lipsă</option>
+              <option value="COMMERCIAL_REVIEW">Validare comercială</option>
               <option value="CLASSIFICATION">Revizuire clasificare</option>
             </select>
           </label>
@@ -69,7 +72,7 @@ export function TaskInboxPage() {
                 <tr><th className="px-5 py-3">Task și motiv</th><th className="px-4 py-3">Factură</th><th className="px-4 py-3">Client</th><th className="px-4 py-3">Context decizie</th><th className="px-4 py-3">Status</th><th className="px-5 py-3 text-right">Acțiune</th></tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {visibleItems.map((item) => <TaskRow key={item.task.id} item={item} returnTo={buildReturnPath(status, type)} onRequested={() => setNotice('Contractul a fost solicitat. Task-ul rămâne vizibil în „În așteptare”.')} />)}
+                {visibleItems.map((item) => <TaskRow key={item.task.id} item={item} returnTo={buildReturnPath(status, type)} onRequested={() => setNotice('Contractul a fost solicitat. Task-ul rămâne vizibil în „În așteptare”.')} onContinued={() => setNotice('Factura continuă fără contract. Decizia și motivul sunt în istoricul facturii.')} />)}
               </tbody>
             </table>
           </div>
@@ -79,10 +82,10 @@ export function TaskInboxPage() {
   )
 }
 
-function TaskRow({ item, returnTo, onRequested }: { item: TaskInboxItem; returnTo: string; onRequested: () => void }) {
+function TaskRow({ item, returnTo, onRequested, onContinued }: { item: TaskInboxItem; returnTo: string; onRequested: () => void; onContinued: () => void }) {
   const { task, invoice, client } = item
   const requestContract = useRequestContract(invoice.id)
-  const destination = task.type === 'CLASSIFICATION' ? 'classification' : 'contract'
+  const destination = taskTab(task.type)
   const href = `/invoices/${invoice.id}?tab=${destination}&returnTo=${encodeURIComponent(returnTo)}`
   const pendingItems = task.classificationItems?.filter((review) => review.status === 'PENDING').length ?? 0
   const recommended = task.contractCandidates?.find((candidate) => candidate.recommended)
@@ -104,16 +107,19 @@ function TaskRow({ item, returnTo, onRequested }: { item: TaskInboxItem; returnT
         <Badge tone="neutral">{PIPELINE_LABELS[invoice.pipelineStatus]}</Badge>
         {task.type === 'CONTRACT_MATCH' && recommended && <div className="mt-2 max-w-[230px]"><strong>{recommended.reference}</strong><span className="block text-[var(--text-secondary)]">Încredere: {recommended.confidence}</span><span className="mt-1 block text-[var(--text-muted)]">{recommended.reasons[0]}{(task.contractCandidates?.length ?? 0) > 1 ? ` · ${(task.contractCandidates?.length ?? 1) - 1} alternativă` : ''}</span></div>}
         {task.type === 'CLASSIFICATION' && <div className="mt-2 text-[var(--text-secondary)]"><strong className="text-[var(--text)]">{pendingItems}</strong> elemente incerte necesită revizuire.</div>}
-        {task.type === 'MISSING_CONTRACT' && <div className="mt-2 text-[var(--text-secondary)]">Factura așteaptă o condiție externă.</div>}
-        {task.type === 'COMMERCIAL_REVIEW' && <div className="mt-2 text-[var(--text-secondary)]">Verifică findings, datele lipsă și excepțiile în tab-ul Contract.</div>}
+        {task.type === 'MISSING_CONTRACT' && <div className="mt-2 text-[var(--text-secondary)]">{task.contractWaived ? 'Continuat fără contract.' : 'Factura așteaptă o condiție externă.'}</div>}
+        {task.type === 'COMMERCIAL_REVIEW' && <div className="mt-2 text-[var(--text-secondary)]">Verifică factura față în față cu contractul, asociază serviciile și completează datele lipsă.</div>}
       </td>
       <td className="px-4 py-4"><Badge tone={task.status === 'OPEN' ? 'warning' : task.status === 'WAITING' ? 'info' : 'success'}>{TASK_STATUS_LABELS[task.status]}</Badge></td>
       <td className="px-5 py-4 text-right">
-        {task.type === 'MISSING_CONTRACT' && task.status === 'OPEN' ? (
-          <Button size="sm" onClick={() => requestContract.mutate(undefined, { onSuccess: onRequested })} disabled={requestContract.isPending}>Solicită contract</Button>
-        ) : (
-          <Link to={href} className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[var(--accent)] outline-none hover:bg-[var(--info-soft)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{task.status === 'OPEN' ? 'Rezolvă' : 'Vezi context'}<ArrowRight className="size-3.5" /></Link>
-        )}
+        <div className="flex items-center justify-end gap-2">
+          {task.type === 'MISSING_CONTRACT' && task.status !== 'RESOLVED' && <ContinueWithoutContractDialog invoiceId={invoice.id} size="sm" onContinued={onContinued} />}
+          {task.type === 'MISSING_CONTRACT' && task.status === 'OPEN' ? (
+            <Button size="sm" onClick={() => requestContract.mutate(undefined, { onSuccess: onRequested })} disabled={requestContract.isPending}>Solicită contract</Button>
+          ) : (
+            <Link to={href} className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[var(--accent)] outline-none hover:bg-[var(--info-soft)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{task.status === 'OPEN' ? 'Rezolvă' : 'Vezi context'}<ArrowRight className="size-3.5" /></Link>
+          )}
+        </div>
       </td>
     </tr>
   )
@@ -136,7 +142,7 @@ function EmptyState({ status, filtered, onReset }: { status: TaskStatus; filtere
 }
 
 function parseStatus(value: string | null): TaskStatus { return value === 'WAITING' || value === 'RESOLVED' ? value : 'OPEN' }
-function parseType(value: string | null): TypeFilter { return value === 'CONTRACT_MATCH' || value === 'MISSING_CONTRACT' || value === 'CLASSIFICATION' ? value : 'ALL' }
+function parseType(value: string | null): TypeFilter { return value === 'CONTRACT_MATCH' || value === 'MISSING_CONTRACT' || value === 'COMMERCIAL_REVIEW' || value === 'CLASSIFICATION' ? value : 'ALL' }
 function buildReturnPath(status: TaskStatus, type: TypeFilter) { return `/tasks?status=${status}&type=${type}` }
 function formatMoney(amount: number, currency: string) { return new Intl.NumberFormat('ro-RO', { style: 'currency', currency }).format(amount) }
 function formatDate(value: string) { return new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeZone: 'Europe/Bucharest' }).format(new Date(value)) }

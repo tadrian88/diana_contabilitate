@@ -107,3 +107,122 @@ func TestDomainHumanAccountStillRequiresApprovedVocabulary(t *testing.T) {
 		t.Fatal("unapproved analytic unlocked by review")
 	}
 }
+
+// packlessInvoice models the D-107 flow: no per-client release pack, every
+// decision confirmed by the accountant, code-owned SAGA mapping.
+func packlessInvoice(t *testing.T) *invoicing.Invoice {
+	t.Helper()
+	item := domainInvoice(t)
+	item.AccountingSnapshot.Pack = nil
+	for i := range item.Lines[0].Classifications {
+		d := &item.Lines[0].Classifications[i]
+		d.Source = classification.SourceAIProposal
+		d.Rule = nil
+		d.HumanReviewed = true
+		d.ReviewReason = "TEST_ONLY accountant confirmation"
+	}
+	return item
+}
+
+func TestDomainPacklessHumanReviewedUsesDefaultMapping(t *testing.T) {
+	item := packlessInvoice(t)
+	r := EvaluateReadiness(item, domainClient(), true, false)
+	if !r.Ready || r.MappingVersion != accounting.DefaultSAGAMapping.Version {
+		t.Fatal(r)
+	}
+	a, err := GenerateTestOnly(item, domainClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(a.Payload), "TipDeducere") || !strings.HasSuffix(a.ExporterVersion, "/"+accounting.DefaultSAGAMapping.Version) {
+		t.Fatal(a.ExporterVersion)
+	}
+	if _, err := Generate(item, domainClient()); err == nil {
+		t.Fatal("TEST_ONLY profile exported by production")
+	}
+}
+
+func TestDomainPacklessAutomaticRuleDecisionRejected(t *testing.T) {
+	item := packlessInvoice(t)
+	item.Lines[0].Classifications[0].HumanReviewed = false
+	item.Lines[0].Classifications[0].Source = classification.SourceRule
+	if r := EvaluateReadiness(item, domainClient(), true, false); r.Ready {
+		t.Fatal("automatic decision accepted without pack")
+	}
+}
+
+func TestDomainMicroProfileDerivedExpenseIsExportable(t *testing.T) {
+	item := packlessInvoice(t)
+	item.AccountingSnapshot.Profile.TaxRegime = "MICROENTERPRISE"
+	expected, _ := item.AccountingSnapshot.Profile.ProfileDerivedExpenseTaxValue()
+	d := &item.Lines[0].Classifications[3]
+	d.Source = classification.SourceProfile
+	d.HumanReviewed = false
+	d.ReviewReason = ""
+	d.PolicyVersion = classification.DomainPolicyVersion
+	d.TypedValue = &expected
+	text := expected.Text()
+	d.EffectiveValue = &text
+	if r := EvaluateReadiness(item, domainClient(), true, false); !r.Ready {
+		t.Fatal(r.Reason)
+	}
+	d.TypedValue = &accounting.Value{Kind: "FULLY_DEDUCTIBLE"}
+	text = d.TypedValue.Text()
+	d.EffectiveValue = &text
+	if r := EvaluateReadiness(item, domainClient(), true, false); r.Ready {
+		t.Fatal("profile-derived value diverging from profile accepted")
+	}
+	item.AccountingSnapshot.Profile.TaxRegime = "PROFIT_TAX"
+	d.TypedValue = &expected
+	text = expected.Text()
+	d.EffectiveValue = &text
+	if r := EvaluateReadiness(item, domainClient(), true, false); r.Ready {
+		t.Fatal("profile-derived decision accepted for profit-tax profile")
+	}
+}
+
+func TestDomainUnsupportedProfileVariantsKeepExplicitReason(t *testing.T) {
+	for field, want := range map[string]string{"vat": "neînregistrați", "deduction": "fără drept de deducere", "cash": "TVA la încasare", "prorata": "pro-rata"} {
+		item := packlessInvoice(t)
+		p := item.AccountingSnapshot.Profile
+		switch field {
+		case "vat":
+			p.VATRegistration = "NOT_REGISTERED"
+		case "deduction":
+			p.DeductionActivity = "MIXED"
+		case "cash":
+			p.CashAccounting = "YES"
+		case "prorata":
+			p.ProRata = "YES"
+		}
+		if r := EvaluateReadiness(item, domainClient(), true, false); r.Ready || !strings.Contains(r.Reason, want) {
+			t.Fatal(field, r)
+		}
+	}
+}
+
+func TestDomainUnknownSupplierCashAccountingNeedsHumanImmediateVAT(t *testing.T) {
+	item := packlessInvoice(t)
+	if item.SourceFacts.CashAccounting != "UNKNOWN" {
+		t.Fatal("fixture must model unknown supplier cash accounting")
+	}
+	d := &item.Lines[0].Classifications[1]
+	d.TypedValue = &accounting.Value{Kind: "ORDINARY", Timing: "DEFERRED", SourceCategory: "S", SourceRate: accountingtest.Rate("21")}
+	text := d.TypedValue.Text()
+	d.EffectiveValue = &text
+	if r := EvaluateReadiness(item, domainClient(), true, false); r.Ready || !strings.Contains(r.Reason, "TVA la încasare necunoscut") {
+		t.Fatal(r)
+	}
+}
+
+func TestProfileAccountAllowedEmptyMeansWholeCatalog(t *testing.T) {
+	item := packlessInvoice(t)
+	item.AccountingSnapshot.Profile.AccountCodes = nil
+	d := &item.Lines[0].Classifications[0]
+	d.TypedValue = &accounting.Value{Kind: "ACCOUNT", Account: "6022"}
+	text := d.TypedValue.Text()
+	d.EffectiveValue = &text
+	if r := EvaluateReadiness(item, domainClient(), true, false); !r.Ready {
+		t.Fatal(r.Reason)
+	}
+}

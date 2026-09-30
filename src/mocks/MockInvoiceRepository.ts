@@ -3,6 +3,8 @@ import type { ApprovedKnowledge, ClientScope, Invoice, PipelineStatus, Promotion
 import type { ContractDocument, InvoiceRepository, ReviewedContract, SPVConnection } from '../repositories/invoiceRepository'
 import { mockClients, mockContracts, mockInvoices, mockRules } from './scenarios'
 import type { CreateClientOverrideInput, CreateRuleVersionInput } from '../repositories/invoiceRepository'
+import type { AIUsagePeriodInput, AIUsageRunKind } from '../domain/ai-usage'
+import { demoAIUsage, demoClientUsage, demoOverview, demoRunDetail, demoRunPage } from './ai-usage'
 
 const clone = <T,>(value: T): T => structuredClone(value)
 
@@ -30,6 +32,7 @@ export class MockInvoiceRepository implements InvoiceRepository {
   private clientCommands = new Map<string,{payload:string;clientId:string}>()
   private contractDocuments = new Map<string, ContractDocument>()
   private contractDocumentFiles = new Map<string,File>()
+  private aiUsage = demoAIUsage(new Date())
 
   async listClients() {
     return clone([...mockClients.filter(c=>!this.clientDetails.has(c.id)),...this.clientDetails.values()].map(c=>'client' in c?c.client:c))
@@ -85,7 +88,10 @@ export class MockInvoiceRepository implements InvoiceRepository {
   async resolveCommercialValidation(){return {changed:false}}
   async putCommercialVariable(){return {changed:false}}
   async confirmCommercialServiceAlias(){return {changed:false}}
+  async listCommercialServiceAliases(){return []}
+  async revokeCommercialServiceAlias(){return {changed:false}}
   async activateReviewedServicePrices(){return {activated:0}}
+  async dismissProposedCommercialClause(){return {changed:false}}
   async putCommercialDateFact(){return {changed:false}}
 
   async getInvoice(id: string) {
@@ -124,6 +130,7 @@ export class MockInvoiceRepository implements InvoiceRepository {
 async uploadContractDocument(clientId:string,file:File){const id=`contract-document-${this.contractDocuments.size+1}`;const field=(value:string|null,page:number|null=1)=>({value,status:value?'PRESENT' as const:'MISSING' as const,confidence:value?'HIGH' as const:'UNKNOWN' as const,evidence:{page,snippet:value??''},alternatives:[]});const item:ContractDocument={id,clientId,clientCui:'RO10000000',originalFilename:file.name,mimeType:'application/pdf',sizeBytes:file.size,sha256:`mock-${id}`,status:'READY_FOR_REVIEW',lifecycleState:'ACTIVE',revision:2,uploadedAt:new Date().toISOString(),uploadedBy:'Contabil demo',buyerMismatch:false,extraction:{id:`extraction-${id}`,provider:'DETERMINISTIC_DEMO',model:'fake-contract-extractor',schemaVersion:'CONTRACT_EXTRACTION_V2',promptVersion:'CONTRACT_EXTRACTION_PROMPT_V2',status:'SUCCEEDED',startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),proposal:{supplierName:field('Furnizor extras SRL'),supplierCui:field('RO12345678'),reference:field('CTR-2026-01'),effectiveFrom:field('2026-01-01'),effectiveTo:field('2027-12-31',2),totalValue:field('125000.00',3),currency:field('RON',3),unitType:field('servicii'),paymentTerms:field('30 zile'),buyerCui:field('RO10000000'),periodType:field('FIXED_TERM'),serviceTerms:[]}}};this.contractDocumentFiles.set(id,file);this.contractDocuments.set(id,item);return clone(item)}
   async confirmContractDocument(clientId:string,document:ContractDocument,input:ReviewedContract){const item=this.contractDocuments.get(document.id);if(!item||item.clientId!==clientId||item.revision!==document.revision)throw new Error('Extragerea s-a modificat.');item.status='CONFIRMED';item.revision++;item.confirmedValues=clone(input);item.confirmedContractId=`contract-confirmed-${document.id}`;item.confirmedAt=new Date().toISOString();item.confirmedBy='Contabil demo';this.contracts.set(item.confirmedContractId,{id:item.confirmedContractId,clientId,reference:input.reference,supplierName:input.supplierName,period:`${input.effectiveFrom} — ${input.effectiveTo}`,value:{amount:Number(input.totalValue),currency:input.currency},currency:input.currency,unitType:input.unitType,paymentTerms:input.paymentTerms,sourceReference:item.originalFilename,sourceMetadata:item.extraction?.schemaVersion,sourceDocumentId:item.id});return {contractId:item.confirmedContractId,changed:true}}
   async confirmProposedCommercialRule(){return {changed:false}}
+  async reviseConfirmedCommercialRule(){return {changed:false}}
   async getContractDocumentFile(clientId:string,documentId:string){const item=this.contractDocuments.get(documentId);if(item?.clientId!==clientId)throw new Error('Documentul nu există.');return this.contractDocumentFiles.get(documentId)??new Blob(['%PDF-1.4\n%%EOF'],{type:'application/pdf'})}
   async retryContractExtraction(clientId:string,documentId:string,revision:number){const item=this.contractDocuments.get(documentId);if(!item||item.clientId!==clientId||item.revision!==revision)throw new Error('Extragerea s-a modificat.');item.status='READY_FOR_REVIEW';item.revision++}
   async discardContractDocument(clientId:string,documentId:string,revision:number){const item=this.contractDocuments.get(documentId);if(!item||item.clientId!==clientId||item.revision!==revision||item.status==='CONFIRMED')throw new Error('Documentul nu poate fi șters.');this.contractDocuments.delete(documentId);this.contractDocumentFiles.delete(documentId)}
@@ -136,7 +143,7 @@ async uploadContractDocument(clientId:string,file:File){const id=`contract-docum
   async previewApprovedKnowledge(clientId:string,invoiceId:string,classificationId:string):Promise<PromotionPreview>{const invoice=this.invoices.get(invoiceId);const item=invoice?.lines.flatMap(line=>line.classifications).find(value=>value.id===classificationId);if(!invoice||invoice.clientId!==clientId||!item||item.status==='PENDING'||!item.typedValue)throw new Error('Decizia finală nu există.');const line=invoice.lines.find(value=>value.classifications.some(value=>value.id===classificationId))!;return {classificationId,classificationRevision:item.revision??1,classificationRunId:invoice.currentClassificationRunId??invoice.classificationContext?.runId??'mock-run',dimension:item.dimension,value:item.typedValue,scope:{clientId,clientDisplay:clientId,supplierDisplay:invoice.supplierName,normalizedSupplierId:invoice.supplierCui??invoice.supplierName,serviceIdentityKind:'NORMALIZED_DESCRIPTION',serviceIdentityValue:line.description.toLocaleLowerCase('ro-RO'),normalizerVersion:'NORMALIZED_DESCRIPTION_V1',currency:invoice.total.currency,documentType:'INVOICE',vatRate:line.vatLabel.replace('%',''),profileId:invoice.accountingSnapshot?.profile?.id,profileVersion:invoice.accountingSnapshot?.profile?.version}}}
   async promoteApprovedKnowledge(clientId:string,invoiceId:string,preview:PromotionPreview,_expectedInvoiceRevision:number):Promise<ApprovedKnowledge>{const id=`knowledge-${preview.classificationId}`;if([...this.knowledge.values()].some(item=>item.scope.clientId===clientId&&item.dimension===preview.dimension&&item.scope.serviceIdentityValue===preview.scope.serviceIdentityValue&&JSON.stringify(item.value)===JSON.stringify(preview.value)))throw new Error('KNOWLEDGE_DUPLICATE');const item:ApprovedKnowledge={id,version:1,dimension:preview.dimension,value:preview.value,scope:preview.scope,status:'ACTIVE',sourceInvoiceId:invoiceId,sourceInvoiceLineId:'mock-line',sourceClassificationId:preview.classificationId,sourceClassificationRunId:preview.classificationRunId,originalSource:'MANUAL',promotedBy:'Contabil demo',promotedAt:new Date().toISOString(),revision:1};this.knowledge.set(id,item);return clone(item)}
   async revokeApprovedKnowledge(clientId:string,item:ApprovedKnowledge):Promise<ApprovedKnowledge>{const current=this.knowledge.get(item.id);if(!current||current.scope.clientId!==clientId||current.revision!==item.revision)throw new Error('CONFLICT');current.status='REVOKED';current.revision++;return clone(current)}
-  async listLegislationSources(){return []}
+  async listLegislationSources():Promise<import('../domain/invoice').LegislationSourceView[]>{return []}
 
   async searchAccounts(query:string) {
     const items=[{code:'6281',name:'Cheltuieli cu serviciile IT',accountType:'expense',synthetic:false,postable:true,active:true},{code:'6262',name:'Cheltuieli cu telecomunicațiile',accountType:'expense',synthetic:false,postable:true,active:true}]
@@ -231,6 +238,20 @@ async uploadContractDocument(clientId:string,file:File){const id=`contract-docum
     return clone(invoice)
   }
 
+  async continueWithoutContract(id: string, reason: string) {
+    const invoice = this.requireInvoice(id)
+    if (!invoice.task || invoice.task.type !== 'MISSING_CONTRACT' || invoice.task.status === 'RESOLVED') throw new Error('Task-ul de contract lipsă nu există.')
+    const trimmed = reason.trim()
+    if (trimmed.length < 10 || trimmed.length > 500) throw new Error('Motivul trebuie să aibă între 10 și 500 de caractere.')
+    invoice.task.status = 'RESOLVED'
+    invoice.task.contractWaived = true
+    invoice.contractWaiver = { reason: trimmed, actor: 'Contabil demo', waivedAt: '2026-09-30T09:00:00.000Z' }
+    invoice.pipelineStatus = 'DEDUPE_CHECKED'
+    invoice.autoRun = true
+    invoice.activity.push(activityFor(invoice, 'Continuat fără contract', `Motiv: ${trimmed}`, 'AWAITING_CONTRACT', 'DEDUPE_CHECKED'))
+    return clone(invoice)
+  }
+
   async reviewClassification(id: string, itemId: string, value?: string, typedValue?: import('../domain/invoice').DomainValue, reason?: string, _mappingAction?:import('../domain/invoice').AccountMappingAction, _expectedMappingRevision?:number, action:import('../domain/invoice').ClassificationReviewAction='APPROVE') {
     const invoice = this.requireInvoice(id)
     const task = invoice.task
@@ -302,6 +323,22 @@ async uploadContractDocument(clientId:string,file:File){const id=`contract-docum
 		invoice.activity.push(activityFor(invoice, 'Import SAGA confirmat manual', 'Importul fișierului în SAGA a fost confirmat de contabil.', 'EXPORTING', 'EXPORTED'))
 		return clone(invoice)
 	}
+
+  async getAIUsageOverview(period: AIUsagePeriodInput) {
+    return clone(demoOverview(this.aiUsage, await this.listClients(), period))
+  }
+
+  async getClientAIUsage(clientId: string, period: AIUsagePeriodInput) {
+    return clone(demoClientUsage(this.aiUsage, clientId, period))
+  }
+
+  async listClientAIUsageRuns(clientId: string, period: AIUsagePeriodInput, page: { limit: number; offset: number }) {
+    return clone(demoRunPage(this.aiUsage, clientId, period, page))
+  }
+
+  async getAIUsageRun(clientId: string, runKind: AIUsageRunKind, runId: string) {
+    return clone(demoRunDetail(this.aiUsage, clientId, runKind, runId))
+  }
 
   private requireInvoice(id: string) {
     const invoice = this.invoices.get(id)

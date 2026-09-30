@@ -19,6 +19,7 @@ import (
 	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/fiscalidentity"
+	"diana-contabilitate/backend/internal/llmusage"
 	"diana-contabilitate/backend/internal/money"
 )
 
@@ -121,10 +122,12 @@ func (s *Service) Extract(ctx context.Context, documentID string) error {
 		return extractionFailure(FailureExtractorConfiguration, RetryNever, ErrExtractionPermanent, 0)
 	}
 	attemptID := newID("contractextract")
-	_, run, err := s.store.BeginExtraction(ctx, documentID, attemptID, s.extractor.Provider(), s.extractor.Model(), s.clock())
+	document, run, err := s.store.BeginExtraction(ctx, documentID, attemptID, s.extractor.Provider(), s.extractor.Model(), s.clock())
 	if err != nil || !run {
 		return err
 	}
+	// Every provider call of this attempt, normalization included, is billed to it.
+	ctx = llmusage.WithScope(ctx, llmusage.Scope{RunKind: llmusage.RunContractExtraction, RunID: attemptID, ClientID: document.ClientID})
 	source, err := s.store.GetSource(ctx, documentID)
 	if err == nil {
 		sum := sha256.Sum256(source.Bytes)
@@ -526,6 +529,9 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 			if err := commercialvalidation.ValidateRule(rule); err != nil {
 				add("COMMERCIAL_RULE_INVALID", fmt.Sprintf("Regula comercială %d nu este validă sau nu are dovadă completă.", index+1))
 			}
+			if rule.Kind == commercialvalidation.RuleIdentity && strings.TrimSpace(v.SupplierCUI) != "" && !commercialvalidation.IdentityRuleNamesSupplier(rule, v.SupplierCUI) {
+				add("IDENTITY_RULE_NOT_SUPPLIER", fmt.Sprintf("Regula comercială %d verifică alt CUI decât al furnizorului; pe factură se compară doar furnizorul.", index+1))
+			}
 			if ruleIDs[rule.ID] {
 				add("COMMERCIAL_RULE_DUPLICATE", fmt.Sprintf("Regula comercială %d repetă identitatea %s.", index+1, rule.ID))
 			}
@@ -626,6 +632,9 @@ func ConfirmationReadinessFor(v ReviewedContract, clientCUI string) Confirmation
 	for index, rule := range v.CommercialRules {
 		if err := commercialvalidation.ValidateRule(rule); err != nil {
 			add("COMMERCIAL_RULE_INVALID", fmt.Sprintf("Regula comercială %d nu este validă sau nu are dovadă completă.", index+1))
+		}
+		if rule.Kind == commercialvalidation.RuleIdentity && !commercialvalidation.IdentityRuleNamesSupplier(rule, v.SupplierCUI) {
+			add("IDENTITY_RULE_NOT_SUPPLIER", fmt.Sprintf("Regula comercială %d verifică alt CUI decât al furnizorului; pe factură se compară doar furnizorul.", index+1))
 		}
 		if confirmedRuleIDs[rule.ID] {
 			add("COMMERCIAL_RULE_DUPLICATE", fmt.Sprintf("Regula comercială %d repetă identitatea %s.", index+1, rule.ID))

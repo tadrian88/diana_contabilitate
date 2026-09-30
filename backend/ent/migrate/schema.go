@@ -865,7 +865,7 @@ var (
 		{Name: "legal_basis", Type: field.TypeString},
 		{Name: "required_review", Type: field.TypeBool},
 		{Name: "review_status", Type: field.TypeEnum, Enums: []string{"PENDING", "ACCEPTED", "CORRECTED", "REJECTED"}},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL"}},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"RULE", "NO_MATCH", "AMBIGUOUS", "LEARNED_MAPPING", "AI_PROPOSAL", "PROFILE"}},
 		{Name: "account_mapping_id", Type: field.TypeString, Nullable: true},
 		{Name: "account_mapping_version", Type: field.TypeInt, Nullable: true},
 		{Name: "policy_version", Type: field.TypeString},

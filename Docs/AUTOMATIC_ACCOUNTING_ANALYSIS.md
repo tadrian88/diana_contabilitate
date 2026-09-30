@@ -59,12 +59,13 @@ cd /Users/adriantudoran/Projects/diana_contabilitate/backend
 DATABASE_URL='postgresql://diana:diana@127.0.0.1:5442/diana?sslmode=disable' atlas migrate apply --env local
 ```
 
-2. Importă snapshoturile în aceeași bază `diana`. Pentru facturile locale existente, filtrul tehnic trebuie să înceapă cel târziu la `2026-09-04`; folosim `2026-09-01`. Aceasta este exclusiv o alegere de test, nu o dată juridică de aplicabilitate:
+2. Snapshoturile se importă automat în baza `diana` (D-106): `make dev` rulează `make seed-legislation`, care execută `legislationdraftimport -skip-existing` pentru ambele snapshoturi, cu `-effective-from 2016-01-01`. Aceasta e exclusiv o alegere de test, nu o dată juridică de aplicabilitate. Importul e idempotent; o versiune existentă cu alt conținut produce eroare. Poate fi rulat și separat:
 
 ```bash
-APP_ENV=development DATABASE_URL='postgresql://diana:diana@127.0.0.1:5442/diana?sslmode=disable' go run ./cmd/legislationdraftimport -file legislation/source-snapshots/legea-227-2015-cod-fiscal-oug-38-2026.draft.json -effective-from 2026-09-01 -accept-test-only
-APP_ENV=development DATABASE_URL='postgresql://diana:diana@127.0.0.1:5442/diana?sslmode=disable' go run ./cmd/legislationdraftimport -file legislation/source-snapshots/omfp-1802-2014-original.draft.json -effective-from 2026-09-01 -accept-test-only
+make seed-legislation
 ```
+
+Versiunile importate manual anterior (de ex. `-TEST_ONLY-2026-09-01`) rămân imuabile și coexistă cu cele noi.
 
 3. Reconstruiește și recreează API-ul și workerul. `restart` nu este suficient pentru cod sau variabile noi:
 
@@ -224,7 +225,7 @@ Fluxul implementabil este:
 
 `SourceFacts + Profile + approved tenant knowledge + dated fragments → Gemini proposal → deterministic Validate → immutable run → human review → approved knowledge → existing SAGA adapter`
 
-Un run păstrează factura/revizia, input snapshot, fragmentele și knowledge-ul folosit, provider/model, prompt/schema, răspunsul structurat, validările, tokenii și timpii. Review-ul păstrează separat propunerea AI și decizia finală. Knowledge-ul are `client_id`, profil, versiuni legislative și perioadă de valabilitate; cheile compozite împiedică asocierea cu profilul/review-ul altui client.
+Un run păstrează factura/revizia, input snapshot, fragmentele și knowledge-ul folosit, provider/model, prompt/schema, răspunsul structurat, validările, tokenii și timpii. Coloanele de tokeni ale run-ului sunt legacy (doar apelul final reușit, fără raționament); consumul complet pe apel, cu retry-uri, eșecuri și cost, este în `llm_usage_events` (D-121, `Docs/AI_USAGE_COST_TRACKING.md`). Review-ul păstrează separat propunerea AI și decizia finală. Knowledge-ul are `client_id`, profil, versiuni legislative și perioadă de valabilitate; cheile compozite împiedică asocierea cu profilul/review-ul altui client.
 
 Retrieval-ul folosește PostgreSQL full-text `simple`, cu filtru obligatoriu pe data facturii. Citarea este acceptată doar dacă ID-ul fragmentului, versiunea, cheia umană și hash-ul coincid cu fragmentul efectiv trimis modelului.
 

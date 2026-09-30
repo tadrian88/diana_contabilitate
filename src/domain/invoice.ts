@@ -24,7 +24,7 @@ export type TaskType = 'CONTRACT_MATCH' | 'MISSING_CONTRACT' | 'COMMERCIAL_REVIE
 export type TaskStatus = 'OPEN' | 'WAITING' | 'RESOLVED'
 export type ReviewStatus = 'PENDING' | 'ACCEPTED' | 'CORRECTED' | 'REJECTED'
 export type ClassificationReviewAction = 'APPROVE' | 'EDIT' | 'REJECT'
-export type ClassificationSource = 'RULE' | 'NO_MATCH' | 'AMBIGUOUS' | 'LEARNED_MAPPING' | 'AI_PROPOSAL'
+export type ClassificationSource = 'RULE' | 'NO_MATCH' | 'AMBIGUOUS' | 'LEARNED_MAPPING' | 'AI_PROPOSAL' | 'PROFILE'
 export type AccountMappingAction = 'NONE' | 'CREATE' | 'VALIDATE' | 'OCCURRENCE_ONLY' | 'CORRECT' | 'POLICY_CHANGE'
 export interface AccountMappingReference { mappingId: string; version: number; accountCode: string; serviceIdentityKind: string; serviceIdentityValue: string; normalizerVersion: string; revision: number }
 export interface AccountMappingScopePreview { clientDisplay:string; supplierDisplay:string; serviceIdentityKind:string; serviceIdentityValue:string; normalizerVersion:string }
@@ -32,7 +32,7 @@ export interface KnowledgeReference { id:string;version:number;sourceInvoiceId:s
 export interface KnowledgeScope {clientId:string;clientDisplay:string;supplierDisplay:string;normalizedSupplierId:string;serviceIdentityKind:string;serviceIdentityValue:string;normalizerVersion:string;currency:string;documentType:string;vatRate:string;profileId?:string;profileVersion?:number}
 export interface PromotionPreview {classificationId:string;classificationRevision:number;classificationRunId:string;dimension:RuleCategory;value:DomainValue;scope:KnowledgeScope}
 export interface ApprovedKnowledge {id:string;version:number;dimension:RuleCategory;value:DomainValue;scope:KnowledgeScope;status:'ACTIVE'|'STALE'|'REVOKED';staleReason?:string;sourceInvoiceId:string;sourceInvoiceLineId:string;sourceClassificationId:string;sourceClassificationRunId:string;originalSource:string;promotedBy:string;promotedAt:string;revision:number;legislationVersionIds?:string[]}
-export interface LegislationSourceView {id:string;kind:string;title:string;issuer:string;officialUrl:string;versionId:string;versionLabel:string;effectiveFrom:string;effectiveTo?:string;status:'ACTIVE'|'EXPIRED'|'FUTURE';fragmentCount:number}
+export interface LegislationSourceView {id:string;kind:string;title:string;issuer:string;officialUrl:string;versionId:string;versionLabel:string;effectiveFrom:string;effectiveTo?:string;status:'ACTIVE'|'EXPIRED'|'FUTURE';fragmentCount:number;testOnly?:boolean}
 export type RuleCategory = 'ACCOUNT' | 'VAT' | 'DEDUCTIBILITY' | 'VAT_TREATMENT' | 'VAT_DEDUCTIBILITY' | 'EXPENSE_TAX_TREATMENT'
 export type RuleScope = 'GLOBAL' | 'CLIENT_OVERRIDE'
 
@@ -215,8 +215,16 @@ export interface ValidationTask {
   contractCandidates?: ContractCandidate[]
   classificationItems?: ClassificationReviewItem[]
   contractRequested?: boolean
+  contractWaived?: boolean
   revision?: number
   classificationRunId?:string
+}
+
+/** Decizia motivată a contabilului de a continua fără contract (D-120). */
+export interface ContractWaiver {
+  reason: string
+  actor: string
+  waivedAt: string
 }
 
 export interface ValidationTaskInboxItem {
@@ -291,6 +299,7 @@ export interface Invoice {
   autoRun: boolean
   selectedContractId?: string
   contract?: ContractSummary
+  contractWaiver?: ContractWaiver
   task?: ValidationTask
   lines: InvoiceLine[]
 	activity: ActivityEvent[]
@@ -358,7 +367,7 @@ export interface DecisionEvidence { modelVersion: string; profileId: string; pro
 export interface LegalCitation { fragmentId:string;versionId:string;citationKey:string;contentHash:string;verified:boolean }
 export interface ClassificationValidation { code:string;message:string;suggestedAccounts?:string[] }
 export interface ProposalProvenance { analysisRunId:string;provider:string;model:string;schemaVersion:string;promptVersion:string;knowledgeId?:string;knowledgeVersion?:number;sourceInvoiceId?:string;sourceLineId?:string;sourceDecisionId?:string;promotedBy?:string;promotedAt?:string }
-export interface LineSourceFacts { sourceId: string; path: string; code: string; rate?: string; scheme?: string; exemptionCode?: string; exemptionReason?: string; vatOrigin: 'DECLARED' | 'CALCULATED' | 'UNKNOWN' }
+export interface LineSourceFacts { sourceId: string; path: string; code: string; rate?: string; scheme?: string; exemptionCode?: string; exemptionReason?: string; vatOrigin: 'DECLARED' | 'CALCULATED' | 'UNKNOWN'; sellerItemId?: string; standardItemId?: string; itemName?: string; itemDescription?: string; note?: string }
 export interface InvoiceSourceFacts { parserVersion: string; sourceDocumentId?: string; sourceHash?: string; typeCode?: string; supplierCountry?: string; buyerCountry?: string; taxPointDate?: string; periodStart?: string; periodEnd?: string; taxPointCode?: string; supplierVatId?: string; supplierLegalId?: string; buyerVatId?: string; buyerLegalId?: string; taxCurrency?: string; cashAccounting: string }
 
 export interface AccountingProfileSnapshot { id: string; clientId: string; version: number; chartPolicy: string; framework?: string; taxRegime?: string; vatRegistration?: string; deductionActivity?: string; cashAccounting?: string; proRata?: string; effectiveFrom?: string; effectiveTo?: string; testOnly?: boolean }

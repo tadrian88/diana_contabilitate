@@ -3,22 +3,49 @@ package validationtasks
 import "testing"
 
 func TestTaskStateMachineIsExhaustive(t *testing.T) {
-	known := make(map[[3]string]Transition)
+	known := make(map[[4]string]Transition)
+	first := make(map[[3]string]Transition)
 	for _, transition := range Transitions() {
-		key := [3]string{string(transition.TaskType), string(transition.From), string(transition.To)}
+		key := [4]string{string(transition.TaskType), string(transition.From), string(transition.To), string(transition.Trigger)}
 		if _, exists := known[key]; exists {
 			t.Fatalf("duplicate transition %+v", transition)
 		}
 		known[key] = transition
+		edge := [3]string{string(transition.TaskType), string(transition.From), string(transition.To)}
+		if _, exists := first[edge]; !exists {
+			first[edge] = transition
+		}
 	}
 	for _, taskType := range Types {
 		for _, from := range Statuses {
 			for _, to := range Statuses {
 				got, found := FindTransition(taskType, from, to)
-				want, expected := known[[3]string{string(taskType), string(from), string(to)}]
+				want, expected := first[[3]string{string(taskType), string(from), string(to)}]
 				if found != expected || found && got != want {
 					t.Fatalf("%s %s -> %s found=%v got=%+v", taskType, from, to, found, got)
 				}
+			}
+		}
+	}
+	for key, want := range known {
+		got, found := FindTransitionByTrigger(Type(key[0]), Status(key[1]), Status(key[2]), Trigger(key[3]))
+		if !found || got != want {
+			t.Fatalf("trigger lookup %v found=%v got=%+v", key, found, got)
+		}
+	}
+}
+
+func TestMissingContractCanBeWaivedFromOpenOrWaiting(t *testing.T) {
+	for _, from := range []Status{StatusOpen, StatusWaiting} {
+		transition, found := FindTransitionByTrigger(TypeMissingContract, from, StatusResolved, TriggerContractWaived)
+		if !found || transition.Module3Executable {
+			t.Fatalf("missing-contract waiver from %s = %+v found=%v", from, transition, found)
+		}
+	}
+	for _, taskType := range []Type{TypeContractMatch, TypeCommercialReview, TypeClassification} {
+		for _, from := range Statuses {
+			if _, found := FindTransitionByTrigger(taskType, from, StatusResolved, TriggerContractWaived); found {
+				t.Fatalf("%s must not be waived from %s", taskType, from)
 			}
 		}
 	}

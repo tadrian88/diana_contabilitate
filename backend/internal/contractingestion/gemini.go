@@ -1,7 +1,6 @@
 package contractingestion
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -13,27 +12,29 @@ import (
 	"strings"
 
 	"diana-contabilitate/backend/internal/commercialvalidation"
+	"diana-contabilitate/backend/internal/llmusage"
+	"diana-contabilitate/backend/internal/platform/gemini"
 )
 
 type GeminiContractExtractor struct {
-	apiKey, model, baseURL string
-	client                 *http.Client
+	api   *gemini.Client
+	model string
 }
 
 func NewGeminiContractExtractor(apiKey, model, baseURL string, client *http.Client) *GeminiContractExtractor {
-	if baseURL == "" {
-		baseURL = "https://generativelanguage.googleapis.com/v1beta"
-	}
-	if client == nil {
-		client = http.DefaultClient
-	}
-	return &GeminiContractExtractor{apiKey: apiKey, model: model, baseURL: strings.TrimRight(baseURL, "/"), client: client}
+	return &GeminiContractExtractor{api: gemini.New(apiKey, baseURL, client), model: model}
+}
+
+// WithUsageRecorder records the tokens of every extraction and normalization call.
+func (g *GeminiContractExtractor) WithUsageRecorder(recorder llmusage.Recorder) *GeminiContractExtractor {
+	g.api.WithUsageRecorder(recorder)
+	return g
 }
 func (g *GeminiContractExtractor) Provider() string { return ProviderGemini }
 func (g *GeminiContractExtractor) Model() string    { return g.model }
 
 func (g *GeminiContractExtractor) Extract(ctx context.Context, pdf []byte, mimeType string) (ExtractionResult, error) {
-	if g.apiKey == "" || g.model == "" {
+	if !g.api.Configured() || g.model == "" {
 		return ExtractionResult{}, extractionFailure(FailureExtractorConfiguration, RetryNever, ErrExtractionPermanent, 0)
 	}
 	input := []any{
@@ -49,19 +50,8 @@ func (g *GeminiContractExtractor) Extract(ctx context.Context, pdf []byte, mimeT
 		"generation_config": map[string]any{"temperature": 0, "thinking_summaries": "none"},
 		"response_format":   map[string]any{"type": "text", "mime_type": "application/json", "schema": proposalJSONSchema()},
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return ExtractionResult{}, err
-	}
-	endpoint := g.baseURL + "/interactions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return ExtractionResult{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", g.apiKey)
-	resp, err := g.client.Do(req)
-	if err != nil {
+	resp, err := g.api.Interact(ctx, gemini.Request{Model: g.model, Operation: llmusage.OperationContractExtraction, Payload: payload})
+	if errors.Is(err, gemini.ErrSend) {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return ExtractionResult{}, extractionFailure(FailureTimeout, RetryStandard, context.DeadlineExceeded, 0)
 		}
@@ -70,10 +60,11 @@ func (g *GeminiContractExtractor) Extract(ctx context.Context, pdf []byte, mimeT
 		}
 		return ExtractionResult{}, extractionFailure(FailureProviderNetwork, RetryStandard, ErrExtractionTransient, 0)
 	}
-	defer resp.Body.Close()
-	responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	if readErr != nil {
+	if errors.Is(err, gemini.ErrRead) {
 		return ExtractionResult{}, extractionFailure(FailureProviderNetwork, RetryStandard, ErrExtractionTransient, 0)
+	}
+	if err != nil {
+		return ExtractionResult{}, err
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return ExtractionResult{}, extractionFailure(FailureProviderRateLimit, RetryStandard, ErrExtractionTransient, resp.StatusCode)
@@ -87,35 +78,12 @@ func (g *GeminiContractExtractor) Extract(ctx context.Context, pdf []byte, mimeT
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return ExtractionResult{}, extractionFailure(FailureProviderRejected, RetryNever, ErrExtractionPermanent, resp.StatusCode)
 	}
-	var decoded struct {
-		Status string `json:"status"`
-		Steps  []struct {
-			Type    string `json:"type"`
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"steps"`
-		Usage struct {
-			Prompt     *int64 `json:"total_input_tokens"`
-			Candidates *int64 `json:"total_output_tokens"`
-		} `json:"usage"`
-	}
-	if json.Unmarshal(responseBody, &decoded) != nil || decoded.Status != "completed" {
+	decoded := resp.Envelope
+	if resp.EnvelopeErr != nil || decoded.Status != "completed" {
 		return ExtractionResult{}, extractionFailure(FailureInvalidProviderEnvelope, RetryOnce, ErrExtractionTransient, 0)
 	}
-	var text string
-	for _, step := range decoded.Steps {
-		if step.Type == "model_output" {
-			for _, part := range step.Content {
-				if part.Type == "text" {
-					text += part.Text
-				}
-			}
-		}
-	}
 	var proposal Proposal
-	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder := json.NewDecoder(strings.NewReader(decoded.Text))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(&proposal); err != nil {
 		return ExtractionResult{}, extractionFailure(FailureInvalidStructuredOutput, RetryOnce, ErrExtractionTransient, 0)
@@ -124,7 +92,7 @@ func (g *GeminiContractExtractor) Extract(ctx context.Context, pdf []byte, mimeT
 		return ExtractionResult{}, extractionFailure(FailureInvalidStructuredOutput, RetryOnce, ErrExtractionTransient, 0)
 	}
 	completeProviderRuleMetadata(&proposal, pdf)
-	result := ExtractionResult{Proposal: proposal, InputTokens: decoded.Usage.Prompt, OutputTokens: decoded.Usage.Candidates}
+	result := ExtractionResult{Proposal: proposal, InputTokens: decoded.InputTokens, OutputTokens: decoded.OutputTokens}
 	if ValidateProposal(proposal) == nil && len(PendingCommercialClauses(proposal)) > 0 {
 		inputTokens, outputTokens := g.normalizeCommercialClauses(ctx, &result.Proposal)
 		result.InputTokens = sumTokenCounts(result.InputTokens, inputTokens)

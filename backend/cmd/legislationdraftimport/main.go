@@ -50,6 +50,7 @@ func main() {
 	date := flag.String("effective-from", "", "TEST_ONLY retrieval start date; not a statement of legal effectiveness")
 	accept := flag.Bool("accept-test-only", false, "acknowledge unverified legal dates and content")
 	validateOnly := flag.Bool("validate-only", false, "validate and preview without database writes")
+	skipExisting := flag.Bool("skip-existing", false, "succeed without writes when the identical TEST_ONLY version is already imported")
 	flag.Parse()
 	if !*accept || *file == "" || *date == "" {
 		fatal("-file, -effective-from and -accept-test-only are required")
@@ -112,6 +113,19 @@ func main() {
 		fatal(err.Error())
 	}
 	defer store.Close()
+	if *skipExisting {
+		stored, exists, err := store.LegislationVersionHash(context.Background(), versionID)
+		if err != nil {
+			fatal(err.Error())
+		}
+		if exists && stored == manifest.Version.ContentHash {
+			fmt.Printf("TEST_ONLY %s already imported with identical content; skipped.\n", versionID)
+			return
+		}
+		if exists {
+			fatal(fmt.Sprintf("TEST_ONLY %s already exists with different content; immutable versions are never overwritten", versionID))
+		}
+	}
 	if err := store.IngestLegislation(context.Background(), manifest); err != nil {
 		fatal(err.Error())
 	}

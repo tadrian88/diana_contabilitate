@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import type { Invoice } from '../../domain/invoice'
+import { Link } from 'react-router-dom'
+import { useClientDetail } from '../clients/client-management-hooks'
 import { useConfirmSagaImport, useDownloadSagaArtifact } from './invoice-hooks'
 
 export function SagaExportCard({ invoice }: { invoice: Invoice }) {
@@ -13,7 +15,7 @@ export function SagaExportCard({ invoice }: { invoice: Invoice }) {
   const [note, setNote] = useState('')
   const exportView = invoice.sagaExport
 
-  if (!exportView && invoice.sagaStatus !== 'FAILED') return null
+  if (!exportView && invoice.sagaStatus !== 'FAILED') return invoice.authority === 'API' && (invoice.pipelineStatus === 'READY_FOR_SAGA' || invoice.pipelineStatus === 'EXPORTING') ? <SagaPendingNotice invoice={invoice} /> : null
 
   const saveArtifact = () => download.mutate(undefined, {
     onSuccess: ({ blob, filename }) => {
@@ -63,3 +65,13 @@ export function SagaExportCard({ invoice }: { invoice: Invoice }) {
 function Info({ label, value }: { label: string; value: string }) { return <div className="rounded-lg bg-[var(--surface-subtle)] p-3"><dt className="text-xs text-[var(--text-muted)]">{label}</dt><dd className="mt-1 break-all font-semibold">{value}</dd></div> }
 function Step({ number, text }: { number: string; text: string }) { return <li className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2"><span className="grid size-6 place-items-center rounded-full bg-[var(--info-soft)] text-xs font-bold text-[var(--info)]">{number}</span>{text}</li> }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Bucharest' }).format(new Date(value)) }
+
+// Before an artifact exists, explain why: either the client has SAGA export
+// disabled (actionable in client settings) or generation is still running.
+function SagaPendingNotice({ invoice }: { invoice: Invoice }) {
+  const detail = useClientDetail(invoice.clientId)
+  if (detail.data && !detail.data.sagaEnabled) return <section aria-labelledby="saga-export-heading" role="alert" className="rounded-xl border border-[var(--warning-border)] bg-[var(--warning-soft)] p-5">
+    <div className="flex items-start gap-3"><AlertCircle className="mt-0.5 size-5 shrink-0" /><div className="flex-1"><h3 id="saga-export-heading" className="font-bold">Exportul SAGA nu este activat pentru acest client</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Factura este gata pentru SAGA, dar fișierul XML nu poate fi generat până nu activezi exportul în setările clientului. După activare, generarea pornește automat.</p><Link className="mt-3 inline-flex rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white" to={`/clients/${encodeURIComponent(invoice.clientId)}#saga-setup`}>Activează exportul SAGA</Link></div></div>
+  </section>
+  return <section aria-labelledby="saga-export-heading" role="status" className="card p-5"><h3 id="saga-export-heading" className="font-bold">Export SAGA</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Diana generează fișierul XML. Pagina se actualizează automat.</p></section>
+}

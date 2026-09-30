@@ -1,4 +1,4 @@
-h1:T2dFdAxCN//nqmvmfWe7xfm8rwVbvEgSrTM9D9KPesU=
+h1:32ZIHuGDp/an94xI/4OL4qqWQ+wk0u6JoeKOtndQYiI=
 000001_foundation.sql h1:1LvkBtffbjWi2YVKW0qGZciJYWvAxKI8su7C3IkgNws=
 000002_invoice_pipeline.sql h1:5NTZwA70HYrkGCZPFDbVk/k2ZqpklocyXKsDWtvfTKU=
 000003_duplicate_status_invariant.sql h1:jbmP08VPjY9Ci+3DbpbCM8Bs/EvLxuHXNuh8EWCW45A=
@@ -31,3 +31,9 @@ h1:T2dFdAxCN//nqmvmfWe7xfm8rwVbvEgSrTM9D9KPesU=
 000030_approved_accounting_knowledge.sql h1:wD86WPL0Qy9j9jASOQj8WRkp+Bgy+w/G05VpPLxhr50=
 000031_approved_knowledge_classification_shape.sql h1:7Or4BmIBDeK2jzh2Kwx9LoynwHZ1SvxXcG8nOGUPM6I=
 000032_ai_proposal_classification_shape.sql h1:Hsij0aG6mXUPObivWgP7UEyccahLr7O+INjpUJsCKig=
+000033_profile_derived_classification.sql h1:ptlPti7btxkVrPcMkdpf5JFjkGESXRpofiZifBIfOPQ=
+000034_invoice_snapshot_follows_current_run.sql h1:q8rnI+g3gSF9sXOfO26qrkBPe+q5Mtzr2nGNrM0LClQ=
+000035_fiscal_vat_rates.sql h1:FLNVf7VFRaDIryy6OCJJ54m4cpw8iQg1AyE4Qtt5uTo=
+000036_service_alias_revocation.sql h1:HOZBWJEGNCGSXDNNe0XwPD/zqLGGjaT9MsBax+VPIes=
+000037_clause_review_reason.sql h1:bcwPb+btEF/VvtWdR94V/MlDWKyzI/xCWwk46ZcBCBA=
+000038_llm_usage.sql h1:xqFMVBz8HFaR3NKv4RORQI2CEbJezj8Mt8MxqC5KDuo=

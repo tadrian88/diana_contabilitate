@@ -165,3 +165,18 @@ func TestGoldenUnifiedContractsDoNotModelFutureEvents(t *testing.T) {
 		})
 	}
 }
+
+func TestVATTreatmentOmittedSourceFactsAreCopiedButNeverOverridden(t *testing.T) {
+	f := testFragment()
+	line := testLine("line-vat", "21")
+	input := testInput(Incoming, line)
+	results, _ := ValidateUnified(input, proposal(line.ID, citedDecision("VAT_TREATMENT", accounting.Value{Kind: "ORDINARY", Timing: "IMMEDIATE"}, f)), []legislation.Fragment{f}, testCatalog())
+	if len(results) != 1 || !results[0].Valid() || results[0].TypedValue.SourceCategory != "S" || !results[0].TypedValue.SourceRate.Equal(money.MustParse("21")) || results[0].Proposal.ProposedValue.SourceCategory != "S" {
+		t.Fatalf("omitted source facts not copied: %#v", results)
+	}
+	wrong := money.MustParse("9")
+	results, _ = ValidateUnified(input, proposal(line.ID, citedDecision("VAT_TREATMENT", accounting.Value{Kind: "ORDINARY", Timing: "IMMEDIATE", SourceCategory: "S", SourceRate: &wrong}, f)), []legislation.Fragment{f}, testCatalog())
+	if len(results) != 1 || results[0].Valid() || !results[0].TypedValue.SourceRate.Equal(wrong) {
+		t.Fatalf("provider-sent mismatching rate must not be replaced: %#v", results)
+	}
+}

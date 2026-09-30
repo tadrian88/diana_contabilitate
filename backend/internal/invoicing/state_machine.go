@@ -11,6 +11,7 @@ const (
 	TriggerStartMatching                TransitionTrigger = "START_MATCHING"
 	TriggerMatchingDecision             TransitionTrigger = "MATCHING_DECISION"
 	TriggerContractConfirmed            TransitionTrigger = "CONTRACT_CONFIRMED"
+	TriggerContractWaived               TransitionTrigger = "CONTRACT_WAIVED"
 	TriggerDuplicateDetected            TransitionTrigger = "DUPLICATE_DETECTED"
 	TriggerDuplicateCleared             TransitionTrigger = "DUPLICATE_CLEARED"
 	TriggerHeaderParsed                 TransitionTrigger = "HEADER_PARSED"
@@ -40,6 +41,7 @@ var transitionDefinitions = []TransitionDefinition{
 	{StatusMatching, StatusAwaitingMatchConfirm, TriggerMatchingDecision, false, false, false},
 	{StatusMatching, StatusDedupeChecked, TriggerMatchingDecision, true, false, true},
 	{StatusAwaitingMatchConfirm, StatusDedupeChecked, TriggerContractConfirmed, false, false, true},
+	{StatusAwaitingContract, StatusDedupeChecked, TriggerContractWaived, false, false, true},
 	{StatusDedupeChecked, StatusDuplicate, TriggerDuplicateDetected, true, false, false},
 	{StatusDedupeChecked, StatusHeaderRead, TriggerDuplicateCleared, true, true, true},
 	{StatusHeaderRead, StatusLinesRead, TriggerLinesParsed, true, true, true},

@@ -26,7 +26,7 @@ test.describe.serial('Actual API → PostgreSQL → outbox → Asynq → review 
     await page.getByRole('button', { name: 'Confirmă contractul' }).click()
     await expect(page.getByRole('link', { name: 'Deschide contractul autoritativ' })).toBeVisible()
     await page.reload()
-    await expect(page.locator('dl dd').filter({ hasText: 'CI-HUMAN-CORRECTION' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Ce a extras Diana' }).getByRole('button', { name: /Referință contract.*CI-HUMAN-CORRECTION/ })).toBeVisible()
     await page.getByRole('link', { name: 'Deschide contractul autoritativ' }).click()
     await expect(page.getByRole('heading', { name: 'CI-HUMAN-CORRECTION' })).toBeVisible()
     await page.goto(reviewURL)

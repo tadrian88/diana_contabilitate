@@ -48,6 +48,23 @@ describe('Task Inbox', () => {
     expect(screen.getByText('DEMO-WT-006')).toBeInTheDocument()
   })
 
+  it('continues a missing-contract invoice without a contract from the inbox', async () => {
+    const user = userEvent.setup()
+    renderApp(new MockInvoiceRepository(), '/tasks')
+
+    const missingRow = (await screen.findByText('DEMO-NC-003')).closest('tr')
+    await user.click(within(missingRow!).getByRole('button', { name: 'Continuă fără contract' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Continui fără contract?' })
+    await user.type(within(dialog).getByLabelText('Motivul deciziei'), 'Achiziție punctuală fără contract')
+    await user.click(within(dialog).getByRole('button', { name: 'Continuă fără contract' }))
+
+    expect(await screen.findByText('Factura continuă fără contract. Decizia și motivul sunt în istoricul facturii.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('DEMO-NC-003')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('tab', { name: /Rezolvate/ }))
+    const resolvedRow = (await screen.findByText('DEMO-NC-003')).closest('tr')
+    expect(within(resolvedRow!).getByText('Continuat fără contract.')).toBeInTheDocument()
+  })
+
   it('removes a resolved task from OPEN and updates Dashboard attention', async () => {
     const user = userEvent.setup()
     const repository = new MockInvoiceRepository()

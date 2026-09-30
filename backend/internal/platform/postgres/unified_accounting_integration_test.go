@@ -146,13 +146,15 @@ func TestAutomaticAccountingWorkflowCreatesOneTaskAndCompletesThroughEditAndAppr
 		}
 	})
 	invoiceID := domainPersistedInvoice(t, tc, facts, lineFacts, "automatic-workflow")
-	text := "contabilitate TVA deductibilitate servicii TEST_ONLY"
+	// Retrieval is per dimension and filtered by source kind (D-113): a LAW
+	// fragment mentioning "deducere" satisfies the VAT deduction lookup.
+	text := "contabilitate TVA deductibilitate dreptul de deducere servicii TEST_ONLY"
 	digest := sha256.Sum256([]byte(text))
 	hash := hex.EncodeToString(digest[:])
 	sourceID := "source-" + invoiceID
 	versionID := "version-" + invoiceID
 	fragmentID := "fragment-" + invoiceID
-	if _, err := tc.store.DB.ExecContext(tc.ctx, `INSERT INTO legislation_sources(id,kind,title,issuer,official_url,created_at) VALUES($1,'OTHER','TEST_ONLY workflow','TEST','https://example.invalid',$2)`, sourceID, tc.now); err != nil {
+	if _, err := tc.store.DB.ExecContext(tc.ctx, `INSERT INTO legislation_sources(id,kind,title,issuer,official_url,created_at) VALUES($1,'LAW','TEST_ONLY workflow','TEST','https://example.invalid',$2)`, sourceID, tc.now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tc.store.DB.ExecContext(tc.ctx, `INSERT INTO legislation_versions(id,source_id,label,effective_from,content_hash,ingested_by,ingested_at,test_only) VALUES($1,$2,'TEST_ONLY','2020-01-01',$3,'test',$4,true)`, versionID, sourceID, hash, tc.now); err != nil {

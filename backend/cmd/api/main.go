@@ -18,6 +18,7 @@ import (
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/invoicing"
+	"diana-contabilitate/backend/internal/llmusage"
 	"diana-contabilitate/backend/internal/outbox"
 	"diana-contabilitate/backend/internal/platform/config"
 	"diana-contabilitate/backend/internal/platform/httpserver"
@@ -53,12 +54,14 @@ func main() {
 	}
 	defer store.Close()
 
-	contractService := contracts.NewService(store, contracts.BaselinePolicy{}, nil)
-	contractExtractor := contractingestion.NewGeminiContractExtractor(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.ContractExtractionTimeout})
-	contractIngestion := contractingestion.NewService(store, contractExtractor, contractService, cfg.ContractMaxPDFBytes, nil)
 	metrics := observability.NewMetrics()
 	store.AccountingReadinessObserver = metrics
 	store.AccountingWorkflowObserver = metrics
+	// The API never calls Gemini today; the recorder keeps any future call billed to its run.
+	usageRecorder := llmusage.BestEffort{Inner: store, Logger: logger, Observer: metrics}
+	contractService := contracts.NewService(store, contracts.BaselinePolicy{}, nil)
+	contractExtractor := contractingestion.NewGeminiContractExtractor(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.ContractExtractionTimeout}).WithUsageRecorder(usageRecorder)
+	contractIngestion := contractingestion.NewService(store, contractExtractor, contractService, cfg.ContractMaxPDFBytes, nil)
 	classificationService := classification.NewService(store, classification.ProductionPolicy{Observer: metrics}, nil)
 	var sagaExporter invoicing.SagaExporter = saga.NewFileExporter(store, nil)
 	if cfg.SagaMode == "fake" {
@@ -98,11 +101,11 @@ func main() {
 	sagaHandoff := saga.NewHandoffService(store, nil)
 	var analysisService *accountinganalysis.WorkflowService
 	if cfg.AccountingAnalysisEnabled {
-		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout})
-		analysisService = accountinganalysis.NewWorkflowService(store, workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.WorkerJobTimeout), analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout}).WithUsageRecorder(usageRecorder)
+		analysisService = accountinganalysis.NewWorkflowService(store, workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.AccountingAnalysisJobTimeout()), analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
 		classificationService.SetAutomaticAccountingFallback(analysisService)
 	}
-	handler := httpserver.NewWithAccountingAnalysis(clients.NewService(store), pipelineService, validationtasks.NewService(store, nil), contractService, classificationService, rules.NewService(store, nil), spvManager, sagaHandoff, contractIngestion, commercialService, analysisService, readiness, logger, metrics)
+	handler := httpserver.NewWithAIUsage(clients.NewService(store), pipelineService, validationtasks.NewService(store, nil), contractService, classificationService, rules.NewService(store, nil), spvManager, sagaHandoff, contractIngestion, commercialService, analysisService, llmusage.NewService(store), readiness, logger, metrics)
 	authHTTP := authentication.NewHTTP(authentication.SQLStore{DB: store.DB}, redisClient, authentication.Config{
 		SecureCookies: cfg.Environment == "cloud-test" || cfg.Environment == "production",
 		SessionTTL:    cfg.AuthSessionTTL, FrontendURL: cfg.FrontendBaseURL,

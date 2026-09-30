@@ -1,4 +1,21 @@
-import type { Invoice, SagaStatus, TaskStatus } from '../../domain/invoice'
+import type { Invoice, SagaStatus, TaskStatus, TaskType } from '../../domain/invoice'
+
+export const invoiceTabs = ['summary', 'contract', 'lines', 'classification', 'history'] as const
+export type InvoiceTab = typeof invoiceTabs[number]
+
+// The tab where a task of this type is worked on.
+export function taskTab(type: TaskType): InvoiceTab {
+  return type === 'CLASSIFICATION' ? 'classification' : 'contract'
+}
+
+// Where the invoice's next human action lives: an open task decides, else a
+// status waiting for a person; everything else opens on the summary.
+export function actionTab(invoice: Invoice): InvoiceTab {
+  if (invoice.task && invoice.task.status !== 'RESOLVED') return taskTab(invoice.task.type)
+  if (invoice.pipelineStatus === 'AWAITING_CONTRACT' || invoice.pipelineStatus === 'AWAITING_MATCH_CONFIRM' || invoice.pipelineStatus === 'AWAITING_COMMERCIAL_REVIEW') return 'contract'
+  if (invoice.pipelineStatus === 'AWAITING_REVIEW') return 'classification'
+  return 'summary'
+}
 
 export function getUnresolvedIssueCount(invoice: Invoice) {
   const task = invoice.task

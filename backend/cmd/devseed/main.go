@@ -592,6 +592,9 @@ func seedModule6Fixtures(ctx context.Context, store *postgres.Store, now time.Ti
 	if _, err = store.Client.InvoiceLine.Create().SetID("inv-module6-journey-line-1").SetInvoiceID("inv-module6-journey").SetPosition(1).SetDescription("Element necunoscut pentru validare completă").SetUnit("buc.").SetVatRate("19.0000").SetVatValue("38.0000").SetQuantity("2.0000").SetUnitPrice("100.0000").SetNetValue("200.0000").SetTotalValue("238.0000").Save(ctx); err != nil {
 		return err
 	}
+	if err = seedDemoCommercialDossiers(ctx, store, now); err != nil {
+		return err
+	}
 	contractService := contractdomain.NewService(store, contractdomain.BaselinePolicy{}, func() time.Time { return now.Add(3 * time.Hour) })
 	_, _, err = contractService.MatchInvoice(ctx, contractdomain.MatchCommand{InvoiceID: "inv-module6-journey", ExpectedRevision: 1, CommandID: "seed:inv-module6-journey:match", CorrelationID: "seed-module6"})
 	return err
@@ -634,6 +637,9 @@ func seedModule7Fixtures(ctx context.Context, store *postgres.Store, now time.Ti
 	}
 	if !enabled {
 		return nil
+	}
+	if err = seedDemoCommercialDossiers(ctx, store, now); err != nil {
+		return err
 	}
 
 	pipeline := invoicing.NewPipelineService(store, invoicing.NewFakeSagaExporter(), func() time.Time { return now })

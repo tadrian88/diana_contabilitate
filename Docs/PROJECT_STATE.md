@@ -1,5 +1,111 @@
 # Project State
 
+## Consum AI: tokeni și cost pe rulare, client și cont (D-121, D-122) — 2026-09-30
+
+- IMPLEMENTAT ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Utilizatorul a aprobat explicit extinderea aditivă a zonelor „FROZEN”: frontend-ul (item „Consum AI” în sidebar, card pe pagina clientului) și backend Module 6 (rute API) și 7 (wiring worker, metrici). Au fost refactorizate și cele trei apeluri Gemini, cu aceeași taxonomie de erori.
+- Fiecare apel Gemini (inclusiv retry-uri, 429/5xx și răspunsuri invalide) este un rând în `llm_usage_events`, atribuit rulării (analiză contabilă sau încercare de extragere a unui contract) și clientului ei. Se salvează și tokenii de raționament și cei din cache.
+- Costul se calculează în USD cu prețuri versionate și append-only (`llm_model_prices`) și rămâne înghețat la momentul apelului (`numeric(20,10)`).
+- Rulările istorice sunt importate ca `BACKFILL` (istoric parțial).
+- API:
+  - `GET /api/v1/ai-usage` (totalul contului);
+  - `GET /api/v1/clients/{clientId}/ai-usage[/runs[/{runKind}/{runId}]]`.
+- UI: pagina „Consum AI” și cardul „Consum AI” de pe pagina clientului.
+- Migrare: `000038_llm_usage.sql`. Prețurile inițiale pentru `gemini-3.8-flash` (pagina Google din 2026-09-24) trebuie confirmate de utilizator înainte de `atlas migrate hash`.
+- Documentație: `Docs/AI_USAGE_COST_TRACKING.md`, `Docs/AI_USAGE_COST_TRACKING_TEST_HANDOFF.md`.
+- Verificare: doar statică de Claude (gofmt). Compilarea, testele Go unit/integration, vitest, E2E și migrarea urmează să fie rulate de utilizator.
+
+## Continuare fără contract (D-120) + harness de test pe datele reale VICTORIA 1881 EVENTS — 2026-09-30
+
+- IMPLEMENTAT ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Utilizatorul a aprobat explicit extinderea aditivă a zonelor „FROZEN”: backend Module 2 (state machine), 3 (task-uri), 4 / Missing Contract Resume și 6 (validare comercială), plus frontend-ul (tab-ul Contract al facturii și Task Inbox).
+- „Continuă fără contract”, cu motiv obligatoriu:
+  - pe task-ul MISSING_CONTRACT (OPEN sau WAITING);
+  - `POST /api/v1/invoices/{id}/contract-waivers`;
+  - factura trece `AWAITING_CONTRACT → DEDUPE_CHECKED`, iar validarea comercială dă `CONTRACT_WAIVED` (CONFORM);
+  - un contract încărcat ulterior nu mai reevaluează factura.
+- Decizie: D-120. Fără migrări noi.
+- Harness-ul de test pentru datele reale primite de la contabil stă în `test-data/victoria1881/`, ignorat de git ca tot `test-data/`. Folosește `scripts/clean-client-local.sh` pentru curățarea clientului între iterații. Faza 1 acoperă doar achizițiile, fiindcă Diana nu importă facturi emise.
+- Verificare: doar statică de Claude. Testele Go unit/integration, vitest, E2E și rularea harness-ului urmează să fie făcute de utilizator.
+
+## Factura blocată în review comercial: identitatea clientului, tarife dublate, asocieri revocate — 2026-09-30
+
+- IMPLEMENTAT ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Extinderea frontend-ului „FROZEN” (pagina facturii, pagina contractului, modalul de asociere) a fost aprobată explicit de utilizator.
+- Pe inv-31f95fa3f49ffbf729f250c9 (CWF-0231) au fost reparate:
+  - clauza IDENTITY a clientului (SOFTCO2) rămânea „De rezolvat” și ținea acoperirea parțială pentru toate facturile contractului; acum se închide automat, acoperită de CUI-urile părților;
+  - aceeași linie de tarif apărea de două ori în asociere (tariful din „Servicii și tarife” + clauza extrasă din același rând); clauza care doar repetă tariful se închide automat, nu poate fi confirmată și nu mai apare în sugestii;
+  - revocarea formulării învățate ștergea și asocierea facturii curente; acum asocierea confirmată rămâne pe factură, iar revocarea cere confirmare;
+  - „Serviciul nu apare în contract” nu ducea nicăieri; acum oferă corecția facturii, excepția motivată sau încărcarea anexei;
+  - factura se deschidea pe Rezumat fără nicio indicație; acum se deschide pe tab-ul cu acțiunea, iar Rezumat arată „Ce ai de făcut”.
+  - Pe drum: cantitatea fixă din contract se completează automat pentru tariful unitar; o regulă UNIT_RATE confirmată din clauză primește definiția variabilei de cantitate (înainte `PutVariable` răspundea 500); rezultatul vechi arată că există o versiune nouă a contractului.
+- Decizii: D-118, D-119. Fără migrări noi.
+- Backfill pentru contractele deja confirmate: `go run ./cmd/contractrules close-covered-clauses`.
+- Date E2E aliniate: `cmd/devseed` dă contractelor demo CTR-DEMO-100/201/202 un snapshot comercial confirmat și complet, cu tarifele liniilor din parcursurile Module 6 și 7 (numai dacă un contract nu are deja dosar). Facturile trec singure de validarea comercială, iar helper-ul E2E care aproba excepții pentru verificări „neverificabil” a fost eliminat.
+- Verificare: doar statică de Claude (`gofmt`, `go build`, `go vet` pe pachetele modificate, inclusiv cu tag-ul de integrare fără `copylocks`, `tsc` pe aplicație). Testele Go unit/integration, vitest și E2E urmează să fie rulate de utilizator.
+
+## Pagina documentului de contract ca spațiu de lucru față în față — 2026-09-29
+
+- FAZA 1 IMPLEMENTATĂ ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Faza 2 (pre-validarea revizuirii înainte de confirmare, împerecherea serviciu ↔ evidență după `sourceIndex`) urmează după verificarea fazei 1.
+- Pagina unui contract confirmat arată acum fiecare valoare lângă PDF-ul evidențiat la textul citat și ce folosește fiecare tarif sau clauză la verificarea facturilor, din snapshot-ul activ.
+- Clauzele se pot închide fără să devină regulă:
+  - identitate acoperită de CUI-ul furnizorului: automat după confirmare sau cu un click;
+  - „nu se verifică pe factură”, cu motiv.
+  - Astfel acoperirea poate deveni completă (BG-2025-117 rămânea parțial din cauza clauzei IDENTITY).
+- Decizia: D-117. Migrarea aditivă `000037_clause_review_reason.sql` (înainte de aplicare rulează `atlas migrate hash`). Backfill pentru contractele deja confirmate: `go run ./cmd/contractrules close-covered-clauses`.
+- Corectat pe drum: versiunea snapshot-ului nou este prima liberă din dosar, nu „activă + 1”; după o revizie care revenea la un set vechi de reguli, următoarea confirmare încălca unicitatea `(dossier_id, version)`.
+- Verificare: doar statică de Claude (`gofmt`, `go build`, `go vet` pe pachetul postgres cu tag-ul de integrare, `tsc` pe aplicație și teste). Testele Go unit/integration și vitest urmează să fie rulate de utilizator.
+
+## Validare comercială față în față + asocierea serviciilor — 2026-09-29
+
+- IMPLEMENTAT ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Schimbarea de UX a fost cerută și aprobată explicit de utilizator; frontend-ul „FROZEN” a fost extins în zona Contract a facturii, a paginii contractului și a filtrului Task Inbox.
+- Pe BG26000108 au fost reparate trei probleme:
+  - clauza TVA era raportată ca „Prețul este corect” pe fiecare linie;
+  - serviciul „Mentenanță IT” (1.800,00 lei) era eliminat fără avertisment la activarea tarifelor;
+  - asocierea cerea potrivire exactă a textului.
+- Decizia: D-116. Migrarea aditivă `000036_service_alias_revocation.sql` (înainte de aplicare rulează `atlas migrate hash`). Detalii: `CONTRACT_COMMERCIAL_VALIDATION.md`.
+- Verificare: doar statică de Claude (inclusiv `gofmt` pe fișierele Go). Testele Go unit/integration, typecheck, vitest și E2E urmează să fie rulate de utilizator.
+
+## Deblocare review V2 + corpus legislativ global + microîntreprinderi — 2026-09-28
+
+- Cauze (din cod): corpusul `legislation_*` era gol local, deci analiza asistată eșua („corpusul legislativ local nu conține fragmente aplicabile”). Bannerul „Planul de conturi s-a modificat” apărea mereu pentru profilurile fără `accountCodes` și bloca editarea. Readiness-ul SAGA cerea un pack per client și `Profile.Ordinary()` (numai PROFIT_TAX), deci microîntreprinderile și clienții fără pack nu puteau ajunge în `READY_FOR_SAGA`.
+- Legislație (D-106): corpusul e global. `make dev` rulează acum `make seed-legislation`, care importă idempotent cele două snapshot-uri TEST_ONLY cu `effective-from 2016-01-01`. Cloud-ul nu se schimbă. OMFP 1802/2014 este textul original, neconsolidat.
+- Clasificare (D-107..D-112): fără pack-uri de producție; clasificarea se face prin AI plus decizii umane/reutilizabile.
+  - Maparea SAGA e implicită în cod: `SAGA_C_DOMAIN_V2_ORDINARY_V1`.
+  - Micro plătitor de TVA este exportabil. `EXPENSE_TAX_TREATMENT=NOT_APPLICABLE` e derivat automat din profil (sursa nouă `PROFILE`, migrarea `000033`).
+  - `accountCodes` gol înseamnă tot planul OMFP postabil.
+  - TVA la încasare necunoscut se confirmă prin `VAT_TREATMENT` revizuit uman.
+  - Contextul modificat este doar avertisment.
+  - `approve-all` folosește readiness-ul comun.
+  - Variantele nesuportate la export (neplătitor TVA, mixt, pro-rata, TVA la încasare client) rămân doar clasificare, cu motiv explicit.
+- Corecție analiză AI, după prima rulare reală pe factura FCO 0878 (D-113):
+  - Promptul `UNIFIED_ACCOUNTING_PROMPT_V3` conține vocabularul exact pe fiecare dimensiune, iar schema are enum pentru `kind`/`timing`. Gemini trimisese `FULL` + `percentage: 100` și un tip TVA necunoscut, cu categoria în `category`.
+  - Căutarea legislativă se face pe fiecare dimensiune nerezolvată: Codul fiscal pentru TVA/impozit, OMFP pentru cont. Buget: maximum 20k caractere pe fragment și 60k în total.
+  - La profilurile fără listă de conturi, AI-ul primește doar conturile relevante direcției facturii: primite → clasele 2, 3, 6 și 471; emise → clasa 7.
+  - `ACCOUNTING_ANALYSIS_TIMEOUT` are acum implicit 180s, cu un deadline Asynq dedicat analizei (timeout + 60s); celelalte job-uri rămân la `WORKER_JOB_TIMEOUT`.
+- Snapshot per rulare (D-114, migrarea `000034`): snapshot-ul facturii urmează rularea curentă de clasificare. Înainte, o factură clasificată fără profil rămânea blocată definitiv cu „Lipsește un snapshot aprobat și coerent de profil/politică/pack.”, chiar și după reanalizare.
+- Handoff SAGA:
+  - O factură care ajungea la export cu exportul SAGA dezactivat pentru client rămânea tăcut în `EXPORTING`, fără încercare de export.
+  - Activarea exportului în setările clientului repune acum în coadă, în aceeași tranzacție, facturile clientului din `READY_FOR_SAGA`/`EXPORTING` fără fișier generat.
+  - Pe Rezumat, un avertisment explică exportul dezactivat și trimite la setare.
+  - Pagina facturii trece singură pe Rezumat după finalizarea review-ului, iar badge-ul „Confirmă importul SAGA” semnalează acțiunea manuală.
+- Verificare: Claude a făcut doar gofmt/editare statică. `go generate ./ent`, `atlas migrate hash`, unit, vitest, integration, E2E și `make dev` urmează să fie rulate de utilizator.
+
+## Clauze TVA / termen de plată recunoscute din text — 2026-09-29
+
+- Problema: clauzele TVA și termen de plată erau extrase corect ca text, dar fără valoare executabilă (normalizarea Gemini întorcea `null` sau eșua fără log), așa că fiecare contract cerea completarea manuală (ex. C7 Valoris, C8 Cleanwave).
+- Aprobat explicit de utilizator (D-115): clauzele recunoscute sigur se confirmă automat, iar valorile rămân editabile.
+  - `commercialvalidation.RecognizeSourceTextRule`: „N zile … de la emiterea/primirea/acceptarea” și „TVA cota legală/aplicabilă/aferentă” sau o singură cotă fixă. Orice ambiguitate (mai multe valori, zile lucrătoare, bază neclară, scutire, taxare inversă) rămâne la revizuire.
+  - Auto-confirmare după confirmarea contractului, prin `ConfirmProposedRule` (aceleași verificări față de sursă ca o confirmare manuală), eveniment `COMMERCIAL_RULE_AUTO_CONFIRMED` (`SYSTEM`, automatic), regulă marcată `origin=SOURCE_TEXT`.
+  - Editare: `POST …/commercial-rules/{ruleId}/revise` → snapshot nou, `COMMERCIAL_RULE_REVISED`; valoarea trebuie să apară în clauza citată.
+  - Cote TVA legale globale (migrarea `000035`, `fiscal_vat_rates`: 19% până la 31.07.2025, 21% de la 01.08.2025) rezolvă `applicable_vat_rate` la data facturii; o valoare din dosar are prioritate.
+  - Backfill pentru contractele confirmate anterior: `go run ./cmd/contractrules autoconfirm-source-text`.
+  - Normalizarea Gemini loghează acum motivul (doar categorie + număr de clauze).
+- Verificare rulată de Claude: Go unit, suita `-tags=integration` din `internal/platform/postgres` pe o bază izolată (toate trec, cu excepția `TestSagaEnableResumesInvoicesStuckAtHandoff`, care nu are legătură), vitest complet (158), typecheck, build, `atlas migrate validate`. Migrarea și backfill-ul au fost aplicate pe baza locală. E2E și `make release-local` nu au fost rulate.
+
+## Reguli comerciale în limbaj natural — 2026-09-28
+
+- Gap de UX (nu bug de date): review-ul contractului afișa AST-ul regulilor (`{"op":"literal",...}`) și codurile de tip (`FIXED_PRICE`) în 3 locuri: reguli propuse de AI, reguli confirmate în formular și reguli confirmate după confirmarea contractului.
+- Fix doar în frontend: `src/features/contracts/commercialRuleText.ts` descrie în română ce compară efectiv motorul (`commercialvalidation/engine.go`); JSON-ul rămâne disponibil doar în „Detalii tehnice (pentru suport)”, închis implicit. Payload-urile, confirmarea și validarea nu se schimbă.
+- Verificare: doar statică de Claude; typecheck/vitest urmează să fie rulate de utilizator.
+
 ## Contract Intelligence & Invoice Compliance V1 — 2026-09-19
 
 - FUNDAȚIA V1 IMPLEMENTATĂ ÎN WORKSPACE, DAR ACCEPTANȚA PLANULUI ESTE PARȚIALĂ — AȘTEAPTĂ TESTELE UTILIZATORULUI; engineering gate rămâne NO.

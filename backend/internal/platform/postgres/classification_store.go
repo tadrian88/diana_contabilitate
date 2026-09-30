@@ -138,6 +138,9 @@ func (s *Store) LoadClassificationInput(ctx context.Context, invoiceID string) (
 	for _, code := range selectableAccountCodes {
 		input.SelectableAccounts[code] = true
 	}
+	if input.Snapshot != nil && input.Snapshot.Profile != nil && len(input.Snapshot.Profile.AccountCodes) == 0 {
+		input.Snapshot.AccountCatalogFingerprint = accountCodesFingerprint(selectableAccountCodes)
+	}
 	if input.Snapshot != nil && input.Snapshot.Profile != nil && len(input.Snapshot.Profile.AccountCodes) > 0 {
 		catalogRows, catalogErr := tx.Account.Query().Where(account.CodeIn(input.Snapshot.Profile.AccountCodes...)).Order(ent.Asc(account.FieldCode)).All(ctx)
 		if catalogErr != nil {
@@ -242,8 +245,10 @@ func (s *Store) ApplyClassification(ctx context.Context, command classificationd
 		return false, err
 	}
 	invoiceUpdate := tx.Invoice.UpdateOneID(command.InvoiceID)
-	if result.ModelVersion == accounting.ModelVersion && invoiceBefore.AccountingSnapshot == nil {
-		invoiceUpdate.SetAccountingSnapshot(result.Snapshot)
+	// The invoice snapshot mirrors the current run (migration 000034); run
+	// history remains immutable in classification_runs.
+	if result.ModelVersion == accounting.ModelVersion {
+		invoiceUpdate.SetAccountingSnapshot(runSnapshot)
 	}
 	classified, err := invoiceUpdate.
 		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), invoice.RevisionEQ(command.ExpectedRevision)).SetCurrentClassificationRunID(runID).
@@ -434,9 +439,7 @@ func (s *Store) ApplyClassificationBlock(ctx context.Context, command classifica
 		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusCOMMERCIALLY_VALIDATED), invoice.RevisionEQ(command.ExpectedRevision)).
 		SetPipelineStatus(invoice.PipelineStatusAWAITING_REVIEW).SetReadinessReason(blockerCode).
 		SetCurrentClassificationRunID(runID).AddRevision(1).SetUpdatedAt(now)
-	if before.AccountingSnapshot == nil {
-		update.SetAccountingSnapshot(snapshot)
-	}
+	update.SetAccountingSnapshot(snapshot)
 	blocked, err := update.Save(ctx)
 	if ent.IsNotFound(err) {
 		return rollback(apperrors.ErrConflict)

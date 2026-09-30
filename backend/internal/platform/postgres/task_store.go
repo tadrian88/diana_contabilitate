@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -14,6 +15,7 @@ import (
 	entvalidationtask "diana-contabilitate/backend/ent/validationtask"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/audit"
+	"diana-contabilitate/backend/internal/invoicing"
 	"diana-contabilitate/backend/internal/validationtasks"
 )
 
@@ -236,6 +238,120 @@ func (s *Store) RequestMissingContract(ctx context.Context, command validationta
 		return nil, false, err
 	}
 	return validationTaskDomain(updated), true, nil
+}
+
+// ContinueWithoutContract resolves a MISSING_CONTRACT task through the
+// accountant's reasoned waiver and resumes the invoice at DEDUPE_CHECKED in the
+// same transaction as the audit and the pipeline continuation (D-120).
+func (s *Store) ContinueWithoutContract(ctx context.Context, command validationtasks.ContinueWithoutContractCommand, now time.Time) (*validationtasks.Task, bool, error) {
+	eventKey := "contract-waiver:" + command.CommandID
+	if exists, err := s.auditExists(ctx, eventKey+":waived"); err != nil {
+		return nil, false, err
+	} else if exists {
+		item, getErr := s.taskByID(ctx, command.TaskID)
+		return item, false, getErr
+	}
+
+	tx, err := s.Client.Tx(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	rollback := func(cause error) (*validationtasks.Task, bool, error) {
+		_ = tx.Rollback()
+		return nil, false, cause
+	}
+	replayOrConflict := func() (*validationtasks.Task, bool, error) {
+		_ = tx.Rollback()
+		if exists, checkErr := s.auditExists(ctx, eventKey+":waived"); checkErr == nil && exists {
+			item, getErr := s.taskByID(ctx, command.TaskID)
+			return item, false, getErr
+		}
+		return nil, false, apperrors.ErrConflict
+	}
+	taskRow, err := tx.ValidationTask.Query().Where(entvalidationtask.IDEQ(command.TaskID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return rollback(apperrors.ErrNotFound)
+	}
+	if err != nil {
+		return rollback(err)
+	}
+	if taskRow.InvoiceID != command.InvoiceID || taskRow.TaskType != entvalidationtask.TaskTypeMISSING_CONTRACT {
+		return rollback(apperrors.ErrValidation)
+	}
+	if taskRow.Status == entvalidationtask.StatusRESOLVED {
+		_ = tx.Rollback()
+		if exists, checkErr := s.auditExists(ctx, eventKey+":waived"); checkErr == nil && exists {
+			item, getErr := s.taskByID(ctx, command.TaskID)
+			return item, false, getErr
+		}
+		return nil, false, validationtasks.ErrTaskAlreadyResolved
+	}
+	fromTask := validationtasks.Status(taskRow.Status)
+	if _, legal := validationtasks.FindTransitionByTrigger(validationtasks.TypeMissingContract, fromTask, validationtasks.StatusResolved, validationtasks.TriggerContractWaived); !legal || taskRow.Revision != command.ExpectedRevision {
+		return replayOrConflict()
+	}
+	invoiceRow, err := tx.Invoice.Query().Where(invoice.IDEQ(command.InvoiceID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return rollback(apperrors.ErrNotFound)
+	}
+	if err != nil {
+		return rollback(err)
+	}
+	if invoiceRow.ClientID != taskRow.ClientID || invoiceRow.PipelineStatus != invoice.PipelineStatusAWAITING_CONTRACT {
+		return rollback(apperrors.ErrValidation)
+	}
+	if _, legal := invoicing.FindTransition(invoicing.StatusAwaitingContract, invoicing.StatusDedupeChecked); !legal {
+		return rollback(apperrors.ErrValidation)
+	}
+	metadata, err := json.Marshal(map[string]string{
+		"reason": validationtasks.ContractWaivedResolution, "note": command.Reason,
+		"actorId": command.ActorID, "actorDisplay": command.ActorDisplay,
+	})
+	if err != nil {
+		return rollback(err)
+	}
+	updated, err := tx.ValidationTask.UpdateOneID(taskRow.ID).
+		Where(entvalidationtask.StatusIn(entvalidationtask.StatusOPEN, entvalidationtask.StatusWAITING), entvalidationtask.RevisionEQ(command.ExpectedRevision)).
+		SetStatus(entvalidationtask.StatusRESOLVED).SetResolvedAt(now).SetResolutionMetadata(metadata).AddRevision(1).SetUpdatedAt(now).Save(ctx)
+	if ent.IsNotFound(err) {
+		return replayOrConflict()
+	}
+	if err != nil {
+		return rollback(err)
+	}
+	_, err = tx.Invoice.UpdateOneID(invoiceRow.ID).
+		Where(invoice.PipelineStatusEQ(invoice.PipelineStatusAWAITING_CONTRACT), invoice.RevisionEQ(invoiceRow.Revision)).
+		SetPipelineStatus(invoice.PipelineStatusDEDUPE_CHECKED).AddRevision(1).SetUpdatedAt(now).Save(ctx)
+	if ent.IsNotFound(err) {
+		return rollback(apperrors.ErrConflict)
+	}
+	if err != nil {
+		return rollback(err)
+	}
+	if err = createAudit(tx, ctx, auditRecord{
+		key: eventKey + ":resolved", invoiceID: invoiceRow.ID, taskID: updated.ID, clientID: invoiceRow.ClientID,
+		eventType: "MISSING_CONTRACT_WAIVED", from: string(fromTask), to: string(validationtasks.StatusResolved),
+		trigger: string(validationtasks.TriggerContractWaived), detail: "Contabilul a decis continuarea fără contract. Motiv: " + command.Reason,
+		actor: audit.ActorUser, actorID: command.ActorID, actorDisplay: command.ActorDisplay, correlationID: command.CorrelationID, at: now,
+	}); err != nil {
+		return rollback(err)
+	}
+	if err = createAudit(tx, ctx, auditRecord{
+		key: eventKey + ":waived", invoiceID: invoiceRow.ID, clientID: invoiceRow.ClientID,
+		eventType: "CONTRACT_WAIVED", from: string(invoice.PipelineStatusAWAITING_CONTRACT), to: string(invoice.PipelineStatusDEDUPE_CHECKED),
+		trigger: string(invoicing.TriggerContractWaived), detail: "Factura continuă fără contract asociat; procesarea este reluată.",
+		actor: audit.ActorUser, actorID: command.ActorID, actorDisplay: command.ActorDisplay, correlationID: command.CorrelationID, at: now,
+	}); err != nil {
+		return rollback(err)
+	}
+	if err = createOutbox(tx, ctx, invoiceRow.ID, eventKey+":continue", command.CorrelationID, now); err != nil {
+		return rollback(err)
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	result, err := s.taskByID(ctx, updated.ID)
+	return result, true, err
 }
 
 func (s *Store) taskByCreationKey(ctx context.Context, key string) (*validationtasks.Task, error) {

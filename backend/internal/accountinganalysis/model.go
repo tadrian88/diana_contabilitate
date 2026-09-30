@@ -12,7 +12,7 @@ import (
 )
 
 const SchemaVersion = "UNIFIED_ACCOUNTING_PROPOSAL_V2"
-const PromptVersion = "UNIFIED_ACCOUNTING_PROMPT_V2"
+const PromptVersion = "UNIFIED_ACCOUNTING_PROMPT_V3"
 const LegacySchemaVersion = "ACCOUNTING_ANALYSIS_V1"
 
 type Direction string

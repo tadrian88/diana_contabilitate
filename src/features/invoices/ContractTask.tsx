@@ -1,11 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { CheckCircle2, ChevronRight, Info, X } from 'lucide-react'
+import { CheckCircle2, ChevronRight, FileX2, Info, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import type { Invoice } from '../../domain/invoice'
 import { useResolveContract, useRequestContract } from './invoice-mutations'
+import { ContinueWithoutContractDialog } from './ContinueWithoutContractDialog'
 
 export function ContractTask({ invoice }: { invoice: Invoice }) {
   const task = invoice.task
@@ -16,6 +17,8 @@ export function ContractTask({ invoice }: { invoice: Invoice }) {
   const invoiceReturnTo = `${location.pathname}${location.search}`
 
   if (!task || task.type === 'CLASSIFICATION' || task.type === 'COMMERCIAL_REVIEW') return <ContractResolved invoice={invoice} returnTo={invoiceReturnTo} />
+
+  if (task.type === 'MISSING_CONTRACT' && task.status === 'RESOLVED') return <ContractResolved invoice={invoice} returnTo={invoiceReturnTo} />
 
   if (task.type === 'MISSING_CONTRACT') {
     return (
@@ -38,7 +41,10 @@ export function ContractTask({ invoice }: { invoice: Invoice }) {
             <Button onClick={() => requestContract.mutate()} disabled={requestContract.isPending}>Solicită contract</Button>
           </div>
         )}
-        <Link to={`/contracts/upload?clientId=${encodeURIComponent(invoice.clientId)}&invoiceId=${encodeURIComponent(invoice.id)}`} className="mt-5 inline-block rounded-lg border border-[var(--border-strong)] px-4 py-2 text-sm font-semibold text-[var(--accent)]">Încarcă contract</Link>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <Link to={`/contracts/upload?clientId=${encodeURIComponent(invoice.clientId)}&invoiceId=${encodeURIComponent(invoice.id)}`} className="inline-block rounded-lg border border-[var(--border-strong)] px-4 py-2 text-sm font-semibold text-[var(--accent)]">Încarcă contract</Link>
+          <ContinueWithoutContractDialog invoiceId={invoice.id} />
+        </div>
       </div>
     )
   }
@@ -116,6 +122,7 @@ export function ContractTask({ invoice }: { invoice: Invoice }) {
 
 function ContractResolved({ invoice, returnTo }: { invoice: Invoice; returnTo: string }) {
   const matched = invoice.contract
+  if (!matched && invoice.contractWaiver) return <ContractWaived invoice={invoice} />
   return (
     <div className="card p-6">
       <div className="flex items-center gap-2 text-[var(--success)]"><CheckCircle2 className="size-5" /><span className="font-semibold">Contract asociat</span></div>
@@ -129,6 +136,20 @@ function ContractResolved({ invoice, returnTo }: { invoice: Invoice; returnTo: s
           <div><dt className="text-xs text-[var(--text-muted)]">Termen plată</dt><dd className="mt-1 font-medium">{matched.paymentTerms}</dd></div>
         </dl>
       </div> : <div className="mt-4 rounded-xl bg-[var(--surface-subtle)] p-4"><div className="font-semibold">{invoice.selectedContractId ?? 'Contract demonstrativ asociat'}</div><div className="mt-1 text-xs text-[var(--text-muted)]">Detaliile opționale ale contractului nu sunt disponibile.</div></div>}
+    </div>
+  )
+}
+
+function ContractWaived({ invoice }: { invoice: Invoice }) {
+  const waiver = invoice.contractWaiver!
+  return (
+    <div className="card p-6">
+      <div className="flex items-center gap-2 text-[var(--text)]"><FileX2 className="size-5 text-[var(--text-muted)]" /><span className="font-semibold">Continuat fără contract</span></div>
+      <p className="mt-1 text-sm text-[var(--text-secondary)]">Factura nu este verificată față de un contract.</p>
+      <dl className="mt-4 grid grid-cols-[1fr_auto] gap-4 rounded-xl bg-[var(--surface-subtle)] p-4 text-sm">
+        <div><dt className="text-xs text-[var(--text-muted)]">Motiv</dt><dd className="mt-1 font-medium">{waiver.reason}</dd></div>
+        <div className="text-right"><dt className="text-xs text-[var(--text-muted)]">Decis de</dt><dd className="mt-1 font-medium">{waiver.actor}</dd><dd className="text-xs text-[var(--text-muted)]">{new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(waiver.waivedAt))}</dd></div>
+      </dl>
     </div>
   )
 }

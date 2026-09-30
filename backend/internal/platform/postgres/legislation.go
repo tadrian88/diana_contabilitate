@@ -27,15 +27,21 @@ func (s *Store) Retrieve(ctx context.Context, query legislation.Query) ([]legisl
 	if len(terms) == 0 {
 		return nil, fmt.Errorf("empty legislation query")
 	}
+	kinds := query.Kinds
+	if kinds == nil {
+		kinds = []string{}
+	}
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT f.id,f.version_id,f.citation_key,f.heading,f.content,f.content_hash,f.ordinal
 		FROM legislation_fragments f
 		JOIN legislation_versions v ON v.id=f.version_id
+		JOIN legislation_sources s ON s.id=v.source_id
 		WHERE $1::date BETWEEN v.effective_from AND COALESCE(v.effective_to,'infinity'::date)
 		  AND ($4::boolean OR NOT v.test_only)
+		  AND (cardinality($5::text[])=0 OR s.kind=ANY($5::text[]))
 		  AND EXISTS (SELECT 1 FROM unnest($2::text[]) q(term) WHERE f.search_vector @@ plainto_tsquery('simple',q.term))
 		ORDER BY (SELECT max(ts_rank_cd(f.search_vector,plainto_tsquery('simple',q.term))) FROM unnest($2::text[]) q(term)) DESC,v.effective_from DESC,f.ordinal
-		LIMIT $3`, string(query.ApplicableDate), terms, limit, query.AllowTestOnly)
+		LIMIT $3`, string(query.ApplicableDate), terms, limit, query.AllowTestOnly, kinds)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve legislation: %w", err)
 	}

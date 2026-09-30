@@ -122,7 +122,7 @@ func (s *Store) InstallReviewedAccountingRule(ctx context.Context, input Reviewe
 	if err != nil {
 		return err
 	}
-	if profile.Payload.TestOnly || !profile.Payload.Valid(input.ClientID, r.EffectiveFrom) || r.ClientPolicy != profile.Payload.ChartPolicy || r.Dimension == "ACCOUNT" && !profile.Payload.AccountAllowed(r.Result.Account) || r.Dimension == "ACCOUNT" && (input.Provenance.AccountingRegime != profile.Payload.Framework || input.Provenance.ClientPolicyReference != r.ClientPolicy) {
+	if profile.Payload.TestOnly || !profile.Payload.Valid(input.ClientID, r.EffectiveFrom) || r.ClientPolicy != profile.Payload.ChartPolicy || r.Dimension == "ACCOUNT" && !profile.Payload.RuleAccountAllowed(r.Result.Account) || r.Dimension == "ACCOUNT" && (input.Provenance.AccountingRegime != profile.Payload.Framework || input.Provenance.ClientPolicyReference != r.ClientPolicy) {
 		return fmt.Errorf("rule/profile/account policy mismatch")
 	}
 	tx, err := s.Client.Tx(ctx)

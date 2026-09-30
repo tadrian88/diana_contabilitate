@@ -100,10 +100,26 @@ export function usePutCommercialVariable(invoice: Invoice, dossierId: string) {
   })
 }
 
-export function useConfirmCommercialServiceAlias(invoice: Invoice) {
+// Confirms every chosen line → service mapping, then re-runs the validation so
+// the prices of the newly mapped lines are checked in the same step. Command
+// keys are derived from the run so a retry after a partial failure replays the
+// mappings already saved instead of conflicting with them.
+export function useConfirmCommercialServiceAliases(invoice: Invoice) {
   const repository = useInvoiceRepository()
+  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input:{serviceId:string;lineId:string;reuseForDossier:boolean}) => repository.confirmCommercialServiceAlias(invoice.clientId,{invoiceId:invoice.id,lineId:input.lineId,serviceId:input.serviceId,reuseForDossier:input.reuseForDossier}),
+    mutationFn: async (input:{runId:string;expectedInvoiceRevision:number;reuseForDossier:boolean;choices:Array<{lineId:string;serviceId:string}>}) => {
+      for (const choice of input.choices) {
+        await repository.confirmCommercialServiceAlias(invoice.clientId,{invoiceId:invoice.id,lineId:choice.lineId,serviceId:choice.serviceId,reuseForDossier:input.reuseForDossier},`${input.runId}:${choice.lineId}:${choice.serviceId}:${input.reuseForDossier?'dossier':'invoice'}`)
+      }
+      return repository.resolveCommercialValidation(invoice.clientId,invoice.id,{runId:input.runId,expectedInvoiceRevision:input.expectedInvoiceRevision,action:'RERUN'},`${input.runId}:rerun-after-mapping`)
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({queryKey:['commercial-validation', invoice.clientId, invoice.id]})
+      void queryClient.invalidateQueries({queryKey:queryKeys.invoices.detail(invoice.id)})
+      void queryClient.invalidateQueries({queryKey:queryKeys.invoices.root})
+      void queryClient.invalidateQueries({queryKey:queryKeys.serviceAliases.root})
+    },
   })
 }
 

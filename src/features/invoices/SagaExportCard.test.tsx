@@ -89,3 +89,27 @@ describe('SAGA export manual handoff', () => {
     expect(screen.getByLabelText('Se încarcă factura')).toBeInTheDocument()
   })
 })
+
+describe('Export SAGA înainte de generarea fișierului', () => {
+  class PendingRepository extends SagaUXRepository {
+    constructor(sagaEnabled: boolean) {
+      super()
+      this.invoice.sagaExport = undefined
+      this.invoice.authority = 'API'
+      this.enabled = sagaEnabled
+    }
+    enabled = false
+    override async getClientDetail(clientId: string) { const detail = await super.getClientDetail(clientId); return { ...detail, sagaEnabled: this.enabled } }
+  }
+
+  it('explică exportul dezactivat și trimite la setarea clientului', async () => {
+    renderApp(new PendingRepository(false), '/invoices/invoice-saga?tab=summary')
+    expect(await screen.findByText('Exportul SAGA nu este activat pentru acest client')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Activează exportul SAGA' })).toHaveAttribute('href', '/clients/client-alfa#saga-setup')
+  })
+
+  it('arată generarea în curs când exportul este activat', async () => {
+    renderApp(new PendingRepository(true), '/invoices/invoice-saga?tab=summary')
+    expect(await screen.findByText('Diana generează fișierul XML. Pagina se actualizează automat.')).toBeInTheDocument()
+  })
+})

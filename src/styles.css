@@ -40,6 +40,9 @@
   --info-border: oklch(0.82 0.08 250);
   --shadow-card: 0 1px 2px oklch(0.25 0.02 258 / 0.05), 0 8px 28px oklch(0.25 0.02 258 / 0.05);
   --radius-card: 0.875rem;
+  --evidence-mark: oklch(0.93 0.13 98);
+  --evidence-ring: oklch(0.74 0.15 80);
+  --evidence-row: oklch(0.985 0.035 98);
 }
 
 .dark {
@@ -72,6 +75,9 @@
   --info-soft: oklch(0.28 0.05 250);
   --info-border: oklch(0.42 0.08 250);
   --shadow-card: 0 1px 2px oklch(0.05 0 0 / 0.2), 0 10px 30px oklch(0.05 0 0 / 0.18);
+  --evidence-mark: oklch(0.42 0.09 90);
+  --evidence-ring: oklch(0.76 0.14 85);
+  --evidence-row: oklch(0.27 0.035 90);
 }
 
 * { box-sizing: border-box; }

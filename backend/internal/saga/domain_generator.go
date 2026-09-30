@@ -72,6 +72,8 @@ func exportVersion(item *invoicing.Invoice) string {
 		v := DomainExporterVersion
 		if item.AccountingSnapshot != nil && item.AccountingSnapshot.Pack != nil {
 			v += "/" + item.AccountingSnapshot.Pack.Mapping.Version
+		} else {
+			v += "/" + accounting.DefaultSAGAMapping.Version
 		}
 		return v
 	}

@@ -8,7 +8,7 @@ import type { Invoice, PipelineStatus, SagaStatus } from '../../domain/invoice'
 import { PIPELINE_LABELS } from '../../domain/invoice'
 import { AttentionBadge, PipelineBadge, SagaBadge } from './InvoiceStatusBadges'
 import { useClients, useInvoices } from './invoice-hooks'
-import { getAttentionStatus, getInvoiceConfidence, getUnresolvedIssueCount, SAGA_LABELS } from './invoice-view'
+import { actionTab, getAttentionStatus, getInvoiceConfidence, getUnresolvedIssueCount, SAGA_LABELS } from './invoice-view'
 
 type SortKey = 'supplier' | 'number' | 'date' | 'value' | 'pipeline'
 type SortDirection = 'asc' | 'desc'
@@ -96,7 +96,7 @@ export function InvoiceListPage() {
                   const client = clients.find((candidate) => candidate.id === invoice.clientId)
                   const issueCount = getUnresolvedIssueCount(invoice)
                   const confidence = getInvoiceConfidence(invoice)
-                  const href = `/invoices/${invoice.id}?tab=summary&returnTo=${encodeURIComponent(returnTo)}`
+                  const href = `/invoices/${invoice.id}?tab=${actionTab(invoice)}&returnTo=${encodeURIComponent(returnTo)}`
                   return (
                     <tr key={invoice.id} className="align-middle hover:bg-[var(--surface-subtle)]" data-invoice-id={invoice.id}>
                       <td className="max-w-[190px] px-3 py-4"><div className="truncate font-semibold text-sm">{invoice.supplierName}</div><div className="mt-1 truncate text-[var(--text-muted)]">{invoice.supplierCui ?? 'CUI indisponibil'}</div></td>

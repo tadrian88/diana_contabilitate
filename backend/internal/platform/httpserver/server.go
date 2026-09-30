@@ -26,6 +26,7 @@ import (
 	"diana-contabilitate/backend/internal/contractingestion"
 	contractdomain "diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/invoicing"
+	"diana-contabilitate/backend/internal/llmusage"
 	"diana-contabilitate/backend/internal/outbox"
 	"diana-contabilitate/backend/internal/platform/observability"
 	"diana-contabilitate/backend/internal/platform/requestactor"
@@ -48,6 +49,7 @@ type Server struct {
 	contractIngestion    *contractingestion.Service
 	commercialValidation *commercialvalidation.Service
 	accountingAnalysis   *accountinganalysis.WorkflowService
+	aiUsage              *llmusage.Service
 	classifications      *classification.Service
 	rules                *rules.Service
 	spv                  *spvdomain.ConnectionManager
@@ -82,7 +84,11 @@ func NewWithCommercialValidation(clientService *clients.Service, invoiceService 
 }
 
 func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *invoicing.Service, taskService *validationtasks.Service, contractService *contractdomain.Service, classificationService *classification.Service, ruleService *rules.Service, spvService *spvdomain.ConnectionManager, sagaHandoff *saga.HandoffService, ingestion *contractingestion.Service, commercial *commercialvalidation.Service, analysis *accountinganalysis.WorkflowService, ready Readiness, logger *slog.Logger, metrics *observability.Metrics) http.Handler {
-	s := &Server{clients: clientService, invoices: invoiceService, tasks: taskService, contracts: contractService, contractIngestion: ingestion, commercialValidation: commercial, accountingAnalysis: analysis, classifications: classificationService, rules: ruleService, spv: spvService, sagaHandoff: sagaHandoff, ready: ready, logger: logger, metrics: metrics}
+	return NewWithAIUsage(clientService, invoiceService, taskService, contractService, classificationService, ruleService, spvService, sagaHandoff, ingestion, commercial, analysis, nil, ready, logger, metrics)
+}
+
+func NewWithAIUsage(clientService *clients.Service, invoiceService *invoicing.Service, taskService *validationtasks.Service, contractService *contractdomain.Service, classificationService *classification.Service, ruleService *rules.Service, spvService *spvdomain.ConnectionManager, sagaHandoff *saga.HandoffService, ingestion *contractingestion.Service, commercial *commercialvalidation.Service, analysis *accountinganalysis.WorkflowService, aiUsage *llmusage.Service, ready Readiness, logger *slog.Logger, metrics *observability.Metrics) http.Handler {
+	s := &Server{clients: clientService, invoices: invoiceService, tasks: taskService, contracts: contractService, contractIngestion: ingestion, commercialValidation: commercial, accountingAnalysis: analysis, aiUsage: aiUsage, classifications: classificationService, rules: ruleService, spv: spvService, sagaHandoff: sagaHandoff, ready: ready, logger: logger, metrics: metrics}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.readiness)
@@ -107,6 +113,7 @@ func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *i
 	mux.HandleFunc("GET /api/v1/invoices/{id}", s.getInvoice)
 	mux.HandleFunc("GET /api/v1/validation-tasks", s.listValidationTasks)
 	mux.HandleFunc("POST /api/v1/invoices/{id}/contract-requests", s.requestMissingContract)
+	mux.HandleFunc("POST /api/v1/invoices/{id}/contract-waivers", s.continueWithoutContract)
 	mux.HandleFunc("GET /api/v1/contracts", s.listContracts)
 	mux.HandleFunc("GET /api/v1/contracts/{id}", s.getContract)
 	mux.HandleFunc("POST /api/v1/contracts/{id}/archive", s.archiveContract)
@@ -141,6 +148,8 @@ func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *i
 	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-documents/{documentId}/file", s.downloadContractDocument)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/confirm", s.confirmContractDocument)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/commercial-rules/{ruleId}/confirm", s.confirmProposedCommercialRule)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/commercial-rules/{ruleId}/revise", s.reviseConfirmedCommercialRule)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/commercial-rules/{ruleId}/dismiss", s.dismissProposedCommercialClause)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/reviewed-service-prices/activate", s.activateReviewedServicePrices)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/commercial-date-facts", s.putCommercialDateFact)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-documents/{documentId}/reextract", s.retryContractDocument)
@@ -155,7 +164,14 @@ func NewWithAccountingAnalysis(clientService *clients.Service, invoiceService *i
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/invoices/{invoiceId}/commercial-validation/resolve", s.resolveCommercialValidation)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/contract-dossiers/{dossierId}/variables", s.putCommercialVariable)
 	mux.HandleFunc("POST /api/v1/clients/{clientId}/commercial-service-aliases", s.confirmCommercialAlias)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-dossiers/{dossierId}/service-aliases", s.listCommercialAliases)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/contract-documents/{documentId}/service-aliases", s.listCommercialAliases)
+	mux.HandleFunc("POST /api/v1/clients/{clientId}/commercial-service-aliases/{aliasId}/revoke", s.revokeCommercialAlias)
 	mux.HandleFunc("GET /api/v1/clients/{clientId}/commercial-snapshots/{snapshotId}/revalidation-preview", s.previewCommercialRevalidation)
+	mux.HandleFunc("GET /api/v1/ai-usage", s.getAIUsageOverview)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/ai-usage", s.getClientAIUsage)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/ai-usage/runs", s.listClientAIUsageRuns)
+	mux.HandleFunc("GET /api/v1/clients/{clientId}/ai-usage/runs/{runKind}/{runId}", s.getClientAIUsageRun)
 	return s.middleware(mux)
 }
 
@@ -410,7 +426,18 @@ func (s *Server) getContractDocument(w http.ResponseWriter, r *http.Request) {
 	if s.writeContractIngestionError(w, r, err) {
 		return
 	}
-	writeJSON(w, http.StatusOK, contractDocumentResponse(item, false))
+	response := contractDocumentResponse(item, false)
+	// A confirmed document also reports what it enforces on invoices now. The
+	// document stays readable when that state cannot be read; the page then
+	// shows it as unknown instead of guessing.
+	if item.Status == contractingestion.StatusConfirmed && s.commercialValidation != nil {
+		if state, stateErr := s.commercialValidation.DocumentCommercialState(r.Context(), item.ClientID, item.ID); stateErr == nil {
+			response.CommercialState = state
+		} else {
+			s.logger.Warn("contract document commercial state unavailable", "correlation_id", correlationID(r.Context()), "document_id", item.ID, "error", stateErr)
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 func (s *Server) downloadContractDocument(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
@@ -1329,6 +1356,67 @@ func (s *Server) requestMissingContract(w http.ResponseWriter, r *http.Request) 
 	}
 	if errors.Is(err, apperrors.ErrValidation) {
 		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Task is not compatible with this contract request.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	item, err := s.invoices.Get(r.Context(), invoiceID)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	dto, err := invoiceResponse(item)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto)
+}
+
+type continueWithoutContractDTO struct {
+	TaskID           string `json:"taskId"`
+	ExpectedRevision uint64 `json:"expectedRevision"`
+	Reason           string `json:"reason"`
+}
+
+// continueWithoutContract lets the accountant resume an invoice blocked on a
+// missing contract with a recorded reason (D-120).
+func (s *Server) continueWithoutContract(w http.ResponseWriter, r *http.Request) {
+	if !s.allowInvoice(w, r, r.PathValue("id")) {
+		return
+	}
+	r, endSpan := applicationCommand(r, "contracts.continue_without_contract")
+	defer endSpan()
+	invoiceID := strings.TrimSpace(r.PathValue("id"))
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	var request continueWithoutContractDTO
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if invoiceID == "" || idempotencyKey == "" || decoder.Decode(&request) != nil || request.TaskID == "" || request.ExpectedRevision == 0 {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invoice, task, revision, and Idempotency-Key are required.")
+		return
+	}
+	actor, _ := requestactor.FromContext(r.Context())
+	_, _, err := s.tasks.ContinueWithoutContract(r.Context(), validationtasks.ContinueWithoutContractCommand{
+		InvoiceID: invoiceID, TaskID: request.TaskID, ExpectedRevision: request.ExpectedRevision, Reason: request.Reason,
+		CommandID: idempotencyKey, ActorID: actor.ID, ActorDisplay: actor.Display, CorrelationID: correlationID(r.Context()),
+	})
+	if errors.Is(err, apperrors.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Validation task or invoice was not found.")
+		return
+	}
+	if errors.Is(err, validationtasks.ErrTaskAlreadyResolved) {
+		writeError(w, r, http.StatusConflict, "TASK_ALREADY_RESOLVED", "Validation task is already resolved.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrConflict) {
+		writeError(w, r, http.StatusConflict, "CONFLICT", "Validation task changed concurrently.")
+		return
+	}
+	if errors.Is(err, apperrors.ErrValidation) {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Motivul este obligatoriu (10–500 caractere), iar factura trebuie să aștepte un contract lipsă.")
 		return
 	}
 	if err != nil {

@@ -191,6 +191,25 @@ type validationTaskStore struct {
 	invoice   *invoicing.Invoice
 	requests  []validationtasks.RequestMissingContractCommand
 	committed map[string]*validationtasks.Task
+	waivers   []validationtasks.ContinueWithoutContractCommand
+	waiverErr error
+}
+
+func (s *validationTaskStore) ContinueWithoutContract(_ context.Context, command validationtasks.ContinueWithoutContractCommand, now time.Time) (*validationtasks.Task, bool, error) {
+	s.waivers = append(s.waivers, command)
+	if s.waiverErr != nil {
+		return nil, false, s.waiverErr
+	}
+	task := s.invoice.ActiveTask
+	task.Status = validationtasks.StatusResolved
+	task.Revision++
+	task.ResolvedAt = &now
+	actor := command.ActorDisplay
+	s.invoice.ActiveTask = nil
+	s.invoice.PipelineStatus = invoicing.StatusDedupeChecked
+	s.invoice.Revision++
+	s.invoice.ContractWaiver = &contractdomain.WaiverSnapshot{TaskID: task.ID, Reason: command.Reason, ActorDisplay: &actor, WaivedAt: now}
+	return task, true, nil
 }
 
 func (s *validationTaskStore) ListValidationTasks(context.Context, validationtasks.Filter) ([]validationtasks.InboxItem, error) {
@@ -339,6 +358,66 @@ func TestRequestMissingContractReturnsWaitingInvoice(t *testing.T) {
 	replay := requestContract()
 	if replay.Code != http.StatusOK || !strings.Contains(replay.Body.String(), `"revision":2`) || len(store.requests) != 2 || store.requests[1].CommandID != "request-1" {
 		t.Fatalf("replay status=%d body=%s requests=%+v", replay.Code, replay.Body.String(), store.requests)
+	}
+}
+
+func TestContinueWithoutContractReturnsResumedInvoiceWithReasonedWaiver(t *testing.T) {
+	now := time.Date(2026, time.September, 30, 10, 0, 0, 0, time.UTC)
+	newInvoice := func() *invoicing.Invoice {
+		return &invoicing.Invoice{
+			ID: "inv-1", ClientID: "client-alfa", SupplierName: "Furnizor", DocumentNumber: "INV-1", IssueDate: now,
+			Total: money.Money{Amount: money.MustParse("119.0000"), Currency: "RON"}, SPVReference: "SPV-1",
+			PipelineStatus: invoicing.StatusAwaitingContract, SagaStatus: invoicing.SagaNotReady, Revision: 1, CreatedAt: now, UpdatedAt: now,
+			ActiveTask: &validationtasks.Task{ID: "task-1", ClientID: "client-alfa", InvoiceID: "inv-1", Type: validationtasks.TypeMissingContract, Status: validationtasks.StatusWaiting, Title: "Contract lipsă", Reason: "Nu există contract.", Revision: 2, CreatedAt: now, UpdatedAt: now},
+		}
+	}
+	post := func(handler http.Handler, body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/invoices/inv-1/contract-waivers", strings.NewReader(body))
+		request.Header.Set("Idempotency-Key", "waiver-1")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+
+	item := newInvoice()
+	store := &validationTaskStore{invoice: item}
+	response := post(testHandlerWithTasks(item, store), `{"taskId":"task-1","expectedRevision":2,"reason":"  Achiziție punctuală fără contract  "}`)
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, `"pipelineStatus":"DEDUPE_CHECKED"`) || !strings.Contains(body, `"contractWaiver":{"reason":"Achiziție punctuală fără contract","actor":"Test"`) {
+		t.Fatalf("status=%d body=%s", response.Code, body)
+	}
+	if len(store.waivers) != 1 || store.waivers[0].CommandID != "waiver-1" || store.waivers[0].ExpectedRevision != 2 || store.waivers[0].ActorID != "test-accountant" {
+		t.Fatalf("waivers=%+v", store.waivers)
+	}
+
+	short := &validationTaskStore{invoice: newInvoice()}
+	if response := post(testHandlerWithTasks(short.invoice, short), `{"taskId":"task-1","expectedRevision":2,"reason":"  scurt  "}`); response.Code != http.StatusBadRequest || len(short.waivers) != 0 {
+		t.Fatalf("short reason status=%d waivers=%d body=%s", response.Code, len(short.waivers), response.Body.String())
+	}
+	unknown := &validationTaskStore{invoice: newInvoice()}
+	if response := post(testHandlerWithTasks(unknown.invoice, unknown), `{"taskId":"task-1","expectedRevision":2,"reason":"Achiziție punctuală","extra":true}`); response.Code != http.StatusBadRequest || len(unknown.waivers) != 0 {
+		t.Fatalf("unknown field status=%d", response.Code)
+	}
+	for err, code := range map[error]string{validationtasks.ErrTaskAlreadyResolved: "TASK_ALREADY_RESOLVED", apperrors.ErrConflict: "CONFLICT"} {
+		conflict := &validationTaskStore{invoice: newInvoice(), waiverErr: err}
+		response := post(testHandlerWithTasks(conflict.invoice, conflict), `{"taskId":"task-1","expectedRevision":2,"reason":"Achiziție punctuală fără contract"}`)
+		if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), code) {
+			t.Fatalf("err=%v status=%d body=%s", err, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestContractWaiverHistoryLabelsAreRomanian(t *testing.T) {
+	if got := activityLabel("CONTRACT_WAIVED"); got != "Continuat fără contract" {
+		t.Fatalf("CONTRACT_WAIVED label=%q", got)
+	}
+	if got := activityLabel("MISSING_CONTRACT_WAIVED"); got != "Contract lipsă: continuat fără contract" {
+		t.Fatalf("MISSING_CONTRACT_WAIVED label=%q", got)
+	}
+	resolved := &validationtasks.Task{Type: validationtasks.TypeMissingContract, Status: validationtasks.StatusResolved, ResolutionMetadata: []byte(`{"reason":"CONTRACT_WAIVED","note":"x"}`)}
+	available := &validationtasks.Task{Type: validationtasks.TypeMissingContract, Status: validationtasks.StatusResolved, ResolutionMetadata: []byte(`{"reason":"CONTRACT_BECAME_AVAILABLE"}`)}
+	if !validationTaskResponse(resolved).ContractWaived || validationTaskResponse(available).ContractWaived {
+		t.Fatal("contractWaived must only flag tasks closed by a waiver")
 	}
 }
 

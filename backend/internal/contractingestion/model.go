@@ -74,6 +74,9 @@ type ProposedCommercialClause struct {
 	Rule       json.RawMessage `json:"rule"`
 	Evidence   Evidence        `json:"evidence"`
 	Confidence Confidence      `json:"confidence"`
+	// RecognizedRule is read-time only: the executable rule Diana will confirm
+	// automatically from the cited clause text. It is never stored.
+	RecognizedRule *commercialvalidation.Rule `json:"recognizedRule,omitempty"`
 }
 
 type ProposedServiceTerm struct {
@@ -113,6 +116,7 @@ type Document struct {
 	ConfirmedValues                                  *ReviewedContract
 	BuyerMismatch                                    bool
 	ClientCUI                                        string
+	ClientName                                       string
 }
 
 type Source struct {

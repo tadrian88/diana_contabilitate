@@ -11,6 +11,9 @@ import (
 	"diana-contabilitate/backend/internal/invoicing"
 )
 
+// maxPendingClauseEvidence bounds the clauses a coverage finding cites.
+const maxPendingClauseEvidence = 5
+
 var whitespace = regexp.MustCompile(`\s+`)
 
 type Engine struct{}
@@ -33,7 +36,7 @@ func (Engine) Validate(input Input, now time.Time) Run {
 	findings := []Finding{}
 	checkedLines := map[string]bool{}
 	matchedRules := map[string][]string{}
-	serviceCandidates := []ServiceCandidate{}
+	pricedRules := []Rule{}
 	if (!input.Snapshot.EffectiveFrom.IsZero() && input.Invoice.IssueDay.Before(input.Snapshot.EffectiveFrom)) || (input.Snapshot.EffectiveTo != nil && input.Invoice.IssueDay.After(*input.Snapshot.EffectiveTo)) {
 		expected := input.Snapshot.EffectiveFrom.Format("02.01.2006") + " – fără dată de sfârșit"
 		if input.Snapshot.EffectiveTo != nil {
@@ -41,8 +44,20 @@ func (Engine) Validate(input Input, now time.Time) Run {
 		}
 		findings = append(findings, Finding{RuleID: "contract-validity", Code: "CONTRACT_NOT_EFFECTIVE", Outcome: Nonconform, Actual: input.Invoice.IssueDay.Format("02.01.2006"), ActualSource: "Data emiterii facturii", Expected: expected, Reason: "Contractul asociat nu este valabil la data facturii."})
 	}
-	if input.Snapshot.Coverage != CoverageComplete {
-		findings = append(findings, Finding{RuleID: "snapshot-coverage", Code: "CONTRACT_COVERAGE_INCOMPLETE", Outcome: Unverifiable, Reason: "Dosarul contractual nu are acoperire comercială completă."})
+	if input.ContractWaived {
+		findings = append(findings, contractWaiverFinding(input))
+	} else if input.Snapshot.Coverage != CoverageComplete {
+		reason := "Dosarul contractual nu are acoperire comercială completă."
+		if count := len(input.PendingClauses); count == 1 {
+			reason = "O clauză din contract este încă de rezolvat; până atunci acoperirea comercială nu este completă."
+		} else if count > 1 {
+			reason = fmt.Sprintf("%d clauze din contract sunt încă de rezolvat; până atunci acoperirea comercială nu este completă.", count)
+		}
+		evidence := input.PendingClauses
+		if len(evidence) > maxPendingClauseEvidence {
+			evidence = evidence[:maxPendingClauseEvidence]
+		}
+		findings = append(findings, Finding{RuleID: "snapshot-coverage", Code: "CONTRACT_COVERAGE_INCOMPLETE", Outcome: Unverifiable, Reason: reason, Evidence: evidence})
 	}
 	if input.Invoice.DocumentType == invoicing.DocumentTypeCreditNote && input.Original == nil {
 		findings = append(findings, Finding{RuleID: "credit-note", Code: "ORIGINAL_INVOICE_UNAVAILABLE", Outcome: Unverifiable, Reason: "Factura storno nu poate fi reconciliată fără factura originală."})
@@ -88,19 +103,38 @@ func (Engine) Validate(input Input, now time.Time) Run {
 				outcome, code, reason = Nonconform, "CONTRACT_REFERENCE_MISMATCH", "Referința declarată în factură diferă de contractul asociat după identitatea părților."
 			}
 			findings = append(findings, Finding{RuleID: rule.ID, Code: code, Outcome: outcome, Actual: actual, ActualSource: input.ReferenceSource, Expected: expected, Reason: reason, Evidence: rule.Evidence})
-		case RuleFixedPrice, RuleUnitRate, RuleTieredPrice, RuleDiscount, RuleTranche, RuleProrata, RuleMinimum, RuleMaximum, RuleCostPlus, RuleFX, RuleVAT:
-			if rule.Kind != RuleVAT {
-				serviceCandidates = append(serviceCandidates, ServiceCandidate{RuleID: rule.ID, Label: rule.Narrative})
-			}
+		case RuleVAT:
 			lines := matchingLines(rule, input.Invoice, input.Aliases)
 			if len(lines) == 0 {
 				continue
 			}
-			if rule.Kind != RuleVAT {
-				for _, line := range lines {
-					checkedLines[line.ID] = true
-					matchedRules[line.ID] = append(matchedRules[line.ID], rule.ID)
+			expected, missing, err := EvaluateExpression(*rule.Expression, variables)
+			if err != nil || len(missing) > 0 {
+				findings = append(findings, missingVariablesFinding(rule, input, missing, "Lipsesc variabilele necesare calculului contractual."))
+				continue
+			}
+			expected = trimDecimal(expected)
+			matchReason, mismatchReason, calculation := "Cota TVA a liniei corespunde cotei din contract.", "Cota TVA a liniei diferă de cota din contract.", rule.Narrative
+			if rule.Expression.Op == "variable" {
+				matchReason, mismatchReason = "Cota TVA a liniei corespunde cotei legale la care trimite contractul.", "Cota TVA a liniei diferă de cota legală la care trimite contractul."
+				if source := strings.TrimSpace(input.Variables[rule.Expression.Variable].SourceReference); source != "" {
+					calculation = "Cota legală la data facturii: " + expected + "% · " + source
 				}
+			}
+			for _, line := range lines {
+				actual := trimDecimal(line.VATRate.String())
+				outcome, code, reason := compareDecimal(actual, expected, "VAT_RATE_MATCH", "VAT_RATE_MISMATCH", matchReason, mismatchReason)
+				findings = append(findings, Finding{RuleID: rule.ID, LineID: line.ID, Code: code, Outcome: outcome, Actual: actual, ActualSource: fmt.Sprintf("Linia %d", line.Position), Expected: expected, Calculation: calculation, Reason: reason, Evidence: rule.Evidence})
+			}
+		case RuleFixedPrice, RuleUnitRate, RuleTieredPrice, RuleDiscount, RuleTranche, RuleProrata, RuleMinimum, RuleMaximum, RuleCostPlus, RuleFX:
+			pricedRules = append(pricedRules, rule)
+			lines := matchingLines(rule, input.Invoice, input.Aliases)
+			if len(lines) == 0 {
+				continue
+			}
+			for _, line := range lines {
+				checkedLines[line.ID] = true
+				matchedRules[line.ID] = append(matchedRules[line.ID], rule.ID)
 			}
 			expected, missing, err := EvaluateExpression(*rule.Expression, variables)
 			if err != nil || len(missing) > 0 {
@@ -108,7 +142,7 @@ func (Engine) Validate(input Input, now time.Time) Run {
 				continue
 			}
 			for _, line := range lines {
-				if rule.Currency != "" && rule.Kind != RuleVAT {
+				if rule.Currency != "" {
 					lineCurrency := linePriceCurrency(line, input.Invoice.Total.Currency, rule.Currency)
 					if lineCurrency == "" {
 						findings = append(findings, Finding{RuleID: rule.ID, LineID: line.ID, Code: "LINE_PRICE_CURRENCY_MISSING", Outcome: Unverifiable, Expected: rule.Currency, MissingInputs: []string{"line_price_currency"}, Reason: "Moneda prețului de linie nu este disponibilă; moneda totalului nu poate fi substituită.", Evidence: rule.Evidence})
@@ -183,9 +217,13 @@ func (Engine) Validate(input Input, now time.Time) Run {
 			findings = append(findings, Finding{RuleID: rule.ID, Code: "RULE_REQUIRES_INPUT", Outcome: Unverifiable, Reason: "Regula necesită o sursă sau un evaluator specializat neconfigurat.", Evidence: rule.Evidence})
 		}
 	}
+	// A waived invoice has no contractual service to cover its lines.
 	for _, line := range input.Invoice.Lines {
+		if input.ContractWaived {
+			continue
+		}
 		if !checkedLines[line.ID] {
-			findings = append(findings, Finding{RuleID: "line-coverage", LineID: line.ID, Code: "SERVICE_LINE_UNCOVERED", Outcome: Unverifiable, Actual: line.Description, Reason: "Linia facturii nu are o regulă comercială confirmată aplicabilă.", ServiceCandidates: serviceCandidates})
+			findings = append(findings, Finding{RuleID: "line-coverage", LineID: line.ID, Code: "SERVICE_LINE_UNCOVERED", Outcome: Unverifiable, Actual: line.Description, Reason: "Linia facturii nu are o regulă comercială confirmată aplicabilă.", ServiceCandidates: SuggestServices(line, pricedRules)})
 		} else if len(matchedRules[line.ID]) > 1 {
 			findings = append(findings, Finding{RuleID: "line-coverage", LineID: line.ID, Code: "SERVICE_LINE_AMBIGUOUS", Outcome: Unverifiable, Actual: line.Description, Reason: "Linia se potrivește cu mai multe servicii contractuale; asocierea trebuie clarificată."})
 		}
@@ -193,6 +231,26 @@ func (Engine) Validate(input Input, now time.Time) Run {
 	run.Findings = findings
 	run.Outcome = aggregate(findings)
 	return run
+}
+
+// contractWaiverFinding records that the accountant decided, with a reason,
+// that the invoice has no contract to be checked against (D-120).
+func contractWaiverFinding(input Input) Finding {
+	finding := Finding{RuleID: "contract-waiver", Code: "CONTRACT_WAIVED", Outcome: Conform, Reason: "Contabilul a decis continuarea fără contract; factura nu este verificată față de un contract."}
+	waiver := input.Invoice.ContractWaiver
+	if waiver == nil {
+		return finding
+	}
+	finding.Actual = waiver.Reason
+	source := []string{"Decizia contabilului"}
+	if waiver.ActorDisplay != nil && strings.TrimSpace(*waiver.ActorDisplay) != "" {
+		source = append(source, strings.TrimSpace(*waiver.ActorDisplay))
+	}
+	if !waiver.WaivedAt.IsZero() {
+		source = append(source, waiver.WaivedAt.Format("02.01.2006"))
+	}
+	finding.ActualSource = strings.Join(source, " · ")
+	return finding
 }
 
 func missingVariablesFinding(rule Rule, input Input, missing []string, fallbackReason string) Finding {
@@ -227,9 +285,6 @@ func calendarDays(from, to time.Time) int {
 }
 
 func commercialActual(kind RuleKind, line invoicing.Line) string {
-	if kind == RuleVAT {
-		return line.VATRate.String()
-	}
 	if kind == RuleFixedPrice || kind == RuleUnitRate || kind == RuleTieredPrice || kind == RuleDiscount || kind == RuleTranche {
 		return line.UnitPrice.String()
 	}

@@ -242,3 +242,96 @@ func TestExpressionRejectsOutOfOrderTiersAndExcessiveDepth(t *testing.T) {
 		t.Fatal("excessively deep expression accepted")
 	}
 }
+
+func TestLegalVATRateIsCheckedOncePerLineUnderItsOwnCode(t *testing.T) {
+	rule := Rule{ID: "vat", Kind: RuleVAT, Narrative: "Prețurile nu includ TVA. TVA se aplică în cota legală în vigoare.", DateBasis: DateInvoiceIssue, Expression: &Expression{Op: "variable", Variable: "applicable_vat_rate"}, RequiredVariables: []string{"applicable_vat_rate"}, Evidence: []Evidence{{DocumentID: "contract", Snippet: "4.3. Prețurile nu includ TVA."}}, Blocking: true}
+	lines := []invoicing.Line{
+		{ID: "line-1", Position: 1, Description: "Mentenanță IT — abonament", VATRate: money.MustParse("21")},
+		{ID: "line-2", Position: 2, Description: "Hosting cloud Business 2 VM", VATRate: money.MustParse("19")},
+	}
+	input := Input{
+		Invoice:   invoicing.Invoice{ID: "invoice", Revision: 1, Lines: lines},
+		Snapshot:  Snapshot{Coverage: CoverageComplete, Rules: []Rule{rule}},
+		Variables: map[string]VariableValue{"applicable_vat_rate": {Name: "applicable_vat_rate", Value: "21", SourceReference: "Codul fiscal, art. 291"}},
+	}
+	run := (Engine{}).Validate(input, time.Now())
+	vat := []Finding{}
+	for _, finding := range run.Findings {
+		if finding.Code == "PRICE_MATCH" || finding.Code == "PRICE_MISMATCH" {
+			t.Fatalf("a VAT rate must never be reported as a price: %+v", finding)
+		}
+		if finding.RuleID == "vat" {
+			vat = append(vat, finding)
+		}
+	}
+	if len(vat) != 2 || vat[0].Code != "VAT_RATE_MATCH" || vat[0].Actual != "21" || vat[0].Expected != "21" || vat[0].ActualSource != "Linia 1" || vat[1].Code != "VAT_RATE_MISMATCH" || vat[1].Outcome != Nonconform {
+		t.Fatalf("unexpected VAT findings: %+v", vat)
+	}
+	if vat[0].Calculation != "Cota legală la data facturii: 21% · Codul fiscal, art. 291" {
+		t.Fatalf("legal source missing from calculation: %q", vat[0].Calculation)
+	}
+}
+
+func TestUncoveredLineSuggestsServiceByWordingAndUnitNeverByPrice(t *testing.T) {
+	price := func(id, description, amount, unit string, kind RuleKind) Rule {
+		narrative := description + " · " + amount + " RON"
+		if kind == RuleUnitRate {
+			narrative += " / " + unit
+		}
+		return Rule{ID: id, Kind: kind, Narrative: narrative, Unit: unit, Applicability: Applicability{ServiceID: id, Aliases: []string{description}, BillingFrequency: "MONTHLY"}, DateBasis: DateInvoiceIssue, Currency: "RON", Expression: &Expression{Op: "literal", Value: amount}, Evidence: []Evidence{{DocumentID: "contract", Snippet: amount + " lei"}}, Blocking: true}
+	}
+	rules := []Rule{
+		// The maintenance tariff equals the invoiced amount on purpose: an
+		// equal price must not attract the suggestion.
+		price("maintenance", "Mentenanță IT — abonament lunar", "650.00", "lună", RuleFixedPrice),
+		price("hosting", "Hosting cloud — pachet Business 2 VM", "900.00", "", RuleFixedPrice),
+		price("extra", "Intervenții suplimentare peste abonament (la cererea Beneficiarului)", "150.00", "oră", RuleUnitRate),
+	}
+	line := invoicing.Line{ID: "line-2", Position: 2, Description: "Hosting cloud Business 2 VM", Unit: "MON", UnitPrice: money.MustParse("650"), SourceFacts: &accounting.LineFacts{PriceAmount: &accounting.AmountFact{Currency: "RON"}, ItemName: "Hosting cloud Business 2 VM", ItemDescription: "Găzduire cloud luna august 2026"}}
+	run := (Engine{}).Validate(Input{Invoice: invoicing.Invoice{ID: "invoice", Revision: 1, Lines: []invoicing.Line{line}}, Snapshot: Snapshot{Coverage: CoverageComplete, Rules: rules}}, time.Now())
+	if len(run.Findings) != 1 || run.Findings[0].Code != "SERVICE_LINE_UNCOVERED" {
+		t.Fatalf("unexpected findings: %+v", run.Findings)
+	}
+	candidates := run.Findings[0].ServiceCandidates
+	if len(candidates) != 3 || candidates[0].RuleID != "hosting" || !candidates[0].Suggested || candidates[0].Label != "Hosting cloud — pachet Business 2 VM" || len(candidates[0].SharedWords) != 5 || candidates[0].LineWordCount != 5 {
+		t.Fatalf("hosting should be the only suggestion: %+v", candidates)
+	}
+	for _, candidate := range candidates[1:] {
+		if candidate.Suggested {
+			t.Fatalf("more than one suggestion: %+v", candidates)
+		}
+		if candidate.RuleID == "extra" && candidate.UnitMatch != UnitIncompatible {
+			t.Fatalf("hourly service should be incompatible with a monthly line: %+v", candidate)
+		}
+	}
+}
+
+func TestGenericOrAmbiguousWordingIsNeverPreselected(t *testing.T) {
+	price := func(id, description string) Rule {
+		return Rule{ID: id, Kind: RuleFixedPrice, Narrative: description + " · 500.00 RON", Applicability: Applicability{ServiceID: id, Aliases: []string{description}}, Currency: "RON", Expression: &Expression{Op: "literal", Value: "500.00"}, Evidence: []Evidence{{DocumentID: "contract", Snippet: "500 lei"}}, Blocking: true}
+	}
+	generic := invoicing.Line{ID: "generic", Position: 1, Description: "PRESTARI SERVICII CF. CTR. 117/2025", Unit: "H87"}
+	for _, candidate := range SuggestServices(generic, []Rule{price("accounting", "Servicii de contabilitate"), price("payroll", "Servicii de salarizare")}) {
+		if candidate.Suggested || candidate.Score != 0 {
+			t.Fatalf("generic wording must not be suggested: %+v", candidate)
+		}
+	}
+	ambiguous := invoicing.Line{ID: "ambiguous", Position: 1, Description: "Hosting cloud", Unit: "MON"}
+	for _, candidate := range SuggestServices(ambiguous, []Rule{price("small", "Hosting cloud — pachet Start"), price("large", "Hosting cloud — pachet Business")}) {
+		if candidate.Suggested {
+			t.Fatalf("two equally close services must not be preselected: %+v", candidate)
+		}
+	}
+}
+
+func TestIncompleteCoverageCitesTheClausesLeftToSettle(t *testing.T) {
+	page := 1
+	pending := []Evidence{{DocumentID: "contract", Page: &page, Snippet: "SOFTCO2 S.R.L., cod de înregistrare fiscală RO49678244"}}
+	run := (Engine{}).Validate(Input{Invoice: invoicing.Invoice{ID: "invoice", Revision: 1}, Snapshot: Snapshot{Coverage: CoveragePartial}, PendingClauses: pending}, time.Now())
+	if len(run.Findings) != 1 || run.Findings[0].Code != "CONTRACT_COVERAGE_INCOMPLETE" || len(run.Findings[0].Evidence) != 1 || run.Findings[0].Evidence[0].DocumentID != "contract" {
+		t.Fatalf("the coverage finding cites the open clause: %+v", run.Findings)
+	}
+	if run.Findings[0].Reason != "O clauză din contract este încă de rezolvat; până atunci acoperirea comercială nu este completă." {
+		t.Fatalf("the reason counts the open clauses: %q", run.Findings[0].Reason)
+	}
+}

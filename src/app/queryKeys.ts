@@ -25,5 +25,13 @@ export const queryKeys = {
     detail: (id: string) => ['rules', 'detail', id] as const,
   },
   knowledge: {root:['approved-knowledge'] as const,list:(scope:ClientScope)=>['approved-knowledge',scope] as const},
+  serviceAliases: {root:['commercial-service-aliases'] as const,list:(clientId:string,scopeId:string)=>['commercial-service-aliases',clientId,scopeId] as const},
   legislation: ['legislation-sources'] as const,
+  aiUsage: {
+    root: ['ai-usage'] as const,
+    overview: (from: string, to: string) => ['ai-usage', 'overview', from, to] as const,
+    client: (clientId: string, from: string, to: string) => ['ai-usage', 'client', clientId, from, to] as const,
+    runs: (clientId: string, from: string, to: string) => ['ai-usage', 'runs', clientId, from, to] as const,
+    run: (clientId: string, runKind: string, runId: string) => ['ai-usage', 'run', clientId, runKind, runId] as const,
+  },
 }

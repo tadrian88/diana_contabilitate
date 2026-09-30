@@ -3,7 +3,9 @@ package validationtasks
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/audit"
@@ -48,10 +50,32 @@ type RequestMissingContractCommand struct {
 	CorrelationID    string
 }
 
+// ContinueWithoutContractCommand records the accountant's reasoned decision to
+// process an invoice that has no supplier contract (D-120).
+type ContinueWithoutContractCommand struct {
+	InvoiceID        string
+	TaskID           string
+	ExpectedRevision uint64
+	Reason           string
+	CommandID        string
+	ActorID          string
+	ActorDisplay     string
+	CorrelationID    string
+}
+
+const (
+	ContractWaiverReasonMinRunes = 10
+	ContractWaiverReasonMaxRunes = 500
+	// ContractWaivedResolution is the resolution_metadata reason of a
+	// MISSING_CONTRACT task closed by ContinueWithoutContract.
+	ContractWaivedResolution = "CONTRACT_WAIVED"
+)
+
 type Store interface {
 	ListValidationTasks(context.Context, Filter) ([]InboxItem, error)
 	CreateBlockingTask(context.Context, CreationCommand, CreationDefinition, time.Time) (*Task, bool, error)
 	RequestMissingContract(context.Context, RequestMissingContractCommand, time.Time) (*Task, bool, error)
+	ContinueWithoutContract(context.Context, ContinueWithoutContractCommand, time.Time) (*Task, bool, error)
 }
 
 type Clock func() time.Time
@@ -99,6 +123,16 @@ func (s *Service) RequestMissingContract(ctx context.Context, command RequestMis
 		return nil, false, apperrors.ErrValidation
 	}
 	return s.store.RequestMissingContract(ctx, command, s.clock())
+}
+
+func (s *Service) ContinueWithoutContract(ctx context.Context, command ContinueWithoutContractCommand) (*Task, bool, error) {
+	command.Reason = strings.TrimSpace(command.Reason)
+	length := utf8.RuneCountInString(command.Reason)
+	if command.InvoiceID == "" || command.TaskID == "" || command.ExpectedRevision == 0 || command.CommandID == "" || command.ActorDisplay == "" ||
+		length < ContractWaiverReasonMinRunes || length > ContractWaiverReasonMaxRunes {
+		return nil, false, apperrors.ErrValidation
+	}
+	return s.store.ContinueWithoutContract(ctx, command, s.clock())
 }
 
 var ErrTaskAlreadyResolved = errors.New("task already resolved")

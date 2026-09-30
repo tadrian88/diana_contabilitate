@@ -379,13 +379,16 @@ func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDoc
 	doc := documentDomain(row, attempt)
 	if client, err := s.Client.AccountingClient.Get(ctx, row.ClientID); err == nil {
 		doc.ClientCUI = client.Cui
+		doc.ClientName = client.Name
 	}
 	if len(row.ConfirmedValues) > 0 {
 		var values contractingestion.ReviewedContract
 		if json.Unmarshal(row.ConfirmedValues, &values) == nil {
-			confirmedIDs := make(map[string]bool, len(values.CommercialRules))
-			for _, rule := range values.CommercialRules {
-				confirmedIDs[rule.ID] = true
+			// The latest reviewed clause wins over the rule selected at
+			// confirmation, so automatic confirmations and later revisions show.
+			confirmedIDs := make(map[string]int, len(values.CommercialRules))
+			for index, rule := range values.CommercialRules {
+				confirmedIDs[rule.ID] = index
 			}
 			rows, queryErr := s.DB.QueryContext(ctx, `SELECT normalized_rule FROM contract_clause_candidates WHERE document_id=$1 AND review_status='CONFIRMED' AND normalized_rule IS NOT NULL ORDER BY reviewed_at,created_at`, row.ID)
 			if queryErr != nil {
@@ -394,9 +397,14 @@ func (s *Store) contractDocument(ctx context.Context, row *ent.ContractSourceDoc
 			for rows.Next() {
 				var encoded []byte
 				var rule commercialvalidation.Rule
-				if rows.Scan(&encoded) == nil && json.Unmarshal(encoded, &rule) == nil && !confirmedIDs[rule.ID] {
+				if rows.Scan(&encoded) != nil || json.Unmarshal(encoded, &rule) != nil {
+					continue
+				}
+				if index, exists := confirmedIDs[rule.ID]; exists {
+					values.CommercialRules[index] = rule
+				} else {
+					confirmedIDs[rule.ID] = len(values.CommercialRules)
 					values.CommercialRules = append(values.CommercialRules, rule)
-					confirmedIDs[rule.ID] = true
 				}
 			}
 			if closeErr := rows.Close(); closeErr != nil {
@@ -428,6 +436,7 @@ func attemptDomain(row *ent.ContractExtractionAttempt) *contractingestion.Attemp
 	if len(row.Proposal) > 0 {
 		var p contractingestion.Proposal
 		if json.Unmarshal(row.Proposal, &p) == nil {
+			annotateSourceTextRecognition(&p)
 			a.Proposal = &p
 		}
 	}

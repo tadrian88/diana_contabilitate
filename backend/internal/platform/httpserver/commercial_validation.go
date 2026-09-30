@@ -195,6 +195,47 @@ func (s *Server) confirmCommercialAlias(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"changed": changed})
 }
 
+func (s *Server) listCommercialAliases(w http.ResponseWriter, r *http.Request) {
+	actor, _ := requestactor.FromContext(r.Context())
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if s.commercialValidation == nil || !actor.AllowsClient(clientID) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Dosarul contractual nu a fost găsit.")
+		return
+	}
+	var aliases []commercialvalidation.LearnedAlias
+	var err error
+	if documentID := strings.TrimSpace(r.PathValue("documentId")); documentID != "" {
+		aliases, err = s.commercialValidation.ListAliasesForDocument(r.Context(), clientID, documentID)
+	} else {
+		aliases, err = s.commercialValidation.ListAliases(r.Context(), clientID, strings.TrimSpace(r.PathValue("dossierId")))
+	}
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": aliases})
+}
+
+func (s *Server) revokeCommercialAlias(w http.ResponseWriter, r *http.Request) {
+	actor, _ := requestactor.FromContext(r.Context())
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if s.commercialValidation == nil || !actor.AllowsClient(clientID) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Asocierea nu a fost găsită.")
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Revocarea asocierii necesită o cheie de idempotency.")
+		return
+	}
+	changed, err := s.commercialValidation.RevokeAlias(r.Context(), commercialvalidation.AliasRevocation{ClientID: clientID, AliasID: strings.TrimSpace(r.PathValue("aliasId")), ActorID: actor.ID, ActorDisplay: actor.Display, CommandID: key})
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"changed": changed})
+}
+
 func (s *Server) confirmProposedCommercialRule(w http.ResponseWriter, r *http.Request) {
 	actor, _ := requestactor.FromContext(r.Context())
 	clientID := strings.TrimSpace(r.PathValue("clientId"))
@@ -226,6 +267,71 @@ func (s *Server) confirmProposedCommercialRule(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]any{"changed": changed})
 }
 
+// dismissProposedCommercialClause closes a proposed clause that is not checked
+// on invoices (with the reviewer's reason) or that only restates the supplier
+// CUI, so it no longer keeps the contract's coverage partial.
+func (s *Server) dismissProposedCommercialClause(w http.ResponseWriter, r *http.Request) {
+	actor, _ := requestactor.FromContext(r.Context())
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if s.commercialValidation == nil || !actor.AllowsClient(clientID) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Clauza comercială nu a fost găsită.")
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Închiderea clauzei necesită o cheie de idempotency.")
+		return
+	}
+	var request struct {
+		ReasonCode string `json:"reasonCode"`
+		Reason     string `json:"reason"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Motivul închiderii clauzei este invalid.")
+		return
+	}
+	changed, err := s.commercialValidation.DismissProposedClause(r.Context(), commercialvalidation.ClauseDismissal{ClientID: clientID, DocumentID: strings.TrimSpace(r.PathValue("documentId")), RuleID: strings.TrimSpace(r.PathValue("ruleId")), CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, ReasonCode: request.ReasonCode, Reason: request.Reason})
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"changed": changed})
+}
+
+// reviseConfirmedCommercialRule corrects a confirmed narrative-completed rule
+// (for example a value recognized automatically from the clause). The server
+// re-checks the correction against the cited source and creates a new snapshot.
+func (s *Server) reviseConfirmedCommercialRule(w http.ResponseWriter, r *http.Request) {
+	actor, _ := requestactor.FromContext(r.Context())
+	clientID := strings.TrimSpace(r.PathValue("clientId"))
+	if s.commercialValidation == nil || !actor.AllowsClient(clientID) {
+		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Regula comercială nu a fost găsită.")
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Modificarea regulii necesită o cheie de idempotency.")
+		return
+	}
+	var request struct {
+		Rule *commercialvalidation.Rule `json:"rule"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Rule == nil {
+		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Regula comercială modificată este invalidă.")
+		return
+	}
+	changed, err := s.commercialValidation.ConfirmProposedRule(r.Context(), commercialvalidation.RuleConfirmation{ClientID: clientID, DocumentID: strings.TrimSpace(r.PathValue("documentId")), RuleID: strings.TrimSpace(r.PathValue("ruleId")), CommandID: key, ActorID: actor.ID, ActorDisplay: actor.Display, Rule: request.Rule, Revise: true})
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"changed": changed})
+}
+
 func (s *Server) activateReviewedServicePrices(w http.ResponseWriter, r *http.Request) {
 	actor, _ := requestactor.FromContext(r.Context())
 	clientID := strings.TrimSpace(r.PathValue("clientId"))
@@ -238,12 +344,12 @@ func (s *Server) activateReviewedServicePrices(w http.ResponseWriter, r *http.Re
 		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Confirmarea tarifelor necesită o cheie de idempotency.")
 		return
 	}
-	count, err := s.commercialValidation.ActivateReviewedServicePrices(r.Context(), clientID, strings.TrimSpace(r.PathValue("documentId")), actor.ID, key)
+	result, err := s.commercialValidation.ActivateReviewedServicePrices(r.Context(), clientID, strings.TrimSpace(r.PathValue("documentId")), actor.ID, key)
 	if err != nil {
 		s.writeDomainError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"activated": count})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) putCommercialDateFact(w http.ResponseWriter, r *http.Request) {

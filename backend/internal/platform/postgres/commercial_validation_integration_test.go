@@ -91,3 +91,94 @@ func TestCommercialDateFactIsInvoiceScopedProvenancedAndIdempotent(t *testing.T)
 		t.Fatalf("cross-client date write changed=%t err=%v", changed, err)
 	}
 }
+
+func TestLearnedServiceAliasCanBeRevokedAndLearnedAgain(t *testing.T) {
+	tc := newModule5TestContext(t)
+	service := commercialvalidation.NewService(tc.store, func() time.Time { return tc.now })
+	dossier, _, err := service.CreateDossier(tc.ctx, commercialvalidation.Dossier{ClientID: tc.clientID, SupplierCUI: "RO38920171", BuyerCUI: "RO49678244", PrimaryReference: "BG-2025-117"}, tc.clientID+":alias-dossier")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = tc.store.DB.ExecContext(tc.ctx, `DELETE FROM contract_service_aliases WHERE dossier_id=$1`, dossier.ID)
+		_, _ = tc.store.DB.ExecContext(tc.ctx, `DELETE FROM activity_events WHERE aggregate_id=$1`, dossier.ID)
+		_, _ = tc.store.DB.ExecContext(tc.ctx, `DELETE FROM contract_dossiers WHERE id=$1`, dossier.ID)
+	})
+	learn := func(id, serviceID string) error {
+		_, err := tc.store.DB.ExecContext(tc.ctx, `INSERT INTO contract_service_aliases(id,client_id,supplier_cui,service_id,normalized_label,confirmed_by_id,confirmed_at,command_key,dossier_id) VALUES($1,$2,'RO38920171',$3,'HOSTING CLOUD BUSINESS 2 VM','reviewer',$4,$5,$6)`, id, tc.clientID, serviceID, tc.now, "commercial-alias:"+id, dossier.ID)
+		return err
+	}
+	if err = learn(dossier.ID+":first", "service-hosting"); err != nil {
+		t.Fatal(err)
+	}
+	if err = learn(dossier.ID+":duplicate", "service-maintenance"); err == nil {
+		t.Fatal("an active wording must map to one service only")
+	}
+	revoke := commercialvalidation.AliasRevocation{ClientID: tc.clientID, AliasID: dossier.ID + ":first", ActorID: "reviewer", CommandID: dossier.ID + ":revoke"}
+	if changed, err := service.RevokeAlias(tc.ctx, revoke); err != nil || !changed {
+		t.Fatalf("revoke changed=%t err=%v", changed, err)
+	}
+	if changed, err := service.RevokeAlias(tc.ctx, revoke); err != nil || changed {
+		t.Fatalf("revoke replay changed=%t err=%v", changed, err)
+	}
+	other := revoke
+	other.ClientID = "other-client"
+	if _, err := service.RevokeAlias(tc.ctx, other); !errors.Is(err, apperrors.ErrNotFound) {
+		t.Fatalf("cross-client revoke returned %v", err)
+	}
+	if err = learn(dossier.ID+":second", "service-maintenance"); err != nil {
+		t.Fatalf("a revoked wording must be learnable again: %v", err)
+	}
+	aliases, err := service.ListAliases(tc.ctx, tc.clientID, dossier.ID)
+	if err != nil || len(aliases) != 2 || aliases[0].ID != dossier.ID+":second" || aliases[0].RevokedAt != nil || aliases[1].RevokedAt == nil || aliases[1].RevokedBy != "reviewer" {
+		t.Fatalf("aliases=%+v err=%v", aliases, err)
+	}
+}
+
+func TestConfirmedMappingKeepsItsInvoiceWhenTheLearnedWordingIsRevoked(t *testing.T) {
+	tc := newModule5TestContext(t)
+	service := commercialvalidation.NewService(tc.store, func() time.Time { return tc.now })
+	dossier, _, err := service.CreateDossier(tc.ctx, commercialvalidation.Dossier{ClientID: tc.clientID, SupplierCUI: "RO38920171", BuyerCUI: "RO49678244", PrimaryReference: "CWF-0231"}, tc.clientID+":mapping-dossier")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invoiceID := tc.createInvoice(t, "mapping-scope", "Servicii curățenie birou")
+	t.Cleanup(func() {
+		_, _ = tc.store.DB.ExecContext(tc.ctx, `DELETE FROM contract_service_aliases WHERE dossier_id=$1`, dossier.ID)
+		_, _ = tc.store.DB.ExecContext(tc.ctx, `DELETE FROM activity_events WHERE aggregate_id=$1`, dossier.ID)
+		_, _ = tc.store.DB.ExecContext(tc.ctx, `DELETE FROM contract_dossiers WHERE id=$1`, dossier.ID)
+	})
+	alias := commercialvalidation.Alias{ID: stableID("service-alias", invoiceID+":map"), ClientID: tc.clientID, InvoiceID: invoiceID, ServiceID: "service-cleaning", NormalizedLabel: "SERVICII CURĂȚENIE BIROU", DossierID: dossier.ID, SupplierCUI: "RO38920171", ReuseForDossier: true, ConfirmedByID: "reviewer", ConfirmedAt: tc.now}
+	if changed, err := tc.store.saveAlias(tc.ctx, alias, invoiceID+":map"); err != nil || !changed {
+		t.Fatalf("remembered mapping changed=%t err=%v", changed, err)
+	}
+	if changed, err := tc.store.saveAlias(tc.ctx, alias, invoiceID+":map"); err != nil || changed {
+		t.Fatalf("replay changed=%t err=%v", changed, err)
+	}
+	active := func() (dossierWide, invoiceScoped int) {
+		if err := tc.store.DB.QueryRowContext(tc.ctx, `SELECT COUNT(*) FILTER (WHERE invoice_id IS NULL),COUNT(*) FILTER (WHERE invoice_id=$2) FROM contract_service_aliases WHERE dossier_id=$1 AND revoked_at IS NULL`, dossier.ID, invoiceID).Scan(&dossierWide, &invoiceScoped); err != nil {
+			t.Fatal(err)
+		}
+		return dossierWide, invoiceScoped
+	}
+	if dossierWide, invoiceScoped := active(); dossierWide != 1 || invoiceScoped != 1 {
+		t.Fatalf("a remembered mapping is learned and binds its invoice: dossier=%d invoice=%d", dossierWide, invoiceScoped)
+	}
+	revoke := commercialvalidation.AliasRevocation{ClientID: tc.clientID, AliasID: alias.ID, ActorID: "reviewer", CommandID: invoiceID + ":revoke"}
+	if changed, err := service.RevokeAlias(tc.ctx, revoke); err != nil || !changed {
+		t.Fatalf("revoke changed=%t err=%v", changed, err)
+	}
+	if dossierWide, invoiceScoped := active(); dossierWide != 0 || invoiceScoped != 1 {
+		t.Fatalf("revoking the learned wording keeps this invoice's mapping: dossier=%d invoice=%d", dossierWide, invoiceScoped)
+	}
+	again := alias
+	again.ID = stableID("service-alias", invoiceID+":map-again")
+	if changed, err := tc.store.saveAlias(tc.ctx, again, invoiceID+":map-again"); err != nil || !changed {
+		t.Fatalf("learning the wording again next to the kept mapping changed=%t err=%v", changed, err)
+	}
+	other := again
+	other.ID, other.ServiceID = stableID("service-alias", invoiceID+":map-other"), "service-windows"
+	if _, err := tc.store.saveAlias(tc.ctx, other, invoiceID+":map-other"); !errors.Is(err, apperrors.ErrConflict) {
+		t.Fatalf("an active wording maps to one service only, err=%v", err)
+	}
+}

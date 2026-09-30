@@ -4,7 +4,6 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
-CLIENT_ID='client-fcb7f867c09dad08a3fe65e1'
 CLIENT_NAME='SOFTCO2 SRL'
 CLIENT_CUI='49678244'
 
@@ -18,10 +17,11 @@ done
 echo '==> Pornesc/verific PostgreSQL local'
 docker compose up -d --wait postgres
 
-CLIENT_ROW=$(docker compose exec -T postgres psql -U diana -d diana -At -F '|' -v ON_ERROR_STOP=1 \
-  -c "SELECT id, name, cui FROM clients WHERE id='$CLIENT_ID' AND name='$CLIENT_NAME' AND cui='$CLIENT_CUI';")
+# ID-ul clientului se schimbă la fiecare make reset; îl identificăm după nume și CUI.
+CLIENT_ID=$(docker compose exec -T postgres psql -U diana -d diana -At -v ON_ERROR_STOP=1 \
+  -c "SELECT id FROM clients WHERE name='$CLIENT_NAME' AND normalized_identifier='$CLIENT_CUI';")
 
-if [ "$CLIENT_ROW" != "$CLIENT_ID|$CLIENT_NAME|$CLIENT_CUI" ]; then
+if [ -z "$CLIENT_ID" ] || [ "$(printf '%s\n' "$CLIENT_ID" | wc -l)" -ne 1 ]; then
   echo "Clientul exact $CLIENT_NAME / CUI $CLIENT_CUI nu a fost găsit. Nu s-a șters nimic." >&2
   exit 1
 fi
@@ -161,6 +161,7 @@ DELETE FROM outbox_entries WHERE aggregate_id IN (
 DELETE FROM line_classifications WHERE invoice_id IN (SELECT id FROM _invoices);
 DELETE FROM invoice_lines WHERE id IN (SELECT id FROM _lines);
 DELETE FROM invoices WHERE id IN (SELECT id FROM _invoices);
+DELETE FROM llm_usage_events WHERE client_id IN (SELECT id FROM _client);
 DELETE FROM contract_extraction_attempts WHERE document_id IN (SELECT id FROM _documents);
 DELETE FROM contract_source_documents WHERE id IN (SELECT id FROM _documents);
 DELETE FROM contract_service_terms WHERE contract_id IN (SELECT id FROM _contracts);

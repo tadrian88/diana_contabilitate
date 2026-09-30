@@ -48,28 +48,40 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 	}
 	date := accountingdate.FromTime(item.IssueDate)
 	snapshot := item.AccountingSnapshot
-	if snapshot == nil || !snapshot.Profile.Valid(item.ClientID, date) || !snapshot.Pack.Valid(snapshot.Profile, item.ClientID, date, allowTest) {
+	if snapshot == nil || !snapshot.Profile.Valid(item.ClientID, date) || snapshot.Pack != nil && !snapshot.Pack.Valid(snapshot.Profile, item.ClientID, date, allowTest) {
 		return fail("Lipsește un snapshot aprobat și coerent de profil/politică/pack.")
 	}
-	mapping := snapshot.Pack.Mapping
+	// A per-client release pack is optional: without one, the code-owned
+	// ordinary mapping applies and every decision must be human-reviewed or
+	// profile-derived (D-107, D-108).
+	if snapshot.Profile.TestOnly && !allowTest {
+		return fail("Profilul fiscal TEST_ONLY nu poate fi exportat în producție.")
+	}
+	mapping := accounting.DefaultSAGAMapping
+	if snapshot.Pack != nil {
+		mapping = snapshot.Pack.Mapping
+	}
 	if mapping.Version == "" || !mapping.Approved || !mapping.Approval.Valid() || mapping.TestOnly && !allowTest || !mapping.OrdinaryFullOmission {
 		return fail("Maparea SAGA pentru tratamentul obișnuit nu este aprobată/validată.")
 	}
-	if !snapshot.Profile.Ordinary() {
-		return fail("Profilul fiscal/utilizarea necesită un tratament neacceptat de maparea inițială.")
+	if supported, reason := snapshot.Profile.SAGAExportSupported(); !supported {
+		return fail(reason)
 	}
 	if item.SourceFacts != nil && item.SourceFacts.TaxPointDate != "" && item.SourceFacts.TaxPointDate != string(date) {
 		return fail("Data exigibilității necesită revizuirea tratamentului.")
 	}
+	// Unknown supplier cash accounting is confirmed either by a released pack
+	// rule or, per line, by an accountant-reviewed VAT_TREATMENT with immediate
+	// exigibility (directly or from accepted reusable knowledge; D-111).
+	supplierConfirmationRequired := false
 	if item.SourceFacts != nil && item.SourceFacts.CashAccounting == "UNKNOWN" {
-		confirmed := false
-		for _, r := range snapshot.Pack.Rules {
-			if r.Predicate.SupplierID == *item.SupplierCUI && r.Predicate.SupplierCashAccounting == "NO" && r.Predicate.SupplierVATRegistration == "ORDINARY_REGISTERED" && r.AcquisitionPolicy != "" && date.Within(r.EffectiveFrom, r.EffectiveTo) {
-				confirmed = true
+		supplierConfirmationRequired = true
+		if snapshot.Pack != nil {
+			for _, r := range snapshot.Pack.Rules {
+				if r.Predicate.SupplierID == *item.SupplierCUI && r.Predicate.SupplierCashAccounting == "NO" && r.Predicate.SupplierVATRegistration == "ORDINARY_REGISTERED" && r.AcquisitionPolicy != "" && date.Within(r.EffectiveFrom, r.EffectiveTo) {
+					supplierConfirmationRequired = false
+				}
 			}
-		}
-		if !confirmed {
-			return fail("Lipsește confirmarea aprobată a regimului TVA al furnizorului.")
 		}
 	}
 	var sourceLines []accounting.SourceLine
@@ -115,7 +127,15 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 			if e == nil || e.ModelVersion != accounting.ModelVersion || e.ProfileID != snapshot.Profile.ID || e.ProfileVersion != snapshot.Profile.Version || e.PolicyID != snapshot.Profile.ChartPolicy || e.DateBasis != accounting.IssueDateBasis || e.Date != date || e.SourceDocumentID != item.SourceFacts.SourceDocumentID || e.ParserVersion != item.SourceFacts.ParserVersion || e.SourceHash != item.SourceFacts.SourceHash || e.SourcePath != l.SourceFacts.Path {
 				return fail("Proveniența deciziei nu corespunde snapshot-ului.")
 			}
-			if !d.HumanReviewed {
+			if !d.HumanReviewed && d.Source == classification.SourceProfile {
+				expected, derived := snapshot.Profile.ProfileDerivedExpenseTaxValue()
+				if !derived || string(d.Dimension) != "EXPENSE_TAX_TREATMENT" || d.Rule != nil || !sameValue(expected, *d.TypedValue) || d.PolicyVersion != classification.DomainPolicyVersion {
+					return fail("Decizia derivată din profil nu corespunde profilului aprobat.")
+				}
+			} else if !d.HumanReviewed {
+				if snapshot.Pack == nil {
+					return fail("Decizie automată fără dovada regulii/pack-ului.")
+				}
 				if d.Source != classification.SourceRule || d.Rule == nil || e.PackID != snapshot.Pack.ID || e.PackVersion != snapshot.Pack.Version || e.RuleVersionID != d.Rule.RuleVersionID || d.PolicyVersion != classification.DomainPolicyVersion {
 					return fail("Decizie automată fără dovada regulii/pack-ului.")
 				}
@@ -142,6 +162,9 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 			} else if d.ReviewReason == "" {
 				return fail("Lipsește motivul confirmării/corecției contabile.")
 			}
+			if supplierConfirmationRequired && d.Dimension == classification.DimensionVATreatment && (!d.HumanReviewed || d.TypedValue.Kind != "ORDINARY" || d.TypedValue.Timing != "IMMEDIATE") {
+				return fail("Lipsește confirmarea contabilului pentru regimul TVA al furnizorului (TVA la încasare necunoscut).")
+			}
 			values[string(d.Dimension)] = *d.TypedValue
 		}
 		for _, dimension := range accounting.Dimensions {
@@ -152,7 +175,7 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 		if !snapshot.Profile.AccountAllowed(values["ACCOUNT"].Account) {
 			return fail("Contul/analiticul nu este în vocabularul aprobat al politicii clientului.")
 		}
-		tag, err := mapDomainLine(l, values, mapping)
+		tag, err := mapDomainLine(l, values, mapping, snapshot.Profile)
 		if err != nil {
 			return fail(err.Error())
 		}
@@ -161,14 +184,17 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 	return result
 }
 func sameValue(a, b accounting.Value) bool { return canonicalValue(a) == canonicalValue(b) }
-func mapDomainLine(l invoicing.Line, v map[string]accounting.Value, p accounting.MappingPolicy) (lineTag, error) {
+func mapDomainLine(l invoicing.Line, v map[string]accounting.Value, p accounting.MappingPolicy, profile *accounting.Profile) (lineTag, error) {
 	treatment, vat, expense := v["VAT_TREATMENT"], v["VAT_DEDUCTIBILITY"], v["EXPENSE_TAX_TREATMENT"]
 	if treatment.Kind != "ORDINARY" || treatment.Timing != "IMMEDIATE" || treatment.SourceCategory != l.SourceFacts.Code || treatment.SourceRate == nil || !treatment.SourceRate.Equal(l.VATRate) {
 		return lineTag{}, fmt.Errorf("Tratamentul TVA nu este compatibil cu sursa/maparea SAGA.")
 	}
 	// No combined import instruction is guessed. Only the explicitly approved
 	// full/full omission is implemented; N50/I extensions await real validation.
-	if vat.Kind != "FULL" || expense.Kind != "FULLY_DEDUCTIBLE" || !p.OrdinaryFullOmission {
+	// Microenterprises are outside profit tax, so NOT_APPLICABLE expense
+	// treatment is equivalent to the full/full omission for SAGA.
+	expenseOK := expense.Kind == "FULLY_DEDUCTIBLE" || expense.Kind == "NOT_APPLICABLE" && profile != nil && profile.TaxRegime == "MICROENTERPRISE"
+	if vat.Kind != "FULL" || !expenseOK || !p.OrdinaryFullOmission {
 		return lineTag{}, fmt.Errorf("Combinația dreptului de deducere TVA și tratamentului cheltuielii nu poate fi reprezentată fidel de maparea SAGA inițială.")
 	}
 	additional := ""

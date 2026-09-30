@@ -372,3 +372,40 @@ func TestDomainReleaseDuringEvaluationRetainsSelectedSnapshot(t *testing.T) {
 		t.Fatal("overlapping release selected arbitrarily")
 	}
 }
+
+// A first run without an applicable profile must not freeze the invoice on a
+// profile-less snapshot: explicit reanalysis adopts the current run snapshot
+// (migration 000034), while in-place snapshot rewrites stay forbidden.
+func TestDomainReanalysisAdoptsCurrentRunSnapshot(t *testing.T) {
+	tc := newModule5TestContext(t)
+	f, l, _, _ := accountingtest.Fixture(tc.clientID)
+	client, err := tc.store.Client.AccountingClient.Get(tc.ctx, tc.clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.BuyerVATID = client.Cui
+	id := domainPersistedInvoice(t, tc, f, l, "reanalysis-snapshot")
+	service := classification.NewService(tc.store, classification.DomainPolicy{AllowTestOnly: true}, func() time.Time { return tc.now })
+	if _, _, err = service.ProcessInvoice(tc.ctx, classification.ProcessCommand{InvoiceID: id, ExpectedRevision: 1, CommandID: id + ":classify"}); err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := tc.store.GetInvoice(tc.ctx, id)
+	if err != nil || blocked.PipelineStatus != invoicing.StatusAwaitingReview || blocked.AccountingSnapshot == nil || blocked.AccountingSnapshot.Profile != nil {
+		t.Fatal("expected profile-less blocked run", blocked, err)
+	}
+	_, _, profile, _ := domainReleaseFixture(t, tc, nil)
+	if _, err = service.Reanalyze(tc.ctx, classification.ReanalysisCommand{InvoiceID: id, ClientID: tc.clientID, CommandID: id + ":reanalyze", ActorID: "TEST_ONLY-actor", ActorDisplay: "TEST_ONLY accountant", ExpectedRevision: blocked.Revision}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := tc.store.GetInvoice(tc.ctx, id)
+	if err != nil || reloaded.AccountingSnapshot == nil || reloaded.AccountingSnapshot.Profile == nil || reloaded.AccountingSnapshot.Profile.ID != profile.ID {
+		t.Fatal("reanalysis kept the stale snapshot", reloaded, err)
+	}
+	var mirrors bool
+	if err = tc.store.DB.QueryRowContext(tc.ctx, `SELECT i.accounting_snapshot = r.snapshot FROM invoices i JOIN classification_runs r ON r.id=i.current_classification_run_id WHERE i.id=$1`, id).Scan(&mirrors); err != nil || !mirrors {
+		t.Fatal("invoice snapshot must mirror the current run", err)
+	}
+	if _, err = tc.store.DB.ExecContext(tc.ctx, `UPDATE invoices SET accounting_snapshot='{}'::jsonb WHERE id=$1`, id); err == nil {
+		t.Fatal("in-place snapshot rewrite accepted")
+	}
+}

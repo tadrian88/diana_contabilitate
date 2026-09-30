@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ClassificationRule, ClientScope } from '../../domain/invoice'
+import type { ClassificationRule, ClientScope, LegislationSourceView } from '../../domain/invoice'
 import { MockInvoiceRepository } from '../../mocks/MockInvoiceRepository'
 import { renderApp } from '../../test/render-app'
 
@@ -147,5 +147,24 @@ describe('Rule Detail and mutations', () => {
     class ErrorRepository extends MockInvoiceRepository { override async listRules(_scope: ClientScope): Promise<ClassificationRule[]> { throw new Error('demo') } }
     renderApp(new ErrorRepository(), '/rules')
     expect(await screen.findByText('Regulile nu au putut fi încărcate')).toBeInTheDocument()
+  })
+})
+
+describe('Surse legislative și decizii reutilizabile', () => {
+  it('afișează corpusul global TEST_ONLY fără link pentru surse locale', async () => {
+    class LegislationRepository extends MockInvoiceRepository {override async listLegislationSources():Promise<LegislationSourceView[]>{return [{id:'ro-omfp-1802-2014-local-draft',kind:'ORDER',title:'TEST_ONLY OMFP 1802/2014',issuer:'Ministerul Finanțelor Publice',officialUrl:'local-sha256:abc',versionId:'omfp-TEST_ONLY-2016-01-01',versionLabel:'TEST_ONLY draft 2016-01-01',effectiveFrom:'2016-01-01',status:'ACTIVE' as const,fragmentCount:831,testOnly:true}]}}
+    renderApp(new LegislationRepository(), '/rules')
+    expect(await screen.findByText('TEST_ONLY OMFP 1802/2014')).toBeInTheDocument()
+    expect(screen.queryByRole('link',{name:'TEST_ONLY OMFP 1802/2014'})).not.toBeInTheDocument()
+    expect(screen.getByText('TEST_ONLY')).toBeInTheDocument()
+    expect(screen.getByText(/Corpus legislativ global, comun tuturor clienților/)).toBeInTheDocument()
+  })
+
+  it('nu confundă erorile API cu liste goale', async () => {
+    class FailingRepository extends MockInvoiceRepository {override async listLegislationSources():Promise<never>{throw new Error('down')}override async listApprovedKnowledge():Promise<never>{throw new Error('down')}}
+    renderApp(new FailingRepository(), '/rules')
+    expect(await screen.findByText('Sursele legislative nu au putut fi încărcate')).toBeInTheDocument()
+    expect(await screen.findByText('Deciziile reutilizabile nu au putut fi încărcate')).toBeInTheDocument()
+    expect(screen.queryByText('Nu există surse legislative importate.')).not.toBeInTheDocument()
   })
 })

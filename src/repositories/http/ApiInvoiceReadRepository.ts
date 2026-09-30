@@ -1,7 +1,8 @@
 import type { AxiosInstance } from 'axios'
 import { apiClient } from '../../features/auth/auth-api'
+import { AI_RUN_KIND_PATH, type AIUsageOverview, type AIUsagePeriodInput, type AIUsageRunDetail, type AIUsageRunKind, type AIUsageRunPage, type ClientAIUsage } from '../../domain/ai-usage'
 import type { ActivityEvent, ApprovedKnowledge, ClassificationRule, Client, ClientScope, Contract, InvoiceLine, Invoice, LegislationSourceView, LineClassification, PipelineStatus, PromotionPreview, SagaExport, SagaStatus, ValidationTask, ValidationTaskInboxItem } from '../../domain/invoice'
-import type { AccountCatalogEntry, CommercialRule, CommercialValidationRun, ContractDocument, ReviewedContract, CreateClientOverrideInput, CreateRuleVersionInput, InvoiceRepository, SPVConnection } from '../invoiceRepository'
+import type { AccountCatalogEntry, ClauseDismissalCode, CommercialRule, CommercialValidationRun, ContractDocument, LearnedServiceAlias, ReviewedContract, CreateClientOverrideInput, CreateRuleVersionInput, InvoiceRepository, ServicePriceActivation, SPVConnection } from '../invoiceRepository'
 
 interface InvoiceReadDto {
  modelVersion?: string
@@ -27,6 +28,7 @@ interface InvoiceReadDto {
   task?: ValidationTask
   selectedContractId?: string
   contract?: Invoice['contract']
+  contractWaiver?: Invoice['contractWaiver']
 	lines?: Array<{
     sourceFacts?: InvoiceLine['sourceFacts']
     id: string
@@ -132,6 +134,17 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
     return mapInvoice(response.data)
   }
 
+  async continueWithoutContract(id: string, reason: string, key: string = crypto.randomUUID()): Promise<Invoice> {
+    const invoice = await this.requireInvoice(id)
+    if (invoice.task?.type !== 'MISSING_CONTRACT' || !invoice.task.revision) throw new Error('A missing-contract task revision is required to continue without a contract.')
+    const response = await this.http.post<InvoiceReadDto>(`/invoices/${encodeURIComponent(invoice.id)}/contract-waivers`, {
+      taskId: invoice.task.id,
+      expectedRevision: invoice.task.revision,
+      reason,
+    }, { headers: { 'Idempotency-Key': key } })
+    return mapInvoice(response.data)
+  }
+
   async listContracts(scope: ClientScope): Promise<Contract[]> {
     const response = await this.http.get<ContractDto[]>('/contracts', { params: scope === 'all' ? undefined : { clientId: scope } })
     return response.data
@@ -157,7 +170,9 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
   async uploadContractDocument(clientId:string,file:File){const form=new FormData();form.append('file',file);const response=await this.http.post<ContractDocument>(`/clients/${encodeURIComponent(clientId)}/contract-documents`,form,{headers:{'Content-Type':'multipart/form-data'}});return response.data}
   async confirmContractDocument(clientId:string,document:ContractDocument,contract:ReviewedContract,key=crypto.randomUUID()){if(!document.extraction?.id)throw new Error('Extraction attempt is required.');const response=await this.http.post<{contractId:string;changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(document.id)}/confirm`,{extractionAttemptId:document.extraction.id,expectedDocumentRevision:document.revision,contract},{headers:{'Idempotency-Key':key}});return response.data}
   async confirmProposedCommercialRule(clientId:string,documentId:string,ruleId:string,rule?:CommercialRule,key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/commercial-rules/${encodeURIComponent(ruleId)}/confirm`,rule?{rule}:undefined,{headers:{'Idempotency-Key':key}});return response.data}
-  async activateReviewedServicePrices(clientId:string,documentId:string,key=crypto.randomUUID()){const response=await this.http.post<{activated:number}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/reviewed-service-prices/activate`,undefined,{headers:{'Idempotency-Key':key}});return response.data}
+  async reviseConfirmedCommercialRule(clientId:string,documentId:string,ruleId:string,rule:CommercialRule,key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/commercial-rules/${encodeURIComponent(ruleId)}/revise`,{rule},{headers:{'Idempotency-Key':key}});return response.data}
+  async activateReviewedServicePrices(clientId:string,documentId:string,key=crypto.randomUUID()){const response=await this.http.post<ServicePriceActivation>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/reviewed-service-prices/activate`,undefined,{headers:{'Idempotency-Key':key}});return response.data}
+  async dismissProposedCommercialClause(clientId:string,documentId:string,ruleId:string,input:{reasonCode:ClauseDismissalCode;reason?:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/commercial-rules/${encodeURIComponent(ruleId)}/dismiss`,{reasonCode:input.reasonCode,reason:input.reason??''},{headers:{'Idempotency-Key':key}});return response.data}
   async putCommercialDateFact(clientId:string,invoiceId:string,input:{kind:'REMITTANCE'|'RECEIPT'|'ACCEPTANCE';date:string;sourceReference:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/commercial-date-facts`,input,{headers:{'Idempotency-Key':key}});return response.data}
   async getContractDocumentFile(clientId:string,documentId:string){const response=await this.http.get<Blob>(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/file`,{responseType:'blob'});return response.data}
   async retryContractExtraction(clientId:string,documentId:string,revision:number){await this.http.post(`/clients/${encodeURIComponent(clientId)}/contract-documents/${encodeURIComponent(documentId)}/reextract`,{expectedDocumentRevision:revision})}
@@ -166,6 +181,8 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
   async resolveCommercialValidation(clientId:string,invoiceId:string,input:{runId:string;findingId?:string;expectedInvoiceRevision:number;action:'ACCEPT_EXCEPTION'|'WAIT_FOR_CORRECTION'|'RERUN';reason?:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/invoices/${encodeURIComponent(invoiceId)}/commercial-validation/resolve`,input,{headers:{'Idempotency-Key':key}});return response.data}
   async putCommercialVariable(clientId:string,dossierId:string,input:{name:string;value:string;source:'MANUAL';sourceReference:string;periodStart?:string;periodEnd?:string},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/contract-dossiers/${encodeURIComponent(dossierId)}/variables`,input,{headers:{'Idempotency-Key':key}});return response.data}
   async confirmCommercialServiceAlias(clientId:string,input:{invoiceId:string;lineId:string;serviceId:string;reuseForDossier:boolean},key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/commercial-service-aliases`,input,{headers:{'Idempotency-Key':key}});return response.data}
+  async listCommercialServiceAliases(clientId:string,scope:{dossierId:string}|{documentId:string}){const path='dossierId' in scope?`/contract-dossiers/${encodeURIComponent(scope.dossierId)}`:`/contract-documents/${encodeURIComponent(scope.documentId)}`;const response=await this.http.get<{items:LearnedServiceAlias[]}>(`/clients/${encodeURIComponent(clientId)}${path}/service-aliases`);return response.data.items??[]}
+  async revokeCommercialServiceAlias(clientId:string,aliasId:string,key=crypto.randomUUID()){const response=await this.http.post<{changed:boolean}>(`/clients/${encodeURIComponent(clientId)}/commercial-service-aliases/${encodeURIComponent(aliasId)}/revoke`,undefined,{headers:{'Idempotency-Key':key}});return response.data}
 
   async resolveContractMatch(id: string, contractId: string): Promise<Invoice> {
     const invoice = await this.requireInvoice(id)
@@ -210,6 +227,22 @@ export class ApiInvoiceReadRepository implements InvoiceRepository {
   async createClientOverride(id: string, input: CreateClientOverrideInput): Promise<ClassificationRule> {
     const response = await this.http.post<ClassificationRule>(`/rules/${encodeURIComponent(id)}/client-overrides`, input, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
     return response.data
+  }
+
+  async getAIUsageOverview(period: AIUsagePeriodInput): Promise<AIUsageOverview> {
+    return (await this.http.get<AIUsageOverview>('/ai-usage', { params: { from: period.from, to: period.to } })).data
+  }
+
+  async getClientAIUsage(clientId: string, period: AIUsagePeriodInput): Promise<ClientAIUsage> {
+    return (await this.http.get<ClientAIUsage>(`/clients/${encodeURIComponent(clientId)}/ai-usage`, { params: { from: period.from, to: period.to } })).data
+  }
+
+  async listClientAIUsageRuns(clientId: string, period: AIUsagePeriodInput, page: { limit: number; offset: number }): Promise<AIUsageRunPage> {
+    return (await this.http.get<AIUsageRunPage>(`/clients/${encodeURIComponent(clientId)}/ai-usage/runs`, { params: { from: period.from, to: period.to, limit: page.limit, offset: page.offset } })).data
+  }
+
+  async getAIUsageRun(clientId: string, runKind: AIUsageRunKind, runId: string): Promise<AIUsageRunDetail> {
+    return (await this.http.get<AIUsageRunDetail>(`/clients/${encodeURIComponent(clientId)}/ai-usage/runs/${AI_RUN_KIND_PATH[runKind]}/${encodeURIComponent(runId)}`)).data
   }
 
   async reviewClassification(id: string, itemId: string, correctedValue?: string, typedValue?: import('../../domain/invoice').DomainValue, reason?: string, mappingAction?:import('../../domain/invoice').AccountMappingAction, expectedMappingRevision?:number, action:import('../../domain/invoice').ClassificationReviewAction='APPROVE'): Promise<Invoice> {
@@ -318,6 +351,7 @@ function mapInvoice(value: InvoiceReadDto): Invoice {
     task: value.task,
     selectedContractId: value.selectedContractId,
     contract: value.contract,
+    contractWaiver: value.contractWaiver,
     revision: value.revision,
 		authority: 'API',
 		sagaExport: value.sagaExport,

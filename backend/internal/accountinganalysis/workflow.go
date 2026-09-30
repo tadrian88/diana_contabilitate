@@ -8,6 +8,7 @@ import (
 
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/legislation"
+	"diana-contabilitate/backend/internal/llmusage"
 )
 
 type Run struct {
@@ -144,6 +145,8 @@ func (s *WorkflowService) Process(ctx context.Context, job AnalysisJob) error {
 		return s.store.SkipAnalysis(ctx, job.AnalysisRunID, "NO_UNRESOLVED_DIMENSIONS", s.now())
 	}
 	engine := NewService(staticCorpus{items: execution.Fragments}, s.analyzer, execution.Accounts, s.observer)
+	// Asynq retries reuse this run id, so every billed attempt lands on the same run.
+	ctx = llmusage.WithScope(ctx, llmusage.Scope{RunKind: llmusage.RunAccountingAnalysis, RunID: job.AnalysisRunID, ClientID: execution.Run.ClientID})
 	result, decisions, issues, err := engine.Analyze(ctx, execution.Input, execution.Approved)
 	if err != nil {
 		return err

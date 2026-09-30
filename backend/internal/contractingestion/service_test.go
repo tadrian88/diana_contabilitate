@@ -86,6 +86,29 @@ func TestCommercialClauseRemainsUnconfirmedUntilHumanSelectsRule(t *testing.T) {
 	}
 }
 
+func TestIdentityRuleMayOnlyStateTheSupplierCUI(t *testing.T) {
+	value := reviewed(fixtures.Proposal("romanian"))
+	identity := func(cui string) commercialvalidation.Rule {
+		return commercialvalidation.Rule{ID: "party", Kind: commercialvalidation.RuleIdentity, Narrative: "Partea contractului", DateBasis: commercialvalidation.DateInvoiceIssue, Expression: &commercialvalidation.Expression{Op: "literal", Value: cui}, Evidence: []commercialvalidation.Evidence{{DocumentID: "contract", Snippet: "cod de înregistrare fiscală " + cui}}, Blocking: true}
+	}
+	blocked := func(readiness ci.ConfirmationReadiness) bool {
+		for _, blocker := range readiness.Blockers {
+			if blocker.Code == "IDENTITY_RULE_NOT_SUPPLIER" {
+				return true
+			}
+		}
+		return false
+	}
+	value.CommercialRules = []commercialvalidation.Rule{identity(value.BuyerCUI)}
+	if readiness := ci.ConfirmationReadinessFor(value, "RO10000000"); !blocked(readiness) || readiness.CanConfirm {
+		t.Fatalf("a rule stating the client's CUI would fail every invoice: %+v", readiness.Blockers)
+	}
+	value.CommercialRules = []commercialvalidation.Rule{identity(value.SupplierCUI)}
+	if readiness := ci.ConfirmationReadinessFor(value, "RO10000000"); blocked(readiness) {
+		t.Fatalf("a rule stating the supplier's CUI is allowed: %+v", readiness.Blockers)
+	}
+}
+
 func TestSupplementWithOnlyPendingCommercialClauseMayBeConfirmedPartial(t *testing.T) {
 	value := ci.ReviewedContract{DocumentRole: "AMENDMENT", RelatedReference: "102/25.06.2025", BuyerCUI: "RO10000000", Coverage: commercialvalidation.CoveragePartial, PendingCommercialClauses: 1}
 	if readiness := ci.ConfirmationReadinessFor(value, "RO10000000"); !readiness.CanConfirm {

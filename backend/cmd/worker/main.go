@@ -18,7 +18,9 @@ import (
 	"diana-contabilitate/backend/internal/contractingestion/fixtures"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/invoicing"
+	"diana-contabilitate/backend/internal/llmusage"
 	"diana-contabilitate/backend/internal/platform/config"
+	"diana-contabilitate/backend/internal/platform/gemini"
 	"diana-contabilitate/backend/internal/platform/observability"
 	"diana-contabilitate/backend/internal/platform/postgres"
 	"diana-contabilitate/backend/internal/saga"
@@ -69,6 +71,7 @@ func main() {
 	metrics := observability.NewMetrics()
 	store.AccountingReadinessObserver = metrics
 	store.AccountingWorkflowObserver = metrics
+	usageRecorder := llmusage.BestEffort{Inner: store, Logger: logger, Observer: metrics}
 	var sagaExporter invoicing.SagaExporter = saga.NewFileExporter(store, nil)
 	if cfg.SagaMode == "fake" {
 		sagaExporter = invoicing.NewFakeSagaExporter("inv-module6-saga-failed", "inv-module7-saga-failed")
@@ -76,9 +79,11 @@ func main() {
 	exporter := observability.TracedSagaExporter{Inner: sagaExporter, Metrics: metrics}
 	pipeline := invoicing.NewPipelineService(store, exporter, nil)
 	contractService := contracts.NewService(store, contracts.BaselinePolicy{}, nil)
-	var contractExtractor contractingestion.ContractExtractor = contractingestion.NewGeminiContractExtractor(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.ContractExtractionTimeout})
+	var contractExtractor contractingestion.ContractExtractor = contractingestion.NewGeminiContractExtractor(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.ContractExtractionTimeout}).WithUsageRecorder(usageRecorder)
 	if cfg.ContractExtractorMode == "fake-fixtures" {
 		contractExtractor = fixtures.Extractor{}
+	} else {
+		warnUnpricedModel(root, store, logger, cfg.GeminiModel)
 	}
 	contractIngestion := contractingestion.NewService(store, contractExtractor, contractService, cfg.ContractMaxPDFBytes, nil)
 	pipeline.SetContractMatchingProcessor(contractService)
@@ -110,8 +115,10 @@ func main() {
 	mux.Handle(workerruntime.ContractExtractionTask, workerruntime.NewContractExtractionHandler(contractIngestion, logger, metrics))
 	mux.Handle(workerruntime.ContractActivationTask, workerruntime.NewContractActivationHandler(contractService))
 	if cfg.AccountingAnalysisEnabled {
-		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout})
-		analysisService := accountinganalysis.NewWorkflowService(store, publisher, analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
+		analyzer := accountinganalysis.NewGeminiAnalyzer(cfg.GeminiAPIKey, cfg.AccountingAnalysisModel, cfg.GeminiBaseURL, &http.Client{Timeout: cfg.AccountingAnalysisTimeout}).WithUsageRecorder(usageRecorder)
+		warnUnpricedModel(root, store, logger, cfg.AccountingAnalysisModel)
+		analysisPublisher := workerruntime.NewAsynqPublisher(asynqClient, cfg.WorkerQueue, cfg.WorkerMaxRetry, cfg.AccountingAnalysisJobTimeout())
+		analysisService := accountinganalysis.NewWorkflowService(store, analysisPublisher, analyzer, "gemini", cfg.AccountingAnalysisModel, metrics)
 		classificationService.SetAutomaticAccountingFallback(analysisService)
 		mux.Handle(workerruntime.AccountingAnalysisTask, workerruntime.NewAccountingAnalysisHandler(analysisService))
 	}
@@ -198,4 +205,17 @@ func boundedBackoff(attempt int, minimum, maximum time.Duration) time.Duration {
 		return maximum
 	}
 	return delay
+}
+
+// warnUnpricedModel flags a configured model without a price: its calls are
+// still recorded, but with NO_PRICE and no cost until a price migration.
+func warnUnpricedModel(ctx context.Context, store *postgres.Store, logger *slog.Logger, model string) {
+	priced, err := store.LLMPriceConfigured(ctx, gemini.Provider, model, time.Now().UTC())
+	if err != nil {
+		logger.Warn("llm price lookup failed", "model", model, "error", err)
+		return
+	}
+	if !priced {
+		logger.Warn("llm model has no configured price; its cost will not be computed", "provider", gemini.Provider, "model", model)
+	}
 }

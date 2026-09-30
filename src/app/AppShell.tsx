@@ -1,5 +1,5 @@
 import * as Select from '@radix-ui/react-select'
-import { Building2, Check, ChevronDown, ClipboardCheck, FileText, Gauge, LogOut, Moon, Scale, ScrollText, Sun, UserRound } from 'lucide-react'
+import { Building2, Check, ChevronDown, ClipboardCheck, Coins, FileText, Gauge, LogOut, Moon, Scale, ScrollText, Sun, UserRound } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Button } from '../components/ui/button'
@@ -17,6 +17,7 @@ const navItems = [
   { label: 'Contracte', icon: ScrollText, to: '/contracts', enabled: true },
   { label: 'Reguli și surse', icon: Scale, to: '/rules', enabled: true },
   { label: 'Clienți', icon: Building2, to: '/clients', enabled: true },
+  { label: 'Consum AI', icon: Coins, to: '/ai-usage', enabled: true },
 ]
 
 export function AppShell() {
@@ -28,7 +29,7 @@ export function AppShell() {
   const { theme, toggleTheme } = useTheme()
   const auth = useAuth()
   const activeClient = clients.find((client) => client.id === scope)
-  const pageTitle = location.pathname.startsWith('/invoices/') ? 'Detaliu factură' : location.pathname === '/invoices' ? 'Facturi' : location.pathname.startsWith('/contracts/') ? 'Detaliu contract' : location.pathname === '/contracts' ? 'Contracte' : location.pathname.startsWith('/rules/') ? 'Detaliu regulă' : location.pathname === '/rules' ? 'Reguli și surse' : location.pathname.startsWith('/clients/') ? 'Context client' : location.pathname === '/clients' ? 'Clienți' : location.pathname === '/tasks' ? 'Task Inbox' : 'Dashboard operațional'
+  const pageTitle = location.pathname.startsWith('/invoices/') ? 'Detaliu factură' : location.pathname === '/invoices' ? 'Facturi' : location.pathname.startsWith('/contracts/') ? 'Detaliu contract' : location.pathname === '/contracts' ? 'Contracte' : location.pathname.startsWith('/rules/') ? 'Detaliu regulă' : location.pathname === '/rules' ? 'Reguli și surse' : location.pathname.startsWith('/clients/') ? 'Context client' : location.pathname === '/clients' ? 'Clienți' : location.pathname === '/tasks' ? 'Task Inbox' : location.pathname === '/ai-usage' ? 'Consum AI' : 'Dashboard operațional'
 
   const changeScope = async (nextScope: string) => {
     let destination: string | undefined

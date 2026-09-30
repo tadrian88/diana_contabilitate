@@ -56,6 +56,9 @@ type Query struct {
 	ApplicableDate accountingdate.Date
 	Limit          int
 	AllowTestOnly  bool
+	// Kinds optionally restricts retrieval to source kinds (e.g. LAW for the
+	// Fiscal Code, ORDER for OMFP account functions). Empty means all kinds.
+	Kinds []string
 }
 
 type Store interface {

@@ -60,25 +60,38 @@ export function AccountingReviewV2({ invoice }: { invoice: Invoice }) {
 }
 
 function WorkflowBanner({ invoice, validProposalCount }: { invoice: Invoice; validProposalCount: number }) {
+  const reanalyze = useReanalyzeClassification(invoice)
+  // A changed client context is a non-blocking warning: the accountant may
+  // still decide manually or reanalyze with the current configuration.
+  if (!invoice.classificationContext?.contextStale) return <WorkflowStatus invoice={invoice} validProposalCount={validProposalCount}/>
+  return <div className="space-y-4">
+    <StatusPanel tone="warning" title="Configurația clientului s-a modificat după această analiză." detail={`${staleReasons(invoice.classificationContext?.staleReasons ?? [])} Poți decide manual în continuare sau poți reanaliza factura cu configurația curentă.`}><Button disabled={reanalyze.isPending} onClick={() => reanalyze.mutate()}>{reanalyze.isPending ? 'Pornim reanalizarea…' : 'Reanalizează factura'}</Button>{reanalyze.isError && <p role="alert" className="text-sm text-[var(--danger)]">Reanalizarea nu a putut fi pornită.</p>}</StatusPanel>
+    <WorkflowStatus invoice={invoice} validProposalCount={validProposalCount}/>
+  </div>
+}
+
+function WorkflowStatus({ invoice, validProposalCount }: { invoice: Invoice; validProposalCount: number }) {
   const approveAll = useApproveAllClassifications(invoice.id)
   const reanalyze = useReanalyzeClassification(invoice)
   const [conflict, setConflict] = useState(false)
-  const stale = Boolean(invoice.classificationContext?.contextStale)
+  // The stale-context banner already offers reanalysis; avoid a duplicate action.
+  const offerReanalysis = !invoice.classificationContext?.contextStale
+  const reanalyzeAction = offerReanalysis && <><Button variant="secondary" disabled={reanalyze.isPending} onClick={() => reanalyze.mutate()}>{reanalyze.isPending ? 'Pornim reanalizarea…' : 'Reanalizează factura'}</Button>{reanalyze.isError && <p role="alert" className="text-sm text-[var(--danger)]">Reanalizarea nu a putut fi pornită.</p>}</>
   const status = invoice.accountingWorkflowStatus
   const blocked = invoice.readinessReason === 'MISSING_FISCAL_PROFILE' || invoice.readinessReason === 'INVALID_ACCOUNTING_PROFILE'
   const failure = invoice.task?.reason?.toLowerCase().includes('asistată nu este disponibilă') || invoice.task?.reason?.toLowerCase().includes('automat') && invoice.task?.reason?.toLowerCase().includes('manual')
 
   if (invoice.readinessReason === 'MISSING_FISCAL_PROFILE') return <StatusPanel tone="warning" title="Profilul fiscal al clientului trebuie configurat înainte de analiza contabilă." detail="După ce salvezi profilul, reanalizează factura pentru a crea deciziile în contextul fiscal corect."><Link className="inline-flex rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold" to={`/clients/${encodeURIComponent(invoice.clientId)}#accounting-profile`}>Vezi profilul fiscal</Link><Button disabled={reanalyze.isPending} onClick={() => reanalyze.mutate()}>{reanalyze.isPending ? 'Pornim reanalizarea…' : 'Reanalizează factura'}</Button>{reanalyze.isError && <p role="alert" className="text-sm text-[var(--danger)]">Reanalizarea nu a putut fi pornită. Verifică dacă profilul este aplicabil la data facturii.</p>}</StatusPanel>
   if (invoice.readinessReason === 'INVALID_ACCOUNTING_PROFILE') return <StatusPanel tone="danger" title="Configurația contabilă a clientului trebuie corectată." detail={invoice.task?.reason || 'Înlocuiește conturile inexistente, inactive sau sintetice din profil înainte de reanalizare.'}><Link className="inline-flex rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white" to={`/clients/${encodeURIComponent(invoice.clientId)}#accounting-profile`}>Remediază profilul</Link></StatusPanel>
-  if (stale) return <StatusPanel tone="warning" title="Configurația clientului s-a modificat după această analiză." detail={staleReasons(invoice.classificationContext?.staleReasons ?? [])}><Button disabled={reanalyze.isPending} onClick={() => reanalyze.mutate()}>{reanalyze.isPending ? 'Pornim reanalizarea…' : 'Reanalizează factura'}</Button>{reanalyze.isError && <p role="alert" className="text-sm text-[var(--danger)]">Reanalizarea nu a putut fi pornită.</p>}</StatusPanel>
   if (status === 'APPLYING_RULES') return <StatusPanel title="Analizăm factura" detail="Aplicăm regulile și configurația contabilă a clientului. Nu este necesară nicio acțiune." busy/>
   if (status === 'AI_ANALYSIS_PENDING' || status === 'AI_ANALYSIS_RUNNING') return <StatusPanel title="Analiza contabilă este în curs" detail="Diana completează dimensiunile rămase. Pagina se actualizează automat, fără aprobări premature." busy/>
   if (status === 'COMPLETED') return <StatusPanel tone="success" title="Clasificare contabilă finalizată" detail="Toate deciziile obligatorii sunt finale. Monografia derivată poate fi consultată mai jos."/>
-  if (failure) return <StatusPanel tone="warning" title="Analiza automată nu a putut fi finalizată." detail="Completează manual câmpurile rămase. Poți finaliza factura fără reluarea analizei automate."/>
+  if (failure) return <StatusPanel tone="warning" title="Analiza automată nu a putut fi finalizată." detail="Completează manual câmpurile rămase sau reanalizează factura după remedierea cauzei (de exemplu, după importul surselor legislative). Poți finaliza factura și fără reluarea analizei automate.">{reanalyzeAction}</StatusPanel>
   if (status === 'REVIEW_REQUIRED' || blocked) return <StatusPanel tone="warning" title="Factura necesită verificarea ta" detail={invoice.readinessReason || (validProposalCount ? 'Aprobarea în grup confirmă numai propunerile valide. Câmpurile invalide sau nerezolvate rămân deschise.' : 'Completează sau corectează câmpurile marcate înainte de finalizare.')}>
     {validProposalCount > 0 && <Button disabled={approveAll.isPending} onClick={() => { setConflict(false); approveAll.mutate(undefined, { onError: error => setConflict((error as {response?:{status?:number}}).response?.status === 409) }) }}>{approveAll.isPending ? 'Se aprobă…' : 'Aprobă toate propunerile valide'}</Button>}
     {conflict && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-[var(--danger)]"><span>Factura a fost modificată între timp. Reîncarcă datele înainte de aprobare.</span><Button variant="secondary" onClick={() => window.location.reload()}><RefreshCw className="size-4"/>Reîncarcă</Button></div>}
     {approveAll.isError && !conflict && <p role="alert" className="text-sm text-[var(--danger)]">Propunerile nu au putut fi aprobate. Reîncarcă factura și verifică starea curentă.</p>}
+    {reanalyzeAction}
   </StatusPanel>
   return <StatusPanel title="Clasificarea contabilă se pregătește" detail="Deciziile vor deveni disponibile după finalizarea etapelor anterioare." busy/>
 }
@@ -103,7 +116,7 @@ function DecisionCard({ decision, invoice }: { decision: Decision; invoice: Invo
   const value = item?.typedValue ?? item?.proposedTypedValue ?? decision.final?.typedValue
   const fallback = item?.resolvedValue ?? item?.proposedValue ?? decision.final?.value
   const validProposal = decision.state === 'VALID_PROPOSAL'
-  const canEdit = Boolean(item) && decision.state !== 'FINAL' && !invoice.classificationContext?.contextStale
+  const canEdit = Boolean(item) && decision.state !== 'FINAL'
   const canReuse=decision.state==='FINAL'&&Boolean(record?.humanReviewed)&&Boolean(record?.revision)&&Boolean(invoice.revision)&&Boolean(invoice.currentClassificationRunId)&&!invoice.classificationContext?.contextStale
   const openReuse=async()=>{if(!record)return;setReuseBusy(true);setReuseMessage('');try{setReusePreview(await repository.previewApprovedKnowledge(invoice.clientId,invoice.id,record.id))}catch{setReuseMessage('Scope-ul nu mai poate fi pregătit. Reîncarcă factura.')}finally{setReuseBusy(false)}}
   const confirmReuse=async()=>{if(!reusePreview||!invoice.revision)return;setReuseBusy(true);setReuseMessage('');try{await repository.promoteApprovedKnowledge(invoice.clientId,invoice.id,reusePreview,invoice.revision);setReusePreview(undefined);setReuseMessage('Decizia este acum reutilizabilă pentru scope-ul confirmat.')}catch(error){const code=(error as {response?:{data?:{code?:string}}}).response?.data?.code;setReuseMessage(code==='KNOWLEDGE_DUPLICATE'?'Există deja o decizie reutilizabilă identică.':code==='KNOWLEDGE_CONFLICT'?'Acest scope are deja o valoare diferită și necesită rezolvare explicită.':'Factura sau decizia s-a modificat. Reîncarcă înainte de promovare.')}finally{setReuseBusy(false)}}
@@ -112,7 +125,8 @@ function DecisionCard({ decision, invoice }: { decision: Decision; invoice: Invo
     <p className="mt-3 text-base font-bold">{decision.dimension === 'ACCOUNT' && value?.account ? <AccountValue code={value.account}/> : decision.dimension === 'EXPENSE_TAX_TREATMENT' && value?.kind === 'NOT_APPLICABLE' && invoice.accountingSnapshot?.profile?.taxRegime === 'MICROENTERPRISE' ? 'Nu se aplică pentru regimul fiscal curent' : displayDomainValue(value, fallback)}</p>
     <p className="mt-2 text-xs text-[var(--text-secondary)]">Sursă: {sourceLabel(record?.effectiveSource ?? record?.source)}</p>
     {record?.explanation && <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold text-[var(--accent)]">De ce a propus Diana această valoare?</summary><p className="mt-2 leading-5 text-[var(--text-secondary)]">{record.explanation}</p></details>}
-    {record?.validationResults?.map(issue => <ValidationIssue key={issue.code} issue={issue} item={item} invoice={invoice} onEdit={() => decision.dimension === 'ACCOUNT' ? setAccountEditing(true) : setEditing(true)}/>) }
+    {/* Validation results describe the original AI proposal; once the decision is final they are audit history, not open actions. */}
+    {canEdit && record?.validationResults?.map(issue => <ValidationIssue key={issue.code} issue={issue} item={item} invoice={invoice} onEdit={() => decision.dimension === 'ACCOUNT' ? setAccountEditing(true) : setEditing(true)}/>) }
     {!!record?.legalCitations?.length && <details className="mt-3 border-t border-[var(--border)] pt-3 text-xs"><summary className="cursor-pointer font-semibold"><Scale className="mr-1 inline size-3.5"/>Vezi baza legală</summary><div className="mt-2 space-y-2">{record.legalCitations.map(citation => <div key={`${citation.fragmentId}:${citation.citationKey}`} className={`rounded-lg p-2 ${citation.verified ? 'bg-[var(--surface-subtle)]' : 'border border-[var(--warning-border)] bg-[var(--warning-soft)]'}`}><strong>{citation.citationKey}</strong><p className="mt-1 text-[var(--text-muted)]">Versiune: {citation.versionId}</p>{!citation.verified && <p className="mt-1 font-semibold text-[var(--warning)]">Referința legală nu a putut fi verificată.</p>}</div>)}</div></details>}
     {record?.legalBasis && !record.legalCitations?.length && <details className="mt-3 border-t border-[var(--border)] pt-3 text-xs"><summary className="cursor-pointer font-semibold">Vezi baza legală</summary><p className="mt-2 text-[var(--text-secondary)]">{record.legalBasis}</p></details>}
     {record?.knowledge&&<p className="mt-3 rounded-lg bg-[var(--surface-subtle)] p-2 text-xs text-[var(--text-secondary)]">Bazată pe factura {record.knowledge.sourceInvoiceId}, aprobată de {record.knowledge.promotedBy} la {formatDateTime(record.knowledge.promotedAt)}.</p>}
@@ -179,7 +193,7 @@ function decisionFor(finals: LineClassification[], reviews: ClassificationReview
 
 function countDecisions(decisions: Decision[]) { return decisions.reduce((result, decision) => { if (decision.state === 'FINAL') result.final++; else if (decision.state === 'VALID_PROPOSAL') result.valid++; else result.problem++; return result }, {final:0,valid:0,problem:0}) }
 function SummaryBadge({ tone, value, label }: { tone:'success'|'warning'|'danger';value:number;label:string }) { return <Badge tone={tone}>{value} {label}</Badge> }
-function sourceLabel(source?: string) { return ({RULE:'Regulă verificată',DETERMINISTIC_RULE:'Regulă verificată',LEARNED_MAPPING:'Decizie aprobată anterior',AI_PROPOSAL:'Propunere automată',MANUAL:'Selectat manual',NO_MATCH:'Nicio regulă aplicabilă',AMBIGUOUS:'Mai multe variante posibile'} as Record<string,string>)[source ?? ''] ?? 'Sursă contabilă' }
+function sourceLabel(source?: string) { return ({RULE:'Regulă verificată',DETERMINISTIC_RULE:'Regulă verificată',LEARNED_MAPPING:'Decizie aprobată anterior',AI_PROPOSAL:'Propunere automată',PROFILE:'Profil fiscal aprobat',MANUAL:'Selectat manual',NO_MATCH:'Nicio regulă aplicabilă',AMBIGUOUS:'Mai multe variante posibile'} as Record<string,string>)[source ?? ''] ?? 'Sursă contabilă' }
 function validationMessage(code: string, fallback: string) { return ({ACCOUNT_NOT_FOUND:'Contul propus nu există în planul de conturi.',ACCOUNT_INACTIVE:'Contul există, dar este inactiv.',ACCOUNT_NOT_POSTABLE:'Contul este sintetic și nu poate fi utilizat direct. Selectează un cont analitic.',ACCOUNT_NOT_ALLOWED_BY_PROFILE:'Contul nu este disponibil în configurația contabilă a acestui client.'} as Record<string,string>)[code] ?? fallback }
 function staleReasons(reasons:string[]) { const labels:Record<string,string>={FISCAL_PROFILE_CHANGED:'Profilul fiscal s-a modificat.',ACCOUNT_CATALOG_CHANGED:'Planul de conturi s-a modificat.',ACCOUNTING_POLICY_CHANGED:'Politica contabilă s-a modificat.',CONTRACT_CONTEXT_CHANGED:'Contextul contractual s-a modificat.'};return reasons.length ? reasons.map(reason=>labels[reason]??'Contextul contabil s-a modificat.').join(' ') : 'Reanalizează factura pentru a folosi configurația curentă.' }
 function profileLabel(value?:string){return ({PROFIT_TAX:'Impozit pe profit',MICROENTERPRISE:'Microîntreprindere'} as Record<string,string>)[value??'']??'Regim fiscal configurat'}

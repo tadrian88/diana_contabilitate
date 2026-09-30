@@ -360,7 +360,7 @@ func validateResult(input InvoiceContext, result Result, version string) error {
 		if !lines[proposal.InvoiceLineID] || seen[key] || strings.TrimSpace(proposal.ProposedValue) == "" || proposal.Confidence == "" || proposal.Explanation == "" || proposal.LegalBasis == "" {
 			return fmt.Errorf("%w: proposal", ErrInvalidPolicyResult)
 		}
-		if result.ModelVersion == accounting.ModelVersion && (proposal.ModelVersion != accounting.ModelVersion || !proposal.RequiresReview && (proposal.TypedValue == nil || proposal.TypedValue.Validate(string(proposal.Dimension)) != nil || proposal.Evidence == nil || proposal.Rule == nil)) {
+		if result.ModelVersion == accounting.ModelVersion && (proposal.ModelVersion != accounting.ModelVersion || !proposal.RequiresReview && (proposal.TypedValue == nil || proposal.TypedValue.Validate(string(proposal.Dimension)) != nil || proposal.Evidence == nil || proposal.Rule == nil && !validProfileDerived(input, proposal))) {
 			return fmt.Errorf("%w: typed decision", ErrInvalidPolicyResult)
 		}
 		if proposal.Dimension == DimensionAccount && proposal.TypedValue != nil {
@@ -374,9 +374,20 @@ func validateResult(input InvoiceContext, result Result, version string) error {
 		for _, dimension := range dimensions {
 			validDimension = validDimension || proposal.Dimension == dimension
 		}
-		if !validDimension || (proposal.Source == SourceRule && proposal.Rule == nil) || (proposal.Source == SourceLearnedMapping && proposal.Mapping == nil && proposal.Knowledge == nil) {
+		if !validDimension || (proposal.Source == SourceRule && proposal.Rule == nil) || (proposal.Source == SourceProfile && !validProfileDerived(input, proposal)) || (proposal.Source == SourceLearnedMapping && proposal.Mapping == nil && proposal.Knowledge == nil) {
 			return fmt.Errorf("%w: evidence", ErrInvalidPolicyResult)
 		}
 	}
 	return nil
+}
+
+// validProfileDerived accepts an automatic decision without a rule only when it
+// is exactly the value the approved snapshot profile implies.
+func validProfileDerived(input InvoiceContext, proposal Proposal) bool {
+	if proposal.Source != SourceProfile || proposal.Rule != nil || proposal.Mapping != nil || proposal.Knowledge != nil || proposal.TypedValue == nil || proposal.Evidence == nil || input.Snapshot == nil || input.Snapshot.Profile == nil {
+		return false
+	}
+	profile := input.Snapshot.Profile
+	expected, ok := profile.ProfileDerivedExpenseTaxValue()
+	return ok && string(proposal.Dimension) == "EXPENSE_TAX_TREATMENT" && proposal.TypedValue.Kind == expected.Kind && proposal.TypedValue.Reason == expected.Reason && proposal.Evidence.ProfileID == profile.ID && proposal.Evidence.ProfileVersion == profile.Version
 }

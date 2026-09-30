@@ -3,7 +3,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/api ./cmd/api && CGO_ENABLED=0 go build -o /out/worker ./cmd/worker && CGO_ENABLED=0 go build -o /out/authuser ./cmd/authuser
+RUN CGO_ENABLED=0 go build -o /out/api ./cmd/api && CGO_ENABLED=0 go build -o /out/worker ./cmd/worker && CGO_ENABLED=0 go build -o /out/authuser ./cmd/authuser && CGO_ENABLED=0 go build -o /out/legislationdraftimport ./cmd/legislationdraftimport
 
 FROM alpine:3.23
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 diana

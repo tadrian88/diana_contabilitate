@@ -513,7 +513,7 @@ func (s *Store) markApprovedKnowledgeStale(ctx context.Context, clientID, profil
 }
 
 func (s *Store) ListLegislationSources(ctx context.Context) ([]classification.LegislationSourceView, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT s.id,s.kind,s.title,s.issuer,s.official_url,v.id,v.label,v.effective_from,v.effective_to,CASE WHEN CURRENT_DATE<v.effective_from THEN 'FUTURE' WHEN v.effective_to IS NOT NULL AND CURRENT_DATE>v.effective_to THEN 'EXPIRED' ELSE 'ACTIVE' END,count(f.id) FROM legislation_sources s JOIN legislation_versions v ON v.source_id=s.id LEFT JOIN legislation_fragments f ON f.version_id=v.id GROUP BY s.id,s.kind,s.title,s.issuer,s.official_url,v.id,v.label,v.effective_from,v.effective_to ORDER BY s.title,v.effective_from DESC`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT s.id,s.kind,s.title,s.issuer,s.official_url,v.id,v.label,v.effective_from,v.effective_to,CASE WHEN CURRENT_DATE<v.effective_from THEN 'FUTURE' WHEN v.effective_to IS NOT NULL AND CURRENT_DATE>v.effective_to THEN 'EXPIRED' ELSE 'ACTIVE' END,count(f.id),v.test_only FROM legislation_sources s JOIN legislation_versions v ON v.source_id=s.id LEFT JOIN legislation_fragments f ON f.version_id=v.id GROUP BY s.id,s.kind,s.title,s.issuer,s.official_url,v.id,v.label,v.effective_from,v.effective_to,v.test_only ORDER BY s.title,v.effective_from DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +523,7 @@ func (s *Store) ListLegislationSources(ctx context.Context) ([]classification.Le
 		var item classification.LegislationSourceView
 		var from time.Time
 		var to sql.NullTime
-		if err = rows.Scan(&item.ID, &item.Kind, &item.Title, &item.Issuer, &item.OfficialURL, &item.VersionID, &item.VersionLabel, &from, &to, &item.Status, &item.FragmentCount); err != nil {
+		if err = rows.Scan(&item.ID, &item.Kind, &item.Title, &item.Issuer, &item.OfficialURL, &item.VersionID, &item.VersionLabel, &from, &to, &item.Status, &item.FragmentCount, &item.TestOnly); err != nil {
 			return nil, err
 		}
 		item.EffectiveFrom = from.Format("2006-01-02")

@@ -19,6 +19,7 @@ export function SagaBadge({ status }: { status: SagaStatus }) {
 
 export function AttentionBadge({ invoice }: { invoice: Invoice }) {
   const attention = getAttentionStatus(invoice)
+  if (invoice.pipelineStatus === 'EXPORTING' && invoice.sagaExport?.artifactStatus === 'GENERATED') return <Badge tone="warning"><AlertTriangle className="size-3.5" />Confirmă importul SAGA</Badge>
   if (attention === 'OPEN') return <Badge tone="warning"><AlertTriangle className="size-3.5" />Acțiune necesară</Badge>
   if (attention === 'WAITING') return <Badge tone="info"><Clock3 className="size-3.5" />Condiție externă</Badge>
   return <Badge tone="success"><CheckCircle2 className="size-3.5" />Fără intervenție</Badge>

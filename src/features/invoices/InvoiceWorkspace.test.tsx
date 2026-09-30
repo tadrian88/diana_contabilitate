@@ -126,6 +126,21 @@ describe('Invoice Detail workspace', () => {
     expect(screen.getByText('Stare terminală. Factura nu continuă către SAGA.')).toBeInTheDocument()
   })
 
+  it('opens an invoice waiting for a person on the tab with the action, and says what to do on Rezumat', async () => {
+    const user = userEvent.setup()
+    renderApp(new MockInvoiceRepository(), '/invoices/inv-multiple')
+    expect(await screen.findByRole('tab', { name: 'Contract' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: 'Rezumat' }))
+    const steps = screen.getByRole('region', { name: 'Ce ai de făcut' })
+    expect(within(steps).getByRole('link', { name: 'Deschide Contract' })).toHaveAttribute('href', expect.stringContaining('tab=contract'))
+  })
+
+  it('opens a finished invoice on Rezumat without a call to action', async () => {
+    renderApp(new MockInvoiceRepository(), '/invoices/inv-resolved')
+    expect(await screen.findByRole('tab', { name: 'Rezumat' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('region', { name: 'Ce ai de făcut' })).not.toBeInTheDocument()
+  })
+
   it('shows invoice-not-found state', async () => {
     renderApp(new MockInvoiceRepository(), '/invoices/does-not-exist')
     expect(await screen.findByText('Factura nu a fost găsită')).toBeInTheDocument()

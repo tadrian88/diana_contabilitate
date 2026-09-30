@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"diana-contabilitate/backend/internal/apperrors"
 )
@@ -30,6 +31,7 @@ func (s *Service) ProcessCommercialValidation(ctx context.Context, invoiceID str
 	}
 	if errors.Is(err, ErrNoSnapshot) {
 		input.Snapshot = Snapshot{Version: 1, SchemaVersion: RuleSchemaVersion, Coverage: CoveragePartial}
+		input.ContractWaived = input.Invoice.ContractWaiver != nil
 	}
 	if input.Invoice.Revision != revision {
 		return nil
@@ -89,9 +91,69 @@ func (s *Service) ConfirmProposedRule(ctx context.Context, command RuleConfirmat
 	return s.store.ConfirmProposedRule(ctx, command, s.clock())
 }
 
-func (s *Service) ActivateReviewedServicePrices(ctx context.Context, clientID, documentID, actorID, commandID string) (int, error) {
+// DismissProposedClause closes a proposed clause that is not checked on
+// invoices, with the reviewer's reason, or one the parties' CUIs already
+// cover; the store verifies the latter against the cited text.
+func (s *Service) DismissProposedClause(ctx context.Context, command ClauseDismissal) (bool, error) {
+	if command.ClientID == "" || command.DocumentID == "" || command.RuleID == "" || command.CommandID == "" || command.ActorID == "" {
+		return false, fmt.Errorf("%w: invalid clause dismissal", apperrors.ErrValidation)
+	}
+	command.Reason = strings.TrimSpace(command.Reason)
+	switch command.ReasonCode {
+	case ClauseNotInvoiceVerifiable:
+		if length := utf8.RuneCountInString(command.Reason); length < 10 || length > 500 {
+			return false, fmt.Errorf("%w: a reason of 10 to 500 characters is required", apperrors.ErrValidation)
+		}
+	case ClauseCoveredBySupplierIdentity, ClauseCoveredByPartyIdentity:
+		command.Reason = ""
+	default:
+		return false, fmt.Errorf("%w: unsupported clause dismissal reason", apperrors.ErrValidation)
+	}
+	return s.store.DismissProposedClause(ctx, command, s.clock())
+}
+
+// DocumentCommercialState reports what a confirmed contract document
+// contributes to invoice checks; nil when it is not part of a dossier yet.
+func (s *Service) DocumentCommercialState(ctx context.Context, clientID, documentID string) (*DocumentCommercialState, error) {
+	if clientID == "" || documentID == "" {
+		return nil, fmt.Errorf("%w: invalid document commercial state", apperrors.ErrValidation)
+	}
+	return s.store.DocumentCommercialState(ctx, clientID, documentID)
+}
+
+func (s *Service) ListAliases(ctx context.Context, clientID, dossierID string) ([]LearnedAlias, error) {
+	if clientID == "" || dossierID == "" {
+		return nil, fmt.Errorf("%w: invalid alias listing", apperrors.ErrValidation)
+	}
+	return s.store.ListAliases(ctx, clientID, dossierID)
+}
+
+// ListAliasesForDocument lists the learned associations of the contract
+// dossier a confirmed contract document belongs to.
+func (s *Service) ListAliasesForDocument(ctx context.Context, clientID, documentID string) ([]LearnedAlias, error) {
+	if clientID == "" || documentID == "" {
+		return nil, fmt.Errorf("%w: invalid alias listing", apperrors.ErrValidation)
+	}
+	dossierID, err := s.store.DocumentDossierID(ctx, clientID, documentID)
+	if err != nil {
+		return nil, err
+	}
+	if dossierID == "" {
+		return []LearnedAlias{}, nil
+	}
+	return s.store.ListAliases(ctx, clientID, dossierID)
+}
+
+func (s *Service) RevokeAlias(ctx context.Context, command AliasRevocation) (bool, error) {
+	if command.ClientID == "" || command.AliasID == "" || command.ActorID == "" || command.CommandID == "" {
+		return false, fmt.Errorf("%w: invalid alias revocation", apperrors.ErrValidation)
+	}
+	return s.store.RevokeAlias(ctx, command, s.clock())
+}
+
+func (s *Service) ActivateReviewedServicePrices(ctx context.Context, clientID, documentID, actorID, commandID string) (ServicePriceActivation, error) {
 	if clientID == "" || documentID == "" || actorID == "" || commandID == "" {
-		return 0, fmt.Errorf("%w: invalid service price activation", apperrors.ErrValidation)
+		return ServicePriceActivation{}, fmt.Errorf("%w: invalid service price activation", apperrors.ErrValidation)
 	}
 	return s.store.ActivateReviewedServicePrices(ctx, clientID, documentID, actorID, commandID, s.clock())
 }

@@ -8,6 +8,7 @@ import (
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountingdate"
 	"diana-contabilitate/backend/internal/classification"
+	"diana-contabilitate/backend/internal/commercialvalidation"
 	"diana-contabilitate/backend/internal/contractingestion"
 	"diana-contabilitate/backend/internal/contracts"
 	"diana-contabilitate/backend/internal/invoicing"
@@ -151,7 +152,16 @@ type invoiceDTO struct {
 	Task                       *validationTaskDTO        `json:"task,omitempty"`
 	SelectedContractID         *string                   `json:"selectedContractId,omitempty"`
 	Contract                   *contractSummaryDTO       `json:"contract,omitempty"`
+	ContractWaiver             *contractWaiverDTO        `json:"contractWaiver,omitempty"`
 	SagaExport                 *sagaExportDTO            `json:"sagaExport,omitempty"`
+}
+
+// contractWaiverDTO is the accountant's reasoned decision to continue without a
+// contract (D-120).
+type contractWaiverDTO struct {
+	Reason   string `json:"reason"`
+	Actor    string `json:"actor"`
+	WaivedAt string `json:"waivedAt"`
 }
 
 type classificationContextDTO struct {
@@ -210,6 +220,7 @@ type validationTaskDTO struct {
 	Revision            uint64                        `json:"revision"`
 	ClassificationRunID *string                       `json:"classificationRunId,omitempty"`
 	ContractRequested   bool                          `json:"contractRequested"`
+	ContractWaived      bool                          `json:"contractWaived,omitempty"`
 	ContractCandidates  []contractCandidateDTO        `json:"contractCandidates,omitempty"`
 	ClassificationItems []classificationReviewItemDTO `json:"classificationItems,omitempty"`
 }
@@ -282,10 +293,13 @@ type contractDocumentDTO struct {
 	ConfirmedContractID *string                             `json:"confirmedContractId,omitempty"`
 	BuyerMismatch       bool                                `json:"buyerMismatch"`
 	ClientCUI           string                              `json:"clientCui"`
+	ClientName          string                              `json:"clientName,omitempty"`
 	Duplicate           bool                                `json:"duplicate,omitempty"`
 	Extraction          *contractExtractionDTO              `json:"extraction,omitempty"`
 	Attempts            []contractExtractionDTO             `json:"attempts"`
 	ConfirmedValues     *contractingestion.ReviewedContract `json:"confirmedValues,omitempty"`
+	// CommercialState is filled only by the single-document read.
+	CommercialState *commercialvalidation.DocumentCommercialState `json:"commercialState,omitempty"`
 }
 type contractExtractionDTO struct {
 	ID                string                      `json:"id"`
@@ -301,7 +315,7 @@ type contractExtractionDTO struct {
 }
 
 func contractDocumentResponse(item contractingestion.Document, duplicate bool) contractDocumentDTO {
-	result := contractDocumentDTO{ID: item.ID, ClientID: item.ClientID, ClientCUI: item.ClientCUI, OriginalFilename: item.OriginalFilename, MIMEType: item.MIMEType, SizeBytes: item.SizeBytes, SHA256: item.SHA256, Status: string(item.Status), LifecycleState: item.LifecycleState, Revision: item.Revision, UploadedAt: item.UploadedAt.Format(time.RFC3339), UploadedBy: item.UploadedByDisplay, ConfirmedContractID: item.ConfirmedContractID, BuyerMismatch: item.BuyerMismatch, Duplicate: duplicate, ConfirmedBy: item.ConfirmedByDisplay}
+	result := contractDocumentDTO{ID: item.ID, ClientID: item.ClientID, ClientCUI: item.ClientCUI, ClientName: item.ClientName, OriginalFilename: item.OriginalFilename, MIMEType: item.MIMEType, SizeBytes: item.SizeBytes, SHA256: item.SHA256, Status: string(item.Status), LifecycleState: item.LifecycleState, Revision: item.Revision, UploadedAt: item.UploadedAt.Format(time.RFC3339), UploadedBy: item.UploadedByDisplay, ConfirmedContractID: item.ConfirmedContractID, BuyerMismatch: item.BuyerMismatch, Duplicate: duplicate, ConfirmedBy: item.ConfirmedByDisplay}
 	if item.ConfirmedAt != nil {
 		value := item.ConfirmedAt.Format(time.RFC3339)
 		result.ConfirmedAt = &value
@@ -417,6 +431,13 @@ func invoiceResponse(item *invoicing.Invoice) (invoiceDTO, error) {
 		result.SelectedContractID = &id
 		result.Contract = associationContractResponse(item.ContractAssociation)
 	}
+	if waiver := item.ContractWaiver; waiver != nil {
+		actor := "Contabil"
+		if waiver.ActorDisplay != nil && *waiver.ActorDisplay != "" {
+			actor = *waiver.ActorDisplay
+		}
+		result.ContractWaiver = &contractWaiverDTO{Reason: waiver.Reason, Actor: actor, WaivedAt: waiver.WaivedAt.Format(time.RFC3339)}
+	}
 	for _, event := range item.Activity {
 		actor := string(event.ActorKind)
 		if event.ActorDisplay != nil {
@@ -458,6 +479,8 @@ func activityLabel(eventType string) string {
 		"MISSING_CONTRACT_REEVALUATED":         "Contract reevaluat automat",
 		"MISSING_CONTRACT_RESOLVED":            "Contract lipsă rezolvat",
 		"MISSING_CONTRACT_STILL_WAITING":       "Contract încă indisponibil",
+		"MISSING_CONTRACT_WAIVED":              "Contract lipsă: continuat fără contract",
+		"CONTRACT_WAIVED":                      "Continuat fără contract",
 		"CONTRACT_MATCHING_EXECUTED":           "Potrivire contract evaluată",
 		"CONTRACT_AUTO_ASSOCIATED":             "Contract asociat automat",
 		"CONTRACT_MATCH_TASK_RESOLVED":         "Task de contract rezolvat",
@@ -488,6 +511,7 @@ func validationTaskResponse(item *validationtasks.Task) validationTaskDTO {
 		CreatedAt: item.CreatedAt.Format(time.RFC3339), UpdatedAt: item.UpdatedAt.Format(time.RFC3339),
 		Title: item.Title, Reason: item.Reason, BlockerCode: item.BlockerCode, Revision: item.Revision, ClassificationRunID: item.ClassificationRunID,
 		ContractRequested: item.Type == validationtasks.TypeMissingContract && item.Status == validationtasks.StatusWaiting,
+		ContractWaived:    contractWaived(item),
 	}
 	if item.WaitingSince != nil {
 		value := item.WaitingSince.Format(time.RFC3339)
@@ -510,6 +534,18 @@ func validationTaskResponse(item *validationtasks.Task) validationTaskDTO {
 		result.ClassificationItems = append(result.ClassificationItems, classificationReviewResponse(classification))
 	}
 	return result
+}
+
+// contractWaived reports a MISSING_CONTRACT task the accountant closed by
+// continuing without a contract.
+func contractWaived(item *validationtasks.Task) bool {
+	if item.Type != validationtasks.TypeMissingContract || item.Status != validationtasks.StatusResolved || len(item.ResolutionMetadata) == 0 {
+		return false
+	}
+	var metadata struct {
+		Reason string `json:"reason"`
+	}
+	return json.Unmarshal(item.ResolutionMetadata, &metadata) == nil && metadata.Reason == validationtasks.ContractWaivedResolution
 }
 
 func classificationResponses(items []classification.Decision) []lineClassificationDTO {

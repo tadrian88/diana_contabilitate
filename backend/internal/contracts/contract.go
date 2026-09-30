@@ -65,6 +65,16 @@ type AssociationSnapshot struct {
 	AssociatedByName *string
 }
 
+// WaiverSnapshot is the accountant's reasoned decision to process an invoice
+// without a contract (D-120). It is read from the resolved MISSING_CONTRACT task.
+type WaiverSnapshot struct {
+	TaskID       string
+	Reason       string
+	ActorID      *string
+	ActorDisplay *string
+	WaivedAt     time.Time
+}
+
 type AssociationKind string
 
 const (

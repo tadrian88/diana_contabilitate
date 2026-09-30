@@ -30,6 +30,11 @@ export function useRequestContract(invoiceId: string) {
   return useUpdateInvoice(invoiceId, () => repository.requestContract(invoiceId))
 }
 
+export function useContinueWithoutContract(invoiceId: string) {
+  const repository = useInvoiceRepository()
+  return useUpdateInvoice(invoiceId, (reason: string) => repository.continueWithoutContract(invoiceId, reason))
+}
+
 export function useReviewClassification(invoiceId: string) {
   const repository = useInvoiceRepository()
   return useUpdateInvoice(invoiceId, ({ itemId, value, typedValue, reason, mappingAction, expectedMappingRevision, action }: { itemId: string; value?: string; typedValue?: DomainValue; reason?: string; mappingAction?:AccountMappingAction;expectedMappingRevision?:number;action?:ClassificationReviewAction }) => repository.reviewClassification(invoiceId, itemId, value, typedValue, reason, mappingAction, expectedMappingRevision, action))

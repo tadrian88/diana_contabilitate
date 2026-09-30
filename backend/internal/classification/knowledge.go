@@ -59,6 +59,7 @@ type LegislationSourceView struct {
 	EffectiveTo   *string `json:"effectiveTo,omitempty"`
 	Status        string  `json:"status"`
 	FragmentCount int     `json:"fragmentCount"`
+	TestOnly      bool    `json:"testOnly"`
 }
 
 type PromotionPreview struct {

@@ -57,6 +57,9 @@ IMPLEMENTED — AWAITING USER-RUN TESTS / REVIEW
 Contract ingestion handoff:
 Docs/CONTRACT_INGESTION_AI.md (manual commands A–V; no heavy tests or live Gemini run by Codex)
 
+AI Usage + Cost Tracking (D-121, D-122):
+IMPLEMENTED — AWAITING USER-RUN TESTS / REVIEW; initial prices pending user confirmation (Docs/AI_USAGE_COST_TRACKING.md)
+
 Canonical project state:
 Docs/PROJECT_STATE.md
 # Authentication V1 — 2026-09-16

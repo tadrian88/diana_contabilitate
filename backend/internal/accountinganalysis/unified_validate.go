@@ -76,6 +76,10 @@ func ValidateUnified(input Input, proposal Proposal, fragments []legislation.Fra
 			if !validConfidence(decision.Confidence) {
 				add("CONFIDENCE", ".confidence", "nivel de încredere necunoscut")
 			}
+			if lineExists && decision.Dimension == "VAT_TREATMENT" {
+				decision.ProposedValue = withSourceTaxFacts(decision.ProposedValue, line)
+				result.Proposal = decision
+			}
 			if decision.Insufficient {
 				add("INSUFFICIENT_FACTS", ".insufficient", "informațiile disponibile nu susțin o propunere validă")
 			} else if err := decision.ProposedValue.Validate(decision.Dimension); err != nil {
@@ -117,6 +121,20 @@ func ValidateUnified(input Input, proposal Proposal, fragments []legislation.Fra
 		}
 	}
 	return results, aggregate
+}
+
+// withSourceTaxFacts copies the e-Factura line tax category and rate into a
+// VAT_TREATMENT proposal only when the provider omitted both. They are source
+// facts, not judgments; values the provider did send are never replaced, so a
+// mismatch still fails VAT_SOURCE_MISMATCH.
+func withSourceTaxFacts(value accounting.Value, line Line) accounting.Value {
+	if value.SourceCategory != "" || value.SourceRate != nil || line.Facts == nil || line.Facts.Rate == nil || strings.TrimSpace(line.Facts.Code) == "" {
+		return value
+	}
+	rate := *line.Facts.Rate
+	value.SourceCategory = line.Facts.Code
+	value.SourceRate = &rate
+	return value
 }
 
 func validateContextualValue(input Input, line Line, dimension string, value accounting.Value, add func(string, string, string)) {

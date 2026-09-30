@@ -42,6 +42,9 @@ const (
 	SourceAmbiguous      Source = "AMBIGUOUS"
 	SourceLearnedMapping Source = "LEARNED_MAPPING"
 	SourceAIProposal     Source = "AI_PROPOSAL"
+	// SourceProfile marks a decision derived deterministically from the
+	// approved client accounting profile (see Profile.ProfileDerivedExpenseTaxValue).
+	SourceProfile Source = "PROFILE"
 )
 
 type MappingReference struct {

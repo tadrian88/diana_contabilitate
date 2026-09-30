@@ -18,3 +18,9 @@ deploy/gcp-test.local.env
 .gitignore
 .gitignore
 deploy/gcp-test.env
+
+# date de test generate local
+test-data/
+
+# backup-uri locale ale bazei (conțin date reale)
+backups/

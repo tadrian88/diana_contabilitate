@@ -60,6 +60,9 @@ type Metrics struct {
 	accountingAIPartial        atomic.Uint64
 	accountingReviewCreated    atomic.Uint64
 	accountingApproveAll       atomic.Uint64
+	llmUsageRecorded           atomic.Uint64
+	llmUsageRecordFailures     atomic.Uint64
+	llmUsageUnattributed       atomic.Uint64
 	mu                         sync.Mutex
 	jobResults                 map[string]uint64
 }
@@ -119,6 +122,11 @@ func (m *Metrics) ContractExtractionFailed() {
 	m.contractExtractionFailures.Add(1)
 }
 func (m *Metrics) ContractConfirmed() { m.contractConfirmations.Add(1) }
+func (m *Metrics) LLMUsageRecorded()  { m.llmUsageRecorded.Add(1) }
+func (m *Metrics) LLMUsageRecordFailed() {
+	m.llmUsageRecordFailures.Add(1)
+}
+func (m *Metrics) LLMUsageUnattributed() { m.llmUsageUnattributed.Add(1) }
 func (m *Metrics) AccountingAnalysisCompleted(duration time.Duration, inputTokens, outputTokens int64, validationFailures int) {
 	m.accountingAnalysisCalls.Add(1)
 	m.accountingAnalysisDuration.Add(uint64(max(duration.Milliseconds(), 0)))
@@ -200,6 +208,9 @@ func (m *Metrics) Handler(stats OutboxStats) http.Handler {
 		writeCounter(&builder, "accounting_ai_partial_validation_total", m.accountingAIPartial.Load())
 		writeCounter(&builder, "accounting_review_tasks_created_total", m.accountingReviewCreated.Load())
 		writeCounter(&builder, "accounting_approve_all_succeeded_total", m.accountingApproveAll.Load())
+		writeCounter(&builder, "llm_usage_events_recorded_total", m.llmUsageRecorded.Load())
+		writeCounter(&builder, "llm_usage_record_failures_total", m.llmUsageRecordFailures.Load())
+		writeCounter(&builder, "llm_usage_unattributed_total", m.llmUsageUnattributed.Load())
 		m.mu.Lock()
 		for result, value := range m.jobResults {
 			builder.WriteString("diana_worker_job_results_total{result=\"")

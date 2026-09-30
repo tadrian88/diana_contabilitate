@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,14 +32,17 @@ func (s *Store) PrepareAnalysis(ctx context.Context, command accountinganalysis.
 	if !accountinganalysis.HasDimensionsNeedingAI(input) {
 		return accountinganalysis.Run{}, false, accountinganalysis.ErrNoAnalysisNeeded
 	}
-	terms := []string{"contabilitate", "TVA", "deductibilitate", input.SupplierName}
-	for _, line := range input.Lines {
-		terms = append(terms, line.Description)
+	// One focused lookup per unresolved dimension, so each proposal can cite
+	// evidence for its own decision; the merged set is size-bounded.
+	groups := [][]legislation.Fragment{}
+	for _, planned := range accountinganalysis.RetrievalPlan(input) {
+		group, retrieveErr := s.Retrieve(ctx, planned.Query(input, true))
+		if retrieveErr != nil {
+			return accountinganalysis.Run{}, false, retrieveErr
+		}
+		groups = append(groups, group)
 	}
-	fragments, err := s.Retrieve(ctx, legislation.Query{Terms: terms, ApplicableDate: input.IssueDate, Limit: 12, AllowTestOnly: true})
-	if err != nil {
-		return accountinganalysis.Run{}, false, err
-	}
+	fragments := accountinganalysis.MergeFragments(groups)
 	if len(fragments) == 0 {
 		return accountinganalysis.Run{}, false, fmt.Errorf("%w: corpusul legislativ local nu conține fragmente aplicabile", apperrors.ErrValidation)
 	}
@@ -518,6 +522,22 @@ func (s *Store) loadAnalysisInput(ctx context.Context, clientID, invoiceID strin
 			return input, validationErr
 		}
 		input.AccountCandidates = append(input.AccountCandidates, accountinganalysis.AccountCandidate{Code: item.Code, Name: item.Name, AccountType: item.AccountType})
+	}
+	if len(input.Profile.AccountCodes) == 0 {
+		// An empty profile vocabulary allows the whole global OMFP catalog
+		// (D-110); the provider receives the active, postable accounts relevant
+		// to the invoice direction to keep the envelope bounded.
+		codes := make([]string, 0, len(input.AccountCatalog.Entries))
+		for code, item := range input.AccountCatalog.Entries {
+			if item.Active && item.Postable && !item.Synthetic && accountinganalysis.AccountRelevantForDirection(code, input.Direction) {
+				codes = append(codes, code)
+			}
+		}
+		sort.Strings(codes)
+		for _, code := range codes {
+			item := input.AccountCatalog.Entries[code]
+			input.AccountCandidates = append(input.AccountCandidates, accountinganalysis.AccountCandidate{Code: item.Code, Name: item.Name, AccountType: item.AccountType})
+		}
 	}
 	lineRows, err := s.DB.QueryContext(ctx, `SELECT id,description,source_facts,net_value,vat_value,total_value FROM invoice_lines WHERE invoice_id=$1 ORDER BY position`, invoiceID)
 	if err != nil {

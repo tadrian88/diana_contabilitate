@@ -87,6 +87,9 @@ func TestDomainAccountVocabularyCannotBeInferred(t *testing.T) {
 	if p.Ordinary() || pack.Valid(p, "A", "2026-09-15", true) {
 		t.Fatal("missing chart vocabulary accepted")
 	}
+	if !p.AccountAllowed("6022") || p.RuleAccountAllowed("6022") {
+		t.Fatal("empty list must allow reviewed decisions over the global catalog but never rule automation")
+	}
 	p.AccountCodes = []string{"628.TEST"}
 	if p.AccountAllowed("628.UNAPPROVED") {
 		t.Fatal("arbitrary analytic accepted")

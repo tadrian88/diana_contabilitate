@@ -174,6 +174,19 @@ func decimal(value *big.Rat, scale int) string {
 	return value.FloatString(scale)
 }
 
+// trimDecimal renders a rate without insignificant zeros ("21.0000" -> "21",
+// "5.5000" -> "5.5"); a value that is not a decimal is returned unchanged.
+func trimDecimal(raw string) string {
+	value, ok := rat(raw)
+	if !ok {
+		return raw
+	}
+	if value.IsInt() {
+		return value.Num().String()
+	}
+	return strings.TrimRight(value.FloatString(4), "0")
+}
+
 func unique(values []string) []string {
 	seen := map[string]bool{}
 	result := []string{}

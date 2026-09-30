@@ -124,8 +124,13 @@ func TestDomainMicroExplicitInapplicability(t *testing.T) {
 	in.Snapshot.Profile.TaxRegime = "MICROENTERPRISE"
 	out, _ := (DomainPolicy{AllowTestOnly: true}).Evaluate(in)
 	p := out.Proposals[3]
-	if p.TypedValue == nil || p.TypedValue.Kind != "NOT_APPLICABLE" || !p.RequiresReview {
+	if p.TypedValue == nil || p.TypedValue.Kind != "NOT_APPLICABLE" || p.RequiresReview || p.Source != SourceProfile || p.Evidence == nil || p.Evidence.ProfileID != in.Snapshot.Profile.ID {
 		t.Fatal(p)
+	}
+	for _, other := range out.Proposals[:3] {
+		if other.Source == SourceProfile {
+			t.Fatal("only EXPENSE_TAX_TREATMENT is profile-derived", other)
+		}
 	}
 }
 func TestDomainConfirmedContractOnly(t *testing.T) {

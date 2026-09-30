@@ -1,3 +1,5 @@
+name: diana_contabilitate
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -40,6 +42,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Local-only, repeatable seeding of the global TEST_ONLY legislation corpus.
+  # effective-from is a local retrieval filter, not a statement of legal effect.
+  legislation-seed:
+    build: ./backend
+    env_file: .env.local
+    profiles: ["seed"]
+    volumes:
+      - ./backend/legislation/source-snapshots:/snapshots:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        legislationdraftimport -file /snapshots/legea-227-2015-cod-fiscal-oug-38-2026.draft.json -effective-from 2016-01-01 -accept-test-only -skip-existing &&
+        legislationdraftimport -file /snapshots/omfp-1802-2014-original.draft.json -effective-from 2016-01-01 -accept-test-only -skip-existing
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   api:
     build: ./backend

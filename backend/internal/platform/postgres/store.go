@@ -31,6 +31,7 @@ import (
 	"diana-contabilitate/backend/internal/money"
 	"diana-contabilitate/backend/internal/outbox"
 	"diana-contabilitate/backend/internal/rules"
+	"diana-contabilitate/backend/internal/validationtasks"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -182,6 +183,9 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 			AssociatedByID: association.AssociatedByID, AssociatedByName: association.AssociatedByDisplay,
 		}
 	}
+	if result.ContractWaiver, err = s.contractWaiver(ctx, result.ID); err != nil {
+		return nil, err
+	}
 	if err = s.attachClassificationContext(ctx, result); err != nil {
 		return nil, err
 	}
@@ -189,6 +193,42 @@ func (s *Store) GetInvoice(ctx context.Context, id string) (*invoicing.Invoice, 
 		result.AccountingWorkflowStatus = accountingWorkflowStatus(ctx, s.DB, result)
 	}
 	return result, nil
+}
+
+// contractWaiver returns the reasoned decision that let the invoice continue
+// without a contract, or nil when the invoice was never waived (D-120).
+func (s *Store) contractWaiver(ctx context.Context, invoiceID string) (*contracts.WaiverSnapshot, error) {
+	rows, err := s.Client.ValidationTask.Query().Where(
+		entvalidationtask.InvoiceIDEQ(invoiceID),
+		entvalidationtask.TaskTypeEQ(entvalidationtask.TaskTypeMISSING_CONTRACT),
+		entvalidationtask.StatusEQ(entvalidationtask.StatusRESOLVED),
+	).Order(ent.Desc(entvalidationtask.FieldResolvedAt)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read contract waiver: %w", err)
+	}
+	for _, row := range rows {
+		var metadata struct {
+			Reason       string `json:"reason"`
+			Note         string `json:"note"`
+			ActorID      string `json:"actorId"`
+			ActorDisplay string `json:"actorDisplay"`
+		}
+		if len(row.ResolutionMetadata) == 0 || json.Unmarshal(row.ResolutionMetadata, &metadata) != nil || metadata.Reason != validationtasks.ContractWaivedResolution {
+			continue
+		}
+		waiver := &contracts.WaiverSnapshot{TaskID: row.ID, Reason: metadata.Note}
+		if row.ResolvedAt != nil {
+			waiver.WaivedAt = *row.ResolvedAt
+		}
+		if metadata.ActorID != "" {
+			waiver.ActorID = &metadata.ActorID
+		}
+		if metadata.ActorDisplay != "" {
+			waiver.ActorDisplay = &metadata.ActorDisplay
+		}
+		return waiver, nil
+	}
+	return nil, nil
 }
 
 func accountingWorkflowStatus(ctx context.Context, db *sql.DB, item *invoicing.Invoice) string {

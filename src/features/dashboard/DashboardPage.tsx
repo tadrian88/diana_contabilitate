@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/badge'
 import type { Client, Invoice } from '../../domain/invoice'
 import { PIPELINE_LABELS, TASK_TYPE_LABELS } from '../../domain/invoice'
 import { useClients, useInvoices } from '../invoices/invoice-hooks'
+import { actionTab } from '../invoices/invoice-view'
 import { DEMO_CLOCK, pipelineGroups, selectDashboard } from './dashboard-selectors'
 
 export function DashboardPage() {
@@ -63,7 +64,7 @@ function ClientOverview({ rows, onSelect }: { rows: ReturnType<typeof selectDash
 }
 
 function AttentionRow({ invoice, clients }: { invoice: Invoice; clients: Client[] }) {
-  const tab = invoice.task?.type === 'CLASSIFICATION' ? 'classification' : 'contract'
+  const tab = actionTab(invoice)
   const client = clients.find((candidate) => candidate.id === invoice.clientId)
   return <Link to={invoiceLink(invoice, tab)} className="grid grid-cols-[170px_1fr_190px_150px] items-center gap-4 px-5 py-4 outline-none hover:bg-[var(--surface-subtle)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"><div><Badge tone="warning"><AlertTriangle className="size-3.5" />{invoice.task ? TASK_TYPE_LABELS[invoice.task.type] : 'Acțiune'}</Badge><div className="mt-2 text-xs font-semibold">{invoice.documentNumber}</div></div><div><div className="text-sm font-semibold">{invoice.supplierName}</div><p className="mt-1 line-clamp-2 text-xs text-[var(--text-secondary)]">{invoice.task?.reason}</p></div><div className="text-xs text-[var(--text-secondary)]">{client?.name ?? 'Client indisponibil'}</div><div className="flex items-center justify-end gap-2 text-right text-xs font-semibold text-[var(--accent)]">{PIPELINE_LABELS[invoice.pipelineStatus]}<ArrowRight className="size-3.5 shrink-0" /></div></Link>
 }

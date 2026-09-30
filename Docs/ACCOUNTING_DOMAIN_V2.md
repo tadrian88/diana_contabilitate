@@ -2,6 +2,8 @@
 
 Status: IMPLEMENTED — AWAITING USER-RUN TESTS. Engineering/accounting acceptance is pending. Classification V1 is NOT FROZEN; Classification V2 is NOT STARTED. This document defines implementation behavior, not approved Romanian accounting advice. The real production pack is empty.
 
+> Actualizare 2026-09-28 (D-107..D-112): exportul SAGA nu mai cere pack per client sau `Profile.Ordinary()`. Fără pack se aplică maparea implicită din cod, deciziile trebuie să fie umane sau derivate din profil (`PROFILE`), iar microîntreprinderile plătitoare de TVA sunt exportabile. Pasajele de mai jos care cer pack/`Ordinary()` pentru export sunt înlocuite de aceste decizii.
+
 ## Separation of responsibilities
 
 `backend/internal/accounting` defines exact source facts, typed fiscal decisions, dated profiles, reviewed predicates and release snapshots. It imports neither SAGA nor AI. `classification.DomainPolicy` evaluates those predicates. The SAGA adapter derives import instructions and owns the shared readiness authority. PostgreSQL calls that authority transactionally before new-model completion and final human review; the generator calls it again before serialization.

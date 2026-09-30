@@ -55,6 +55,11 @@ func (s *Store) LoadInput(ctx context.Context, invoiceID string) (commercialvali
 		return commercialvalidation.Input{}, fmt.Errorf("decode commercial rules: %w", err)
 	}
 	input.Snapshot = snapshot
+	if snapshot.Coverage != commercialvalidation.CoverageComplete && snapshot.DossierID != "" {
+		if input.PendingClauses, err = s.pendingClauseEvidence(ctx, snapshot.DossierID); err != nil {
+			return commercialvalidation.Input{}, err
+		}
+	}
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT d.name,v.value,v.source,COALESCE(v.source_reference,''),v.period_start,v.period_end,
 		       v.recorded_by_id,v.recorded_at,v.applies
@@ -95,13 +100,16 @@ func (s *Store) LoadInput(ctx context.Context, invoiceID string) (commercialvali
 	if err = rows.Close(); err != nil {
 		return commercialvalidation.Input{}, err
 	}
+	if err = s.resolveLegalVATRate(ctx, &input); err != nil {
+		return commercialvalidation.Input{}, err
+	}
 	aliasRows, err := s.DB.QueryContext(ctx, `
 		SELECT id,client_id,supplier_cui,service_id,normalized_label,effective_from,effective_to,confirmed_by_id,confirmed_at
 		FROM contract_service_aliases
-		WHERE client_id=$1 AND supplier_cui=$2 AND dossier_id=$4
+		WHERE client_id=$1 AND supplier_cui=$2 AND dossier_id=$4 AND revoked_at IS NULL
 		  AND (invoice_id=$5 OR (invoice_id IS NULL AND NOT EXISTS (
 		    SELECT 1 FROM contract_service_aliases specific
-		    WHERE specific.dossier_id=contract_service_aliases.dossier_id
+		    WHERE specific.dossier_id=contract_service_aliases.dossier_id AND specific.revoked_at IS NULL
 		      AND specific.invoice_id=$5 AND specific.normalized_label=contract_service_aliases.normalized_label)))
 		  AND (effective_from IS NULL OR effective_from <= $3)
 		  AND (effective_to IS NULL OR effective_to >= $3)`, item.ClientID, valueOrBlank(item.NormalizedSupplierCUI), item.IssueDay, snapshot.DossierID, invoiceID)
@@ -317,9 +325,38 @@ func (s *Store) SaveRun(ctx context.Context, run commercialvalidation.Run, corre
 	return true, nil
 }
 
+// pendingClauseEvidence cites the dossier's clauses still to settle, oldest
+// first, so a coverage finding can send the reviewer to them.
+func (s *Store) pendingClauseEvidence(ctx context.Context, dossierID string) ([]commercialvalidation.Evidence, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT document_id,source_page,source_snippet FROM contract_clause_candidates WHERE dossier_id=$1 AND review_status='PROPOSED' ORDER BY created_at,id`, dossierID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []commercialvalidation.Evidence{}
+	for rows.Next() {
+		var evidence commercialvalidation.Evidence
+		var page sql.NullInt64
+		if err = rows.Scan(&evidence.DocumentID, &page, &evidence.Snippet); err != nil {
+			return nil, err
+		}
+		if page.Valid {
+			value := int(page.Int64)
+			evidence.Page = &value
+		}
+		result = append(result, evidence)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) GetRun(ctx context.Context, clientID, invoiceID string) (*commercialvalidation.Run, error) {
 	var run commercialvalidation.Run
-	err := s.DB.QueryRowContext(ctx, `SELECT r.id,r.invoice_id,COALESCE(r.snapshot_id,''),COALESCE(s.dossier_id,''),r.invoice_revision,r.snapshot_version,r.engine_version,r.outcome,r.created_at,r.completed_at FROM invoice_commercial_validation_runs r JOIN invoices i ON i.id=r.invoice_id LEFT JOIN contract_commercial_snapshots s ON s.id=r.snapshot_id WHERE i.client_id=$1 AND i.id=$2 ORDER BY r.created_at DESC,r.id DESC LIMIT 1`, clientID, invoiceID).Scan(&run.ID, &run.InvoiceID, &run.SnapshotID, &run.DossierID, &run.InvoiceRevision, &run.SnapshotVersion, &run.EngineVersion, &run.Outcome, &run.CreatedAt, &run.CompletedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT r.id,r.invoice_id,COALESCE(r.snapshot_id,''),COALESCE(s.dossier_id,''),r.invoice_revision,r.snapshot_version,r.engine_version,r.outcome,r.created_at,r.completed_at,COALESCE(active.version,0)
+		FROM invoice_commercial_validation_runs r JOIN invoices i ON i.id=r.invoice_id
+		LEFT JOIN contract_commercial_snapshots s ON s.id=r.snapshot_id
+		LEFT JOIN contract_dossiers d ON d.id=s.dossier_id
+		LEFT JOIN contract_commercial_snapshots active ON active.id=d.active_snapshot_id
+		WHERE i.client_id=$1 AND i.id=$2 ORDER BY r.created_at DESC,r.id DESC LIMIT 1`, clientID, invoiceID).Scan(&run.ID, &run.InvoiceID, &run.SnapshotID, &run.DossierID, &run.InvoiceRevision, &run.SnapshotVersion, &run.EngineVersion, &run.Outcome, &run.CreatedAt, &run.CompletedAt, &run.ActiveSnapshotVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperrors.ErrNotFound
 	}
@@ -519,31 +556,174 @@ func (s *Store) ConfirmAlias(ctx context.Context, alias commercialvalidation.Ali
 	if alias.ID == "" {
 		alias.ID = stableID("service-alias", commandID)
 	}
-	var scopedInvoiceID any
-	if !alias.ReuseForDossier {
-		scopedInvoiceID = alias.InvoiceID
+	return s.saveAlias(ctx, alias, commandID)
+}
+
+// saveAlias stores a validated alias. An explicit mapping always binds the
+// invoice it was made on. Kept for the dossier too, it is also learned for
+// future invoices; revoking the learned wording later leaves this invoice's
+// own decision in place.
+func (s *Store) saveAlias(ctx context.Context, alias commercialvalidation.Alias, commandID string) (bool, error) {
+	scopes := []aliasScope{{id: alias.ID, key: "commercial-alias:" + commandID, invoiceID: alias.InvoiceID}}
+	if alias.ReuseForDossier {
+		scopes = []aliasScope{
+			{id: alias.ID, key: "commercial-alias:" + commandID},
+			{id: stableID("service-alias", commandID+":invoice"), key: "commercial-alias:" + commandID + ":invoice", invoiceID: alias.InvoiceID},
+		}
 	}
-	result, err := s.DB.ExecContext(ctx, `INSERT INTO contract_service_aliases(id,client_id,supplier_cui,service_id,normalized_label,effective_from,effective_to,confirmed_by_id,confirmed_at,command_key,dossier_id,invoice_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`, alias.ID, alias.ClientID, alias.SupplierCUI, alias.ServiceID, alias.NormalizedLabel, alias.EffectiveFrom, alias.EffectiveTo, alias.ConfirmedByID, alias.ConfirmedAt, "commercial-alias:"+commandID, alias.DossierID, scopedInvoiceID)
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
-	count, _ := result.RowsAffected()
-	if count == 0 {
-		var stored commercialvalidation.Alias
-		var from, to sql.NullTime
-		var storedInvoiceID sql.NullString
-		err = s.DB.QueryRowContext(ctx, `SELECT client_id,supplier_cui,service_id,normalized_label,effective_from,effective_to,confirmed_by_id,dossier_id,invoice_id FROM contract_service_aliases WHERE command_key=$1`, "commercial-alias:"+commandID).Scan(&stored.ClientID, &stored.SupplierCUI, &stored.ServiceID, &stored.NormalizedLabel, &from, &to, &stored.ConfirmedByID, &stored.DossierID, &storedInvoiceID)
+	defer tx.Rollback()
+	changed := false
+	for _, scope := range scopes {
+		inserted, err := insertAlias(ctx, tx, alias, scope)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return false, apperrors.ErrConflict
-			}
 			return false, err
 		}
-		if stored.ClientID != alias.ClientID || stored.DossierID != alias.DossierID || stored.SupplierCUI != alias.SupplierCUI || stored.ServiceID != alias.ServiceID || stored.NormalizedLabel != alias.NormalizedLabel || stored.ConfirmedByID != alias.ConfirmedByID || storedInvoiceID.Valid == alias.ReuseForDossier || (storedInvoiceID.Valid && storedInvoiceID.String != alias.InvoiceID) || !sameNullableTime(from, alias.EffectiveFrom) || !sameNullableTime(to, alias.EffectiveTo) {
-			return false, apperrors.ErrConflict
+		changed = changed || inserted
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return changed, nil
+}
+
+// aliasScope is one row a confirmed alias is stored as: the dossier-wide
+// wording (no invoice) or the mapping of one invoice.
+type aliasScope struct{ id, key, invoiceID string }
+
+// insertAlias stores one scope of a confirmed alias. Replaying the same
+// command, or confirming what an active alias of the same scope already maps
+// to the same service, changes nothing; any other alias of the scope for the
+// same wording is a conflict.
+func insertAlias(ctx context.Context, tx *sql.Tx, alias commercialvalidation.Alias, scope aliasScope) (bool, error) {
+	var invoiceID any
+	if scope.invoiceID != "" {
+		invoiceID = scope.invoiceID
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO contract_service_aliases(id,client_id,supplier_cui,service_id,normalized_label,effective_from,effective_to,confirmed_by_id,confirmed_at,command_key,dossier_id,invoice_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`, scope.id, alias.ClientID, alias.SupplierCUI, alias.ServiceID, alias.NormalizedLabel, alias.EffectiveFrom, alias.EffectiveTo, alias.ConfirmedByID, alias.ConfirmedAt, scope.key, alias.DossierID, invoiceID)
+	if err != nil {
+		return false, err
+	}
+	if count, _ := result.RowsAffected(); count == 1 {
+		return true, nil
+	}
+	var stored commercialvalidation.Alias
+	var from, to sql.NullTime
+	var storedInvoiceID sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT client_id,supplier_cui,service_id,normalized_label,effective_from,effective_to,confirmed_by_id,dossier_id,invoice_id FROM contract_service_aliases WHERE command_key=$1`, scope.key).Scan(&stored.ClientID, &stored.SupplierCUI, &stored.ServiceID, &stored.NormalizedLabel, &from, &to, &stored.ConfirmedByID, &stored.DossierID, &storedInvoiceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		var same bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM contract_service_aliases WHERE dossier_id=$1 AND invoice_id IS NOT DISTINCT FROM $2 AND normalized_label=$3 AND service_id=$4 AND revoked_at IS NULL)`, alias.DossierID, invoiceID, alias.NormalizedLabel, alias.ServiceID).Scan(&same); err != nil {
+			return false, err
+		}
+		if same {
+			return false, nil
+		}
+		return false, apperrors.ErrConflict
+	}
+	if err != nil {
+		return false, err
+	}
+	if stored.ClientID != alias.ClientID || stored.DossierID != alias.DossierID || stored.SupplierCUI != alias.SupplierCUI || stored.ServiceID != alias.ServiceID || stored.NormalizedLabel != alias.NormalizedLabel || stored.ConfirmedByID != alias.ConfirmedByID || storedInvoiceID.Valid != (scope.invoiceID != "") || (storedInvoiceID.Valid && storedInvoiceID.String != scope.invoiceID) || !sameNullableTime(from, alias.EffectiveFrom) || !sameNullableTime(to, alias.EffectiveTo) {
+		return false, apperrors.ErrConflict
+	}
+	return false, nil
+}
+
+func (s *Store) ListAliases(ctx context.Context, clientID, dossierID string) ([]commercialvalidation.LearnedAlias, error) {
+	var rulesJSON []byte
+	err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(s.rules,'[]'::jsonb) FROM contract_dossiers d LEFT JOIN contract_commercial_snapshots s ON s.id=d.active_snapshot_id WHERE d.id=$1 AND d.client_id=$2`, dossierID, clientID).Scan(&rulesJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperrors.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var rules []commercialvalidation.Rule
+	_ = json.Unmarshal(rulesJSON, &rules)
+	labels := map[string]string{}
+	for _, rule := range rules {
+		serviceID := rule.Applicability.ServiceID
+		if serviceID == "" {
+			serviceID = rule.ID
+		}
+		if _, known := labels[serviceID]; !known {
+			labels[serviceID] = commercialvalidation.ServiceLabel(rule)
 		}
 	}
-	return count == 1, nil
+	rows, err := s.DB.QueryContext(ctx, `SELECT a.id,a.dossier_id,a.service_id,a.normalized_label,COALESCE(a.invoice_id,''),COALESCE(confirmer.email,a.confirmed_by_id),a.confirmed_at,a.revoked_at,COALESCE(revoker.email,a.revoked_by_id,'')
+		FROM contract_service_aliases a
+		LEFT JOIN auth_users confirmer ON confirmer.id=a.confirmed_by_id
+		LEFT JOIN auth_users revoker ON revoker.id=a.revoked_by_id
+		WHERE a.client_id=$1 AND a.dossier_id=$2
+		ORDER BY a.revoked_at IS NOT NULL, a.confirmed_at DESC, a.id`, clientID, dossierID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []commercialvalidation.LearnedAlias{}
+	for rows.Next() {
+		var alias commercialvalidation.LearnedAlias
+		var revokedAt sql.NullTime
+		if err = rows.Scan(&alias.ID, &alias.DossierID, &alias.ServiceID, &alias.NormalizedLabel, &alias.InvoiceID, &alias.ConfirmedBy, &alias.ConfirmedAt, &revokedAt, &alias.RevokedBy); err != nil {
+			return nil, err
+		}
+		if revokedAt.Valid {
+			alias.RevokedAt = &revokedAt.Time
+		}
+		alias.ServiceLabel = labels[alias.ServiceID]
+		result = append(result, alias)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) DocumentDossierID(ctx context.Context, clientID, documentID string) (string, error) {
+	var dossierID sql.NullString
+	err := s.DB.QueryRowContext(ctx, `SELECT dossier_id FROM contract_source_documents WHERE id=$1 AND client_id=$2`, documentID, clientID).Scan(&dossierID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", apperrors.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return dossierID.String, nil
+}
+
+// RevokeAlias stops a learned association from mapping future validations.
+// The row and its confirmation remain as history; replaying the same command
+// is a no-op.
+func (s *Store) RevokeAlias(ctx context.Context, command commercialvalidation.AliasRevocation, now time.Time) (bool, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var dossierID, label string
+	var revokedAt sql.NullTime
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(dossier_id,''),normalized_label,revoked_at FROM contract_service_aliases WHERE id=$1 AND client_id=$2 FOR UPDATE`, command.AliasID, command.ClientID).Scan(&dossierID, &label, &revokedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, apperrors.ErrNotFound
+	}
+	if err != nil {
+		return false, err
+	}
+	if revokedAt.Valid {
+		return false, nil
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE contract_service_aliases SET revoked_at=$3,revoked_by_id=$4,revoke_command_key=$5 WHERE id=$1 AND client_id=$2 AND revoked_at IS NULL`, command.AliasID, command.ClientID, now, command.ActorID, "commercial-alias-revoke:"+command.CommandID); err != nil {
+		return false, err
+	}
+	eventKey := "commercial-alias-revoked:" + command.CommandID
+	if _, err = tx.ExecContext(ctx, `INSERT INTO activity_events(id,client_id,aggregate_type,aggregate_id,event_type,occurred_at,actor_kind,actor_id,actor_display,automatic,detail,idempotency_key) VALUES($1,$2,'CONTRACT_DOSSIER',$3,'COMMERCIAL_ALIAS_REVOKED',$4,'USER',$5,$6,false,$7,$8) ON CONFLICT(idempotency_key) DO NOTHING`, stableID("evt", eventKey), command.ClientID, dossierID, now, command.ActorID, nullText(command.ActorDisplay), "Asocierea formulării „"+label+"” a fost revocată; facturile viitoare vor cere din nou alegerea serviciului.", eventKey); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) PutInvoiceDateFact(ctx context.Context, fact commercialvalidation.InvoiceDateFact, now time.Time) (bool, error) {
@@ -720,4 +900,52 @@ func insertCommercialAudit(ctx context.Context, tx *sql.Tx, clientID, invoiceID,
 	after, _ := json.Marshal(to)
 	_, err := tx.ExecContext(ctx, `INSERT INTO activity_events(id,client_id,invoice_id,validation_task_id,aggregate_type,aggregate_id,event_type,occurred_at,actor_kind,actor_display,automatic,detail,before_snapshot,after_snapshot,correlation_id,pipeline_from,pipeline_to,trigger,idempotency_key) VALUES($1,$2,$3,$4,'INVOICE',$3,$5,$6,'SYSTEM','Motor comercial',true,$7,$8,$9,$10,$11,$12,$13,$14)`, stableID("evt", key), clientID, invoiceID, taskID, eventType, now, detail, before, after, nullText(correlationID), from, to, trigger, key)
 	return err
+}
+
+// resolveLegalVATRate supplies applicable_vat_rate from the legal fiscal table
+// for the invoice issue day when a rule needs it and the dossier has no value
+// valid on that day. A dossier value always takes precedence.
+func (s *Store) resolveLegalVATRate(ctx context.Context, input *commercialvalidation.Input) error {
+	name := commercialvalidation.ApplicableVATVariable
+	if _, recorded := input.Variables[name]; recorded || !snapshotNeedsVariable(input.Snapshot.Rules, name) {
+		return nil
+	}
+	var rate, source string
+	var from time.Time
+	var to sql.NullTime
+	err := s.DB.QueryRowContext(ctx, `SELECT rate::text,valid_from,valid_to,legal_source FROM fiscal_vat_rates
+		WHERE country='RO' AND category='STANDARD' AND valid_from<=$1 AND (valid_to IS NULL OR valid_to>=$1)
+		ORDER BY valid_from DESC LIMIT 1`, input.Invoice.IssueDay).Scan(&rate, &from, &to, &source)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load legal VAT rate: %w", err)
+	}
+	if strings.Contains(rate, ".") {
+		rate = strings.TrimRight(strings.TrimRight(rate, "0"), ".")
+	}
+	value := commercialvalidation.VariableValue{Name: name, Value: rate, Source: "LEGISLATION", SourceReference: source, PeriodStart: &from}
+	if to.Valid {
+		value.PeriodEnd = &to.Time
+	}
+	input.Variables[name] = value
+	delete(input.UnavailableVariables, name)
+	return nil
+}
+
+func snapshotNeedsVariable(rules []commercialvalidation.Rule, name string) bool {
+	for _, rule := range rules {
+		for _, required := range rule.RequiredVariables {
+			if required == name {
+				return true
+			}
+		}
+		for _, used := range expressionVariables(rule.Expression) {
+			if used == name {
+				return true
+			}
+		}
+	}
+	return false
 }

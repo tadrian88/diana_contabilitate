@@ -4,10 +4,12 @@ package postgres
 
 import (
 	"context"
+	entinvoice "diana-contabilitate/backend/ent/invoice"
 	"diana-contabilitate/backend/internal/accounting"
 	"diana-contabilitate/backend/internal/accountingdate"
 	"diana-contabilitate/backend/internal/apperrors"
 	"diana-contabilitate/backend/internal/clients"
+	"diana-contabilitate/backend/internal/invoicing"
 	"diana-contabilitate/backend/internal/platform/httpserver"
 	"diana-contabilitate/backend/internal/platform/observability"
 	"diana-contabilitate/backend/internal/platform/requestactor"
@@ -318,5 +320,39 @@ func TestClientManagementCreateDuplicateSubmission(t *testing.T) {
 	err := s.DB.QueryRowContext(ctx, `SELECT count(*) FROM activity_events WHERE client_id=$1 AND event_type='CLIENT_CREATED'`, id).Scan(&count)
 	if err != nil || count != 1 {
 		t.Fatal("creation not atomic/idempotent", count, err)
+	}
+}
+
+// Enabling SAGA export resumes invoices that reached the handoff while export
+// was disabled; the worker had rejected them permanently.
+func TestSagaEnableResumesInvoicesStuckAtHandoff(t *testing.T) {
+	ctx, s, svc := clientManagementFixture(t)
+	d := createManagementClient(t, ctx, svc)
+	id := d.Client.ID
+	now := time.Now().UTC()
+	invoiceID := "saga-enable-" + id
+	if _, err := s.Client.Invoice.Create().SetID(invoiceID).SetClientID(id).SetSupplierName("TEST_ONLY supplier").SetSupplierCui("RO90000002").SetNormalizedSupplierCui("90000002").SetDocumentNumber(invoiceID).SetNormalizedDocumentNumber(invoiceID).SetIssueDate(now).SetIssueDay(invoicing.InvoiceIssueDay(now)).SetTotalAmount("121").SetCurrency("RON").SetSpvReference(invoiceID).SetIngestionSource("TEST_ONLY").SetExternalDeliveryID(invoiceID).SetPipelineStatus(entinvoice.PipelineStatusEXPORTING).SetSagaStatus(entinvoice.SagaStatusEXPORTING).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = s.DB.ExecContext(context.Background(), `DELETE FROM outbox_entries WHERE aggregate_id=$1`, invoiceID)
+		_, _ = s.DB.ExecContext(context.Background(), `DELETE FROM invoices WHERE id=$1`, invoiceID)
+	})
+	// A replay resends the identical command, including the revision it was
+	// first sent with.
+	enable := clients.Command{ClientID: id, SagaEnabled: true, ExpectedRevision: d.Client.Revision, CommandID: "enable-saga-resume"}
+	d, err := svc.Command(ctx, "saga", enable)
+	if err != nil || !d.SagaEnabled {
+		t.Fatal("enable failed", err)
+	}
+	var pending int
+	if err = s.DB.QueryRowContext(ctx, `SELECT count(*) FROM outbox_entries WHERE aggregate_id=$1 AND event_type='INVOICE_CONTINUE' AND status='PENDING'`, invoiceID).Scan(&pending); err != nil || pending != 1 {
+		t.Fatal("stuck invoice not resumed", pending, err)
+	}
+	if _, err = svc.Command(ctx, "saga", enable); err != nil {
+		t.Fatal("replay", err)
+	}
+	if err = s.DB.QueryRowContext(ctx, `SELECT count(*) FROM outbox_entries WHERE aggregate_id=$1`, invoiceID).Scan(&pending); err != nil || pending != 1 {
+		t.Fatal("replayed command duplicated continuation", pending, err)
 	}
 }

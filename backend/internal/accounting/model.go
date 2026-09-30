@@ -314,6 +314,51 @@ func (p *Profile) Ordinary() bool {
 	return p != nil && p.Framework == "OMFP_1802_2014" && p.ChartPolicy != "" && len(p.AccountCodes) > 0 && p.validAccounts() && p.TaxRegime == "PROFIT_TAX" && p.VATRegistration == "ORDINARY_REGISTERED" && p.DeductionActivity == "WITH_DEDUCTION_RIGHT" && p.CashAccounting == "NO" && p.ProRata == "NO"
 }
 
+// ProfileDerivedExpenseTaxValue is the only decision Diana derives from the
+// approved profile alone: microenterprises are outside profit tax, so the
+// expense profit-tax treatment is not applicable.
+func (p *Profile) ProfileDerivedExpenseTaxValue() (Value, bool) {
+	if p == nil || p.TaxRegime != "MICROENTERPRISE" {
+		return Value{}, false
+	}
+	return Value{Kind: "NOT_APPLICABLE", Reason: "Profilul aprobat indică regimul microîntreprinderii pentru această dată."}, true
+}
+
+// SAGAExportSupported reports whether the code-owned SAGA mapping can represent
+// this profile faithfully. Classification works for every valid profile; only
+// the export is limited, with an explicit reason for unsupported variants.
+func (p *Profile) SAGAExportSupported() (bool, string) {
+	switch {
+	case p == nil:
+		return false, "Lipsește profilul fiscal aprobat."
+	case p.Framework != "OMFP_1802_2014":
+		return false, "Exportul SAGA este disponibil doar pentru clienții care aplică OMFP 1802/2014."
+	case p.TaxRegime != "PROFIT_TAX" && p.TaxRegime != "MICROENTERPRISE":
+		return false, "Exportul SAGA este disponibil doar pentru clienții plătitori de impozit pe profit sau microîntreprinderi."
+	case p.VATRegistration != "ORDINARY_REGISTERED":
+		return false, "Exportul SAGA pentru clienții neînregistrați în scopuri de TVA sau cu regim special de TVA nu este încă suportat; clasificarea rămâne disponibilă."
+	case p.DeductionActivity != "WITH_DEDUCTION_RIGHT":
+		return false, "Exportul SAGA pentru activități fără drept de deducere sau mixte nu este încă suportat; clasificarea rămâne disponibilă."
+	case p.CashAccounting != "NO":
+		return false, "Exportul SAGA pentru clienții cu TVA la încasare nu este încă suportat; clasificarea rămâne disponibilă."
+	case p.ProRata != "NO":
+		return false, "Exportul SAGA pentru clienții cu pro-rata nu este încă suportat; clasificarea rămâne disponibilă."
+	case !p.validAccounts():
+		return false, "Lista de conturi a profilului este invalidă."
+	}
+	return true, ""
+}
+
+// DefaultSAGAMapping is the code-owned SAGA mapping used when no per-client
+// release pack exists: ordinary/immediate VAT with full deduction omits
+// TipDeducere. Its approval is the reviewed exporter code itself.
+var DefaultSAGAMapping = MappingPolicy{
+	Version:              "SAGA_C_DOMAIN_V2_ORDINARY_V1",
+	Approved:             true,
+	OrdinaryFullOmission: true,
+	Approval:             Approval{Actor: "Diana SAGA exporter", At: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Evidence: []string{"Docs/DECISIONS.md D-108"}},
+}
+
 type Predicate struct {
 	SupplierVATRegistration string       `json:"supplierVatRegistration"`
 	SupplierCashAccounting  string       `json:"supplierCashAccounting"`
@@ -376,7 +421,7 @@ func (p *Pack) Valid(profile *Profile, client string, date accountingdate.Date, 
 	}
 	seen := map[string]bool{}
 	for _, r := range p.Rules {
-		if !r.Valid() || seen[r.VersionID] || r.ClientPolicy != profile.ChartPolicy || r.Dimension == "ACCOUNT" && !profile.AccountAllowed(r.Result.Account) || r.EffectiveFrom < p.EffectiveFrom || (p.EffectiveTo != nil && (r.EffectiveTo == nil || *r.EffectiveTo > *p.EffectiveTo)) {
+		if !r.Valid() || seen[r.VersionID] || r.ClientPolicy != profile.ChartPolicy || r.Dimension == "ACCOUNT" && !profile.RuleAccountAllowed(r.Result.Account) || r.EffectiveFrom < p.EffectiveFrom || (p.EffectiveTo != nil && (r.EffectiveTo == nil || *r.EffectiveTo > *p.EffectiveTo)) {
 			return false
 		}
 		seen[r.VersionID] = true
@@ -445,6 +490,9 @@ type Snapshot struct {
 	ContractRevision  uint64            `json:"contractRevision,omitempty"`
 	TestOnly          bool              `json:"testOnly"`
 	AccountCatalog    []AccountSnapshot `json:"accountCatalog,omitempty"`
+	// AccountCatalogFingerprint identifies the global postable catalog used
+	// when the profile has no explicit account list.
+	AccountCatalogFingerprint string `json:"accountCatalogFingerprint,omitempty"`
 }
 
 type AccountSnapshot struct {
@@ -470,9 +518,23 @@ func (p *Profile) validAccounts() bool {
 	}
 	return true
 }
+
+// RuleAccountAllowed is stricter than AccountAllowed: deterministic rule
+// automation never infers an account vocabulary, so it requires an explicit
+// profile list (D-110 applies only to human/AI-reviewed decisions).
+func (p *Profile) RuleAccountAllowed(code string) bool {
+	return p != nil && len(p.AccountCodes) > 0 && p.AccountAllowed(code)
+}
+
+// AccountAllowed applies the profile's optional account vocabulary. An empty
+// list means the whole global OMFP catalog is allowed; callers still require
+// the account to be active and postable in that catalog.
 func (p *Profile) AccountAllowed(code string) bool {
 	if p == nil {
 		return false
+	}
+	if len(p.AccountCodes) == 0 {
+		return true
 	}
 	for _, approved := range p.AccountCodes {
 		if approved == code {

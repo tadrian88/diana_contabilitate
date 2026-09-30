@@ -6,7 +6,7 @@ Status: utilizatorul a raportat trecerea testului de integrare pentru clauze nar
 
 Un PDF contractual este trimis extractorului o singură dată pentru perechea SHA-256 + versiune de extractor. Rezultatul revizuit de om devine un snapshot comercial imuabil. Validarea facturilor citește exclusiv snapshot-ul, variabilele cu proveniență, aliasurile confirmate și factura; nu retrimite contractul la Gemini.
 
-AI-ul produce propuneri neautoritative. Documentul este tratat ca date neîncrezătoare, nu ca instrucțiuni. Regula executabilă este un AST închis și validat; nu se evaluează cod sau formulă text generată de provider. Mapping-ul determinist folosește descrieri/SKU-uri/aliasuri confirmate. Sugestia AI per factură pentru mapping ambiguu nu este implementată încă; asemenea linii rămân `NEVERIFICABIL` până la un alias confirmat explicit prin API.
+AI-ul produce propuneri neautoritative. Documentul este tratat ca date neîncrezătoare, nu ca instrucțiuni. Regula executabilă este un AST închis și validat; nu se evaluează cod sau formulă text generată de provider. Mapping-ul determinist folosește descrieri/SKU-uri/aliasuri confirmate. Pentru liniile neacoperite, motorul ordonează serviciile contractului după cuvintele comune și compatibilitatea unității de măsură (niciodată după preț) și pre-selectează cel mult o sugestie neambiguă; utilizatorul confirmă asocierea din ecranul facturii (D-116). Până la confirmare, linia rămâne `NEVERIFICABIL`.
 
 ## Înlocuire și corectarea unei încărcări greșite
 
@@ -82,6 +82,8 @@ Acțiunile sunt:
 - `ACCEPT_EXCEPTION` pentru un finding, obligatoriu cu motiv și actor;
 - `WAIT_FOR_CORRECTION`, care păstrează factura blocată.
 
+O factură fără contract, pentru care contabilul a ales „Continuă fără contract” (D-120), nu primește `CONTRACT_COVERAGE_INCOMPLETE` și nici `SERVICE_LINE_UNCOVERED`. Primește o singură constatare `CONTRACT_WAIVED`, `CONFORM`, care citează motivul, autorul și data deciziei. Verificările de storno rămân. Decizia contează numai cât timp factura nu are un snapshot contractual asociat.
+
 Clasificarea este pornită numai după `CONFORM` sau după exceptarea explicită a tuturor findings blocante. Comenzile au idempotency key, optimistic revision și verificare de ownership pe client.
 
 Ecranul facturii afișează outcome, valoare actuală/așteptată, calcul, date lipsă, document/pagină/citat și acțiunile disponibile. Review-ul documentului afișează rolul, referința părinte, coverage și regulile comerciale propuse.
@@ -107,12 +109,58 @@ Asocierea autoritativă se face după client/CUI, nu după textul liber al linie
 - COL31 aparține SA / contract 20. Prețurile de 2.250 EUR și 1.875 EUR corespund discountului de 25%, iar referința la contractul 19 produce aceeași abatere;
 - dacă documentele sunt storno, ambele cer factura originală; fără aceasta apare și `ORIGINAL_INVOICE_UNAVAILABLE`.
 
+## Revizuire față în față și asocierea serviciilor — 2026-09-29
+
+- **TVA separat de preț.** O clauză `VAT` produce `VAT_RATE_MATCH` / `VAT_RATE_MISMATCH` pe fiecare linie, cu sursa legală a cotei în `calculation`; `PRICE_*` rămâne doar pentru tarife. Versiunea motorului devine `COMMERCIAL_VALIDATION_V2`; rulările vechi rămân neschimbate până la `RERUN`.
+- **Card grupat.** Verificările pe factură apar sus, cele pe linii sub antetul liniei; o cotă TVA conformă pe toate liniile apare o singură dată. Valorile sunt formatate ro-RO: „Pe factură” / „În contract”.
+- **Verificare față în față** (`?tab=contract&verifica=<id>`). În stânga, extrasul din e-Factura cu rândul și valoarea comparată marcate și calea XML. În dreapta, PDF-ul original la pagina evidenței, cu fragmentele localizate în stratul de text pdf.js și evidențiate. O sumă care apare de mai multe ori este aleasă pe rândul serviciului. Navigarea se face cu ← →; excepțiile pentru `NECONFORM` se aprobă tot aici.
+- **Asocierea serviciilor** (`?asociere=`). Toate liniile neacoperite apar într-un singur ecran, cu serviciile ca opțiuni (nu drop-down), semnalele de potrivire și rândul din PDF.
+  - Sugestia este pre-selectată doar când e neambiguă; prețul nu este niciodată semnal.
+  - „Ține minte pentru acest contract” este implicit bifat.
+  - Confirmarea trimite toate asocierile, cu chei derivate din rulare (reîncercarea nu dublează), apoi `RERUN`.
+- **Formulări învățate.** `GET /api/v1/clients/{clientId}/contract-dossiers/{dossierId}/service-aliases` (sau `.../contract-documents/{documentId}/service-aliases`) și `POST /api/v1/clients/{clientId}/commercial-service-aliases/{aliasId}/revoke`. Revocarea păstrează istoricul (migrarea `000036`), scrie `COMMERCIAL_ALIAS_REVOKED` în audit și permite reasocierea formulării.
+  - Din 2026-09-30 (D-119), o asociere confirmată cu „Ține minte” se salvează de două ori: ca formulare a dosarului și ca asociere a facturii. Revocarea formulării (cu confirmare) afectează doar facturile viitoare.
+  - „Serviciul nu apare în contract” oferă corecția facturii (`WAIT_FOR_CORRECTION`), excepția motivată pe linie (`ACCEPT_EXCEPTION`) sau încărcarea anexei.
+  - Rularea afișată spune când contractul are între timp o versiune nouă (`activeSnapshotVersion`, citit la `GET`, nestocat) sau când formulările s-au schimbat, și oferă „Rulează din nou”.
+  - Un tarif unitar cu cantitate fixă în contract (`CONTRACT_FIXED_QUANTITY`, neschimbată față de valoarea citată) primește automat valoarea variabilei `unit_quantity_*` cu sursa `CONTRACT`.
+- **Activarea tarifelor.** Sumele cu separator de mii (1.800,00 · 1 800,00 · 1,800.00) sunt recunoscute. Răspunsul `{activated, skipped[]}` explică fiecare serviciu neactivat. Butonul de activare apare cât timp există tarife confirmate nefolosite, chiar dacă alte tarife sunt active. Regulile noi citează și rândul serviciului, nu doar suma, și poartă unitatea de măsură.
+
+## Pagina documentului de contract și închiderea clauzelor — 2026-09-29
+
+- **Spațiu de lucru.** Pagina `/contracts/documents/{clientId}/{documentId}` afișează valorile extrase grupate: părți, contract, plată, servicii și tarife, clauze.
+  - Fiecare valoare apare lângă PDF-ul original, evidențiat la textul citat.
+  - Navigarea: ↑/↓, `?element=field:<cheie>|service:<index>|rule:<ruleId>|group:services|group:clauses`.
+  - Link-urile din factură duc direct la regula verificată.
+- **Starea comercială a documentului.** `GET .../contract-documents/{documentId}` întoarce `commercialState` pentru un document confirmat, citit din snapshot-ul activ:
+  - `coverage` și `snapshotVersion`;
+  - `activeRuleIds`: regulile documentului prezente în snapshot;
+  - `services[]`: pentru fiecare tarif confirmat, `active` sau `skipReason`, calculat cu aceleași verificări ca activarea, inclusiv `PRICED_BY_CONTRACT_CLAUSES`;
+  - `clauses[]`: starea fiecărei clauze propuse (`PROPOSED`/`CONFIRMED`/`REJECTED`), cu motiv, cine și când.
+
+  `confirmedValues.coverage` rămâne valoarea de la confirmare și nu descrie acoperirea curentă.
+- **Clauze închise fără regulă** (migrarea `000037`: `review_reason_code`, `review_reason`, `proposal_rule_id`):
+  - `COVERED_BY_CONTRACT_REFERENCE`: o a doua clauză de referință care conține referința principală;
+  - `COVERED_BY_SUPPLIER_IDENTITY`: o clauză de identitate în care **toate** CUI-urile citate sunt CUI-ul furnizorului dosarului;
+  - `COVERED_BY_PARTY_IDENTITY` (D-118): o clauză de identitate care citează CUI-ul clientului (singur sau alături de al furnizorului). Clientul este cumpărătorul verificat la confirmare și pe fiecare factură din SPV. Dacă apare un al treilea CUI, clauza rămâne în review;
+  - `COVERED_BY_SERVICE_TARIFF` (D-118, doar sistemul): o clauză de preț fix/unitar care doar repetă un tarif activ din „Servicii și tarife” (același literal, aceeași monedă, fără aplicabilitate proprie, serviciul numit în text). O astfel de clauză nu mai poate fi confirmată, iar sugestiile de asociere nu o mai oferă lângă tarif.
+
+    Se închid automat după confirmare (`CloseCoveredClauses`), la fiecare confirmare de regulă și după activarea tarifelor. Pentru contractele confirmate anterior: `go run ./cmd/contractrules close-covered-clauses`.
+  - O regulă `IDENTITY` poate cita doar CUI-ul furnizorului (motorul o compară cu furnizorul facturii): altfel confirmarea este refuzată (`IDENTITY_RULE_NOT_SUPPLIER`).
+  - `NOT_INVOICE_VERIFIABLE`: se închide cu `POST .../contract-documents/{documentId}/commercial-rules/{ruleId}/dismiss`, `{reasonCode, reason}`.
+    - Motivul are 10–500 caractere.
+    - Evenimentul `COMMERCIAL_CLAUSE_DISMISSED` intră în audit.
+    - Reluarea e idempotentă. O clauză deja confirmată întoarce 409.
+- **Avansarea snapshot-ului** (`advanceSnapshot`):
+  - Acoperirea devine completă numai când dosarul nu mai are clauze propuse; `CONFLICTED` se păstrează.
+  - Versiunea nouă este prima liberă din dosar.
+  - Nu se scrie nimic dacă regulile și acoperirea nu se schimbă.
+
 ## Limitări explicite V1
 
 - Nu s-a executat Gemini live și calitatea V4 pe PDF-urile reale nu este revendicată.
 - Nu există încă adaptor live pentru BNR/ECB sau calendar oficial de zile nelucrătoare; valorile cu proveniență pot fi introduse prin API.
 - Preview-ul retroactiv există, dar execuția bulk nu este implementată; istoricul nu se rescrie automat.
 - Ledger-ul este pregătit de schemă, dar postarea și verificarea cumulativă automată pentru plafoane/consum contractual nu sunt implementate.
-- Mapping-ul AI per factură și ecranul de confirmare a aliasurilor lipsesc. Variabilele lipsă pot fi completate în ecranul facturii cu valoare, perioadă și referință de proveniență; aliasurile se pot confirma prin API, apoi utilizatorul cere `RERUN`.
+- Nu există mapping AI per factură. Sugestiile deterministe și confirmarea asocierilor (cu `RERUN` automat) sunt în ecranul facturii; asocierile învățate se pot revoca din pagina contractului. Variabilele lipsă pot fi completate în ecranul facturii cu valoare, perioadă și referință de proveniență.
 - Validarea de TVA este limitată la comparația ratei de pe linie cu expresia confirmată; tratamentul fiscal complet și cursul oficial nu sunt deduse automat.
 - Confirmarea unei anexe este disponibilă prin fluxul de document, dar conflictele de clauze nu au încă un editor dedicat de reconciliere; `CONFLICTED` blochează validarea automată.

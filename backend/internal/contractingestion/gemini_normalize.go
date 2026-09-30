@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
-	"net/http"
+	"log/slog"
 	"strings"
 
 	"diana-contabilitate/backend/internal/commercialvalidation"
+	"diana-contabilitate/backend/internal/llmusage"
+	"diana-contabilitate/backend/internal/platform/gemini"
 )
 
 // This second, ingestion-only request receives extracted clauses, never the
@@ -49,6 +52,7 @@ func (g *GeminiContractExtractor) normalizeCommercialClauses(ctx context.Context
 	}
 	inputJSON, err := json.Marshal(candidates)
 	if err != nil {
+		logNormalizationSkipped("encode_input", len(candidates))
 		return nil, nil
 	}
 	payload := map[string]any{
@@ -57,54 +61,28 @@ func (g *GeminiContractExtractor) normalizeCommercialClauses(ctx context.Context
 		"generation_config": map[string]any{"temperature": 0, "thinking_summaries": "none"},
 		"response_format":   map[string]any{"type": "text", "mime_type": "application/json", "schema": normalizationJSONSchema()},
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
+	// Usage is recorded by the transport on every path that reached the
+	// provider; the returned counts only feed the legacy attempt columns.
+	resp, err := g.api.Interact(ctx, gemini.Request{Model: g.model, Operation: llmusage.OperationContractClauseNormalization, Payload: payload})
+	switch {
+	case errors.Is(err, gemini.ErrSend):
+		logNormalizationSkipped("provider_network", len(candidates))
+		return nil, nil
+	case errors.Is(err, gemini.ErrRead):
+		logNormalizationSkipped("read_response", len(candidates))
+		return nil, nil
+	case err != nil:
+		logNormalizationSkipped("encode_request", len(candidates))
 		return nil, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/interactions", bytes.NewReader(body))
-	if err != nil {
-		return nil, nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", g.apiKey)
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return nil, nil
-	}
-	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logNormalizationSkipped("provider_status", len(candidates), "http_status", resp.StatusCode)
 		return nil, nil
 	}
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	if err != nil {
+	envelope := resp.Envelope
+	if resp.EnvelopeErr != nil || envelope.Status != "completed" {
+		logNormalizationSkipped("invalid_envelope", len(candidates))
 		return nil, nil
-	}
-	var envelope struct {
-		Status string `json:"status"`
-		Steps  []struct {
-			Type    string `json:"type"`
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"steps"`
-		Usage struct {
-			Input  *int64 `json:"total_input_tokens"`
-			Output *int64 `json:"total_output_tokens"`
-		} `json:"usage"`
-	}
-	if json.Unmarshal(responseBody, &envelope) != nil || envelope.Status != "completed" {
-		return nil, nil
-	}
-	var output strings.Builder
-	for _, step := range envelope.Steps {
-		if step.Type == "model_output" {
-			for _, part := range step.Content {
-				if part.Type == "text" {
-					output.WriteString(part.Text)
-				}
-			}
-		}
 	}
 	var result struct {
 		Rules []struct {
@@ -112,12 +90,14 @@ func (g *GeminiContractExtractor) normalizeCommercialClauses(ctx context.Context
 			Expression json.RawMessage `json:"expression"`
 		} `json:"rules"`
 	}
-	decoder := json.NewDecoder(strings.NewReader(output.String()))
+	decoder := json.NewDecoder(strings.NewReader(envelope.Text))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&result) != nil || decoder.Decode(new(any)) != io.EOF {
-		return envelope.Usage.Input, envelope.Usage.Output
+		logNormalizationSkipped("invalid_output", len(candidates))
+		return envelope.InputTokens, envelope.OutputTokens
 	}
 	seen := map[string]bool{}
+	completed := 0
 	for _, item := range result.Rules {
 		index, known := indexes[item.ID]
 		if !known || seen[item.ID] || len(item.Expression) == 0 || bytes.Equal(item.Expression, []byte("null")) {
@@ -141,9 +121,19 @@ func (g *GeminiContractExtractor) normalizeCommercialClauses(ctx context.Context
 		encoded, err := json.Marshal(rule)
 		if err == nil {
 			proposal.CommercialClauses[index].Rule = encoded
+			completed++
 		}
 	}
-	return envelope.Usage.Input, envelope.Usage.Output
+	if completed < len(candidates) {
+		logNormalizationSkipped("expression_null_or_invalid", len(candidates)-completed)
+	}
+	return envelope.InputTokens, envelope.OutputTokens
+}
+
+// logNormalizationSkipped records why narrative-only clauses stayed without an
+// AI expression. Only counts and categories are logged, never clause text.
+func logNormalizationSkipped(reason string, clauses int, attrs ...any) {
+	slog.Warn("contract commercial normalization incomplete", append([]any{"reason", reason, "clauses", clauses}, attrs...)...)
 }
 
 func normalizationJSONSchema() map[string]any {

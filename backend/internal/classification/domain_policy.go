@@ -38,12 +38,14 @@ func (p DomainPolicy) Evaluate(in InvoiceContext) (Result, error) {
 				if line.SourceFacts != nil {
 					proposal.Evidence.SourcePath = line.SourceFacts.Path
 				}
-				if dimension == "EXPENSE_TAX_TREATMENT" && profile.TaxRegime == "MICROENTERPRISE" {
-					v := accounting.Value{Kind: "NOT_APPLICABLE", Reason: "Profilul aprobat indică regimul microîntreprinderii pentru această dată."}
+				if v, derived := profile.ProfileDerivedExpenseTaxValue(); derived && dimension == "EXPENSE_TAX_TREATMENT" {
 					proposal.TypedValue = &v
 					proposal.ProposedValue = v.Text()
 					proposal.Explanation = v.Reason
-					proposal.LegalBasis = "Profil fiscal aprobat; necesită confirmare contabilă în domeniul inițial."
+					proposal.LegalBasis = "Profil fiscal aprobat: microîntreprinderile nu datorează impozit pe profit."
+					proposal.Confidence = "Derivat din profilul fiscal aprobat"
+					proposal.Source = SourceProfile
+					proposal.RequiresReview = false
 				}
 			}
 			if profile.Valid(in.ClientID, in.IssueDate) && (!profile.TestOnly || p.AllowTestOnly) && profile.Ordinary() && pack.Valid(profile, in.ClientID, in.IssueDate, p.AllowTestOnly) && ordinarySource(in, line) {

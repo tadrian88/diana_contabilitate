@@ -219,6 +219,17 @@ func (s *Store) ExecuteClientCommand(ctx context.Context, kind string, c clients
 	case "saga":
 		event = "SAGA_CONFIGURATION_UPDATED"
 		_, err = tx.ExecContext(ctx, `INSERT INTO client_saga_configurations(client_id,enabled,updated_at) VALUES($1,$2,$3) ON CONFLICT(client_id) DO UPDATE SET enabled=EXCLUDED.enabled,updated_at=EXCLUDED.updated_at`, id, c.SagaEnabled, now)
+		if err == nil && c.SagaEnabled {
+			// Invoices that reached SAGA handoff while export was disabled were
+			// permanently rejected by the worker. Enabling export resumes them in
+			// the same transaction; continuation is idempotent per revision.
+			_, err = tx.ExecContext(ctx, `INSERT INTO outbox_entries(id,event_type,aggregate_type,aggregate_id,payload,idempotency_key,status,attempts,created_at,available_at)
+				SELECT 'out-saga-enabled-'||md5(i.id||':'||i.revision::text||':'||$3::text),'INVOICE_CONTINUE','INVOICE',i.id,jsonb_build_object('invoice_id',i.id),'saga-configuration-enabled:'||i.id||':'||i.revision::text||':'||$3::text,'PENDING',0,$2::timestamptz,$2::timestamptz
+				FROM invoices i
+				WHERE i.client_id=$1 AND i.pipeline_status IN ('READY_FOR_SAGA','EXPORTING')
+				  AND NOT EXISTS(SELECT 1 FROM saga_export_attempts a WHERE a.invoice_id=i.id AND a.invoice_revision=i.revision AND a.status='GENERATED')
+				ON CONFLICT(idempotency_key) DO NOTHING`, id, now, now.UTC().Format(time.RFC3339Nano))
+		}
 	case "profile":
 		var latest int
 		err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM client_accounting_profiles WHERE client_id=$1`, id).Scan(&latest)

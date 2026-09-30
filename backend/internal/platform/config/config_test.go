@@ -139,3 +139,14 @@ func TestInvalidRuntimeSyntaxFailsRatherThanUsingDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestAccountingAnalysisJobTimeoutLeavesHeadroomOnlyForAnalysis(t *testing.T) {
+	cfg := Config{WorkerJobTimeout: 2 * time.Minute, AccountingAnalysisTimeout: 180 * time.Second}
+	if cfg.AccountingAnalysisJobTimeout() != 4*time.Minute {
+		t.Fatal(cfg.AccountingAnalysisJobTimeout())
+	}
+	cfg = Config{WorkerJobTimeout: 10 * time.Minute, AccountingAnalysisTimeout: 30 * time.Second}
+	if cfg.AccountingAnalysisJobTimeout() != 10*time.Minute {
+		t.Fatal("shared job timeout must remain the lower bound")
+	}
+}

@@ -136,7 +136,7 @@ func Load() (Config, error) {
 		ContractExtractorMode:     envOr("CONTRACT_EXTRACTOR_MODE", "gemini"),
 		AccountingAnalysisEnabled: envBool("ACCOUNTING_ANALYSIS_ENABLED", false),
 		AccountingAnalysisModel:   envOr("GEMINI_ACCOUNTING_MODEL", envOr("GEMINI_CONTRACT_MODEL", "gemini-3.8-flash")),
-		AccountingAnalysisTimeout: envDuration("ACCOUNTING_ANALYSIS_TIMEOUT", 90*time.Second),
+		AccountingAnalysisTimeout: envDuration("ACCOUNTING_ANALYSIS_TIMEOUT", 180*time.Second),
 		AuthSessionTTL:            envDuration("AUTH_SESSION_TTL", 12*time.Hour),
 		AuthLoginLimit:            envInt("AUTH_LOGIN_LIMIT", 5),
 		AuthLoginWindow:           envDuration("AUTH_LOGIN_WINDOW", 15*time.Minute),
@@ -277,4 +277,14 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// AccountingAnalysisJobTimeout is the Asynq deadline for accounting analysis
+// jobs only: the provider timeout plus persistence headroom, never shorter than
+// the shared worker job timeout. Other job types keep WorkerJobTimeout.
+func (c Config) AccountingAnalysisJobTimeout() time.Duration {
+	if timeout := c.AccountingAnalysisTimeout + time.Minute; timeout > c.WorkerJobTimeout {
+		return timeout
+	}
+	return c.WorkerJobTimeout
 }
