@@ -85,7 +85,10 @@ type headerTag struct {
 	Number       string `xml:"FacturaNumar"`
 	Date         string `xml:"FacturaData"`
 	DueDate      string `xml:"FacturaScadenta,omitempty"`
-	Currency     string `xml:"FacturaMoneda,omitempty"`
+	// CashAccounting (Da/Nu) is written only for issued invoices (D-130); the
+	// SAGA manual places FacturaTVAIncasare before FacturaMoneda.
+	CashAccounting string `xml:"FacturaTVAIncasare,omitempty"`
+	Currency       string `xml:"FacturaMoneda,omitempty"`
 }
 
 type detailsTag struct {

@@ -6,6 +6,7 @@ import (
 	"diana-contabilitate/backend/internal/classification"
 	"diana-contabilitate/backend/internal/invoicing"
 	"fmt"
+	"strings"
 )
 
 const DomainExporterVersion = "SAGA_C_DOMAIN_V2_V1"
@@ -21,6 +22,17 @@ type Readiness struct {
 // generation. ignoreTask is used only inside the completion transaction before
 // the current classification task is resolved; other task types still block.
 func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest, ignoreTask bool) Readiness {
+	return evaluateReadiness(item, client, allowTest, ignoreTask, accounting.DefaultSAGAOutgoingMapping)
+}
+
+// OutgoingFormatUnverified is the reason an issued invoice cannot be exported
+// until SAGA Ieșiri is verified (D-130).
+const OutgoingFormatUnverified = "Formatul SAGA Ieșiri nu este încă verificat."
+
+// evaluateReadiness takes the Ieșiri mapping explicitly so tests can exercise
+// the full path of an approved mapping; production always passes the
+// code-owned default.
+func evaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest, ignoreTask bool, outgoingMapping accounting.MappingPolicy) Readiness {
 	fail := func(reason string) Readiness { return Readiness{Reason: reason} }
 	if item == nil || item.ID == "" || client.ID != item.ClientID || client.Name == "" || client.CUI == "" || item.SupplierCUI == nil || *item.SupplierCUI == "" || item.SupplierName == "" || item.DocumentNumber == "" || item.IssueDate.IsZero() {
 		return fail("Identitatea facturii/clientului este incompletă.")
@@ -43,7 +55,12 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 		}
 		return Readiness{Ready: true, MappingVersion: ExporterVersion}
 	}
-	if item.ModelVersion == accounting.ModelVersion && (item.SourceFacts == nil || invoicing.NormalizeBusinessIdentifier(item.SourceFacts.BuyerVATID) != invoicing.NormalizeBusinessIdentifier(client.CUI) || invoicing.NormalizeBusinessIdentifier(item.SourceFacts.SupplierVATID) != invoicing.NormalizeBusinessIdentifier(*item.SupplierCUI)) {
+	outgoing := item.Outgoing()
+	if outgoing {
+		if item.ModelVersion == accounting.ModelVersion && !issuedIdentityMatches(item, client) {
+			return fail("Identitatea fiscală sursă nu corespunde clientului emitent/cumpărătorului facturii.")
+		}
+	} else if item.ModelVersion == accounting.ModelVersion && (item.SourceFacts == nil || invoicing.NormalizeBusinessIdentifier(item.SourceFacts.BuyerVATID) != invoicing.NormalizeBusinessIdentifier(client.CUI) || invoicing.NormalizeBusinessIdentifier(item.SourceFacts.SupplierVATID) != invoicing.NormalizeBusinessIdentifier(*item.SupplierCUI)) {
 		return fail("Identitatea fiscală sursă nu corespunde clientului/furnizorului facturii.")
 	}
 	date := accountingdate.FromTime(item.IssueDate)
@@ -61,7 +78,10 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 	if snapshot.Pack != nil {
 		mapping = snapshot.Pack.Mapping
 	}
-	if mapping.Version == "" || !mapping.Approved || !mapping.Approval.Valid() || mapping.TestOnly && !allowTest || !mapping.OrdinaryFullOmission {
+	if outgoing {
+		// The Ieșiri gate is checked last, so data problems surface first.
+		mapping = outgoingMapping
+	} else if mapping.Version == "" || !mapping.Approved || !mapping.Approval.Valid() || mapping.TestOnly && !allowTest || !mapping.OrdinaryFullOmission {
 		return fail("Maparea SAGA pentru tratamentul obișnuit nu este aprobată/validată.")
 	}
 	if supported, reason := snapshot.Profile.SAGAExportSupported(); !supported {
@@ -74,7 +94,7 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 	// rule or, per line, by an accountant-reviewed VAT_TREATMENT with immediate
 	// exigibility (directly or from accepted reusable knowledge; D-111).
 	supplierConfirmationRequired := false
-	if item.SourceFacts != nil && item.SourceFacts.CashAccounting == "UNKNOWN" {
+	if !outgoing && item.SourceFacts != nil && item.SourceFacts.CashAccounting == "UNKNOWN" {
 		supplierConfirmationRequired = true
 		if snapshot.Pack != nil {
 			for _, r := range snapshot.Pack.Rules {
@@ -88,7 +108,11 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 	for _, l := range item.Lines {
 		sourceLines = append(sourceLines, accounting.SourceLine{ID: l.ID, Facts: l.SourceFacts, Net: l.NetValue, VAT: l.VATValue, Total: l.TotalValue, Rate: l.VATRate})
 	}
-	if err := accounting.Reconcile(item.SourceFacts, sourceLines, item.Total.Amount, item.Total.Currency); err != nil {
+	reconcile := accounting.Reconcile
+	if outgoing {
+		reconcile = accounting.ReconcileIssued
+	}
+	if err := reconcile(item.SourceFacts, sourceLines, item.Total.Amount, item.Total.Currency); err != nil {
 		return fail(err.Error())
 	}
 	positions := map[int]bool{}
@@ -127,7 +151,12 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 			if e == nil || e.ModelVersion != accounting.ModelVersion || e.ProfileID != snapshot.Profile.ID || e.ProfileVersion != snapshot.Profile.Version || e.PolicyID != snapshot.Profile.ChartPolicy || e.DateBasis != accounting.IssueDateBasis || e.Date != date || e.SourceDocumentID != item.SourceFacts.SourceDocumentID || e.ParserVersion != item.SourceFacts.ParserVersion || e.SourceHash != item.SourceFacts.SourceHash || e.SourcePath != l.SourceFacts.Path {
 				return fail("Proveniența deciziei nu corespunde snapshot-ului.")
 			}
-			if !d.HumanReviewed && d.Source == classification.SourceProfile {
+			if !d.HumanReviewed && d.Source == classification.SourceDirection {
+				expected, derived := accounting.DirectionDerivedValue(string(d.Dimension))
+				if !outgoing || !derived || d.Rule != nil || !sameValue(expected, *d.TypedValue) || d.PolicyVersion != classification.DomainPolicyVersion {
+					return fail("Decizia derivată din direcția facturii nu corespunde facturii emise.")
+				}
+			} else if !d.HumanReviewed && d.Source == classification.SourceProfile {
 				expected, derived := snapshot.Profile.ProfileDerivedExpenseTaxValue()
 				if !derived || string(d.Dimension) != "EXPENSE_TAX_TREATMENT" || d.Rule != nil || !sameValue(expected, *d.TypedValue) || d.PolicyVersion != classification.DomainPolicyVersion {
 					return fail("Decizia derivată din profil nu corespunde profilului aprobat.")
@@ -175,13 +204,68 @@ func EvaluateReadiness(item *invoicing.Invoice, client ClientIdentity, allowTest
 		if !snapshot.Profile.AccountAllowed(values["ACCOUNT"].Account) {
 			return fail("Contul/analiticul nu este în vocabularul aprobat al politicii clientului.")
 		}
-		tag, err := mapDomainLine(l, values, mapping, snapshot.Profile)
+		mapLine := mapDomainLine
+		if outgoing {
+			mapLine = mapOutgoingLine
+		}
+		tag, err := mapLine(l, values, mapping, snapshot.Profile)
 		if err != nil {
 			return fail(err.Error())
 		}
 		result.Lines[l.ID] = tag
 	}
+	if outgoing && (mapping.Version == "" || !mapping.Approved || !mapping.Approval.Valid() || mapping.TestOnly && !allowTest) {
+		return fail(OutgoingFormatUnverified)
+	}
 	return result
+}
+
+// issuedIdentityMatches checks an issued invoice: the client is the source
+// supplier and the stored customer is the source buyer (VAT or legal ID; a
+// natural person has only a CNP).
+func issuedIdentityMatches(item *invoicing.Invoice, client ClientIdentity) bool {
+	f := item.SourceFacts
+	if f == nil || item.NormalizedCustomerID == nil || invoicing.NormalizeBusinessIdentifier(f.SupplierVATID) != invoicing.NormalizeBusinessIdentifier(client.CUI) || invoicing.NormalizeBusinessIdentifier(*item.SupplierCUI) != invoicing.NormalizeBusinessIdentifier(client.CUI) {
+		return false
+	}
+	for _, raw := range []string{f.BuyerVATID, f.BuyerLegalID} {
+		if raw == "" {
+			continue
+		}
+		if _, normalized := invoicing.CustomerIdentity(raw, f.BuyerCountry); normalized == *item.NormalizedCustomerID {
+			return true
+		}
+	}
+	return false
+}
+
+// mapOutgoingLine maps an issued-invoice line to SAGA Ieșiri: ordinary VAT
+// whose chargeability follows the client profile, no deduction or expense
+// treatment, and a credited sales account (D-129, D-130).
+func mapOutgoingLine(l invoicing.Line, v map[string]accounting.Value, _ accounting.MappingPolicy, profile *accounting.Profile) (lineTag, error) {
+	treatment, vat, expense, account := v["VAT_TREATMENT"], v["VAT_DEDUCTIBILITY"], v["EXPENSE_TAX_TREATMENT"], v["ACCOUNT"].Account
+	timing := "IMMEDIATE"
+	if profile != nil && profile.CashAccounting == "YES" {
+		timing = "DEFERRED"
+	}
+	if treatment.Kind != "ORDINARY" || treatment.Timing != timing || treatment.SourceCategory != l.SourceFacts.Code || treatment.SourceRate == nil || !treatment.SourceRate.Equal(l.VATRate) {
+		return lineTag{}, fmt.Errorf("Tratamentul TVA al facturii emise nu este compatibil cu sursa/profilul clientului.")
+	}
+	if vat.Kind != "NOT_APPLICABLE" || expense.Kind != "NOT_APPLICABLE" {
+		return lineTag{}, fmt.Errorf("Factura emisă nu poate avea drept de deducere sau tratament de cheltuială.")
+	}
+	if !outgoingAccount(account) {
+		return lineTag{}, fmt.Errorf("Contul liniei emise trebuie să fie de venituri (clasa 7), 167, 419 sau 472.")
+	}
+	additional := ""
+	if l.AdditionalInfo != nil {
+		additional = *l.AdditionalInfo
+	}
+	return lineTag{Position: l.Position, Description: l.Description, AdditionalInfo: additional, Unit: l.Unit, Quantity: l.Quantity.String(), UnitPrice: l.UnitPrice.String(), NetValue: l.NetValue.String(), VATRate: l.VATRate.String(), VATValue: l.VATValue.String(), Account: account}, nil
+}
+
+func outgoingAccount(code string) bool {
+	return code != "" && (code[0] == '7' || strings.HasPrefix(code, "167") || strings.HasPrefix(code, "419") || strings.HasPrefix(code, "472"))
 }
 func sameValue(a, b accounting.Value) bool { return canonicalValue(a) == canonicalValue(b) }
 func mapDomainLine(l invoicing.Line, v map[string]accounting.Value, p accounting.MappingPolicy, profile *accounting.Profile) (lineTag, error) {

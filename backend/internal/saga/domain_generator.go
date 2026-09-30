@@ -21,17 +21,29 @@ func GenerateTestOnly(item *invoicing.Invoice, client ClientIdentity) (Artifact,
 	return generate(item, client, true)
 }
 func generate(item *invoicing.Invoice, client ClientIdentity, allowTest bool) (Artifact, error) {
+	return generateWith(item, client, allowTest, accounting.DefaultSAGAOutgoingMapping)
+}
+
+func generateWith(item *invoicing.Invoice, client ClientIdentity, allowTest bool, outgoingMapping accounting.MappingPolicy) (Artifact, error) {
 	if item == nil || item.ModelVersion != accounting.ModelVersion {
 		return generateLegacy(item, client)
 	}
 	if item.PipelineStatus != invoicing.StatusReadyForSAGA && item.PipelineStatus != invoicing.StatusExporting {
 		return Artifact{}, invalid("Factura nu este într-o stare exportabilă.", nil)
 	}
-	ready := EvaluateReadiness(item, client, allowTest, false)
+	ready := evaluateReadiness(item, client, allowTest, false, outgoingMapping)
 	if !ready.Ready {
 		return Artifact{}, invalid(ready.Reason, nil)
 	}
 	tag := invoiceTag{ID: item.ID, Header: headerTag{SupplierName: item.SupplierName, SupplierCIF: *item.SupplierCUI, ClientName: client.Name, ClientCIF: client.CUI, Number: item.DocumentNumber, Date: item.IssueDate.Format("02.01.2006")}}
+	if item.Outgoing() {
+		// SAGA routes the file to Ieșiri because FurnizorCIF is the company.
+		// The customer identifier is written unmasked (it may be a CNP).
+		tag.Header = headerTag{SupplierName: client.Name, SupplierCIF: client.CUI, ClientName: *item.CustomerName, ClientCIF: *item.CustomerIdentifier, Number: item.DocumentNumber, Date: item.IssueDate.Format("02.01.2006"), CashAccounting: "Nu"}
+		if item.AccountingSnapshot.Profile.CashAccounting == "YES" {
+			tag.Header.CashAccounting = "Da"
+		}
+	}
 	if item.DueDate != nil {
 		tag.Header.DueDate = item.DueDate.Format("02.01.2006")
 	}
@@ -65,12 +77,14 @@ func generate(item *invoicing.Invoice, client ClientIdentity, allowTest bool) (A
 		return Artifact{}, err
 	}
 	sum := sha256.Sum256(payload)
-	return Artifact{Filename: fmt.Sprintf("F_%s_%s_%s.xml", filenamePart(*item.SupplierCUI), filenamePart(item.DocumentNumber), item.IssueDate.Format("02.01.2006")), ContentType: ContentType, Payload: payload, SHA256: hex.EncodeToString(sum[:]), ExporterVersion: exportVersion(item), ClassificationSnapshot: snapshot}, nil
+	return Artifact{Filename: fmt.Sprintf("F_%s_%s_%s.xml", filenamePart(tag.Header.SupplierCIF), filenamePart(item.DocumentNumber), item.IssueDate.Format("02.01.2006")), ContentType: ContentType, Payload: payload, SHA256: hex.EncodeToString(sum[:]), ExporterVersion: exportVersion(item), ClassificationSnapshot: snapshot}, nil
 }
 func exportVersion(item *invoicing.Invoice) string {
 	if item != nil && item.ModelVersion == accounting.ModelVersion {
 		v := DomainExporterVersion
-		if item.AccountingSnapshot != nil && item.AccountingSnapshot.Pack != nil {
+		if item.Outgoing() {
+			v += "/" + accounting.DefaultSAGAOutgoingMapping.Version
+		} else if item.AccountingSnapshot != nil && item.AccountingSnapshot.Pack != nil {
 			v += "/" + item.AccountingSnapshot.Pack.Mapping.Version
 		} else {
 			v += "/" + accounting.DefaultSAGAMapping.Version

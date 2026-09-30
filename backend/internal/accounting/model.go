@@ -371,6 +371,15 @@ var DefaultSAGAMapping = MappingPolicy{
 	Approval:             Approval{Actor: "Diana SAGA exporter", At: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Evidence: []string{"Docs/DECISIONS.md D-108"}},
 }
 
+// DefaultSAGAOutgoingMapping is the code-owned mapping of issued invoices to
+// SAGA "Ieșiri" (D-130): the client is Furnizor, the customer is Client, the
+// credited account is Cont and TipDeducere is omitted. It stays unapproved
+// until an import accepted by SAGA C is evidenced (D-102); approving it is a
+// reviewed code change.
+var DefaultSAGAOutgoingMapping = MappingPolicy{
+	Version: "SAGA_C_DOMAIN_V2_OUTGOING_V1",
+}
+
 type Predicate struct {
 	SupplierVATRegistration string       `json:"supplierVatRegistration"`
 	SupplierCashAccounting  string       `json:"supplierCashAccounting"`
