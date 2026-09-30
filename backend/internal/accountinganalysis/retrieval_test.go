@@ -31,6 +31,38 @@ func TestRetrievalPlanTargetsOnlyUnresolvedDimensions(t *testing.T) {
 	}
 }
 
+func TestIncomingAccountRetrievalAlwaysIncludesOMFPAccountFunctions(t *testing.T) {
+	input := Input{IssueDate: "2026-06-01", Direction: Incoming, Lines: []Line{{ID: "l1", Description: "Promovare online", UnresolvedDimensions: []string{"ACCOUNT"}}}}
+	plan := RetrievalPlan(input)
+	if len(plan) != 2 || plan[0].Dimension != "ACCOUNT" || plan[1].Dimension != "ACCOUNT" || len(plan[0].Terms) != 0 || len(plan[1].Terms) == 0 {
+		t.Fatalf("account functions must come first, then the lexical lookup: %#v", plan)
+	}
+	keys := strings.Join(plan[0].CitationKeys, "|")
+	for _, account := range []string{"622", "623", "628", "602", "611", "231"} {
+		if !strings.Contains(keys, "OMFP 1802/2014 contul "+account) {
+			t.Fatalf("missing account %s in %s", account, keys)
+		}
+	}
+	query := plan[0].Query(input, true)
+	if query.Kinds[0] != "ORDER" || query.Limit != len(IncomingAccountFunctions) || len(query.CitationKeys) != len(IncomingAccountFunctions) {
+		t.Fatalf("%#v", query)
+	}
+
+	outgoing := input
+	outgoing.Direction = Outgoing
+	for _, planned := range RetrievalPlan(outgoing) {
+		if len(planned.CitationKeys) > 0 {
+			t.Fatalf("sales must not receive purchase account functions: %#v", planned)
+		}
+	}
+	resolved := Input{IssueDate: "2026-06-01", Direction: Incoming, Lines: []Line{{ID: "l1", UnresolvedDimensions: []string{"VAT_DEDUCTIBILITY"}}}}
+	for _, planned := range RetrievalPlan(resolved) {
+		if len(planned.CitationKeys) > 0 {
+			t.Fatalf("a resolved account must not retrieve account functions: %#v", planned)
+		}
+	}
+}
+
 func TestMergeFragmentsDeduplicatesAndBoundsSize(t *testing.T) {
 	fragment := func(id string, size int) legislation.Fragment {
 		return legislation.Fragment{ID: id, Text: strings.Repeat("x", size)}

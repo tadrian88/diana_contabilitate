@@ -229,6 +229,8 @@ Un run păstrează factura/revizia, input snapshot, fragmentele și knowledge-ul
 
 Retrieval-ul folosește PostgreSQL full-text `simple`, cu filtru obligatoriu pe data facturii. Citarea este acceptată doar dacă ID-ul fragmentului, versiunea, cheia umană și hash-ul coincid cu fragmentul efectiv trimis modelului.
 
+Pentru o factură primită al cărei cont nu este rezolvat, retrieval-ul trimite întotdeauna, înaintea căutării lexicale, funcțiunea conturilor sintetice OMFP 1802/2014 uzuale la achiziții: 601–609, 611–614, 621–628, 231 și 471 (`IncomingAccountFunctions`). Acestea sunt selectate după cheia de citare exactă (`OMFP 1802/2014 contul NNN`) și au în total circa 11.000 de caractere. Motivul: la testul pe datele reale VICTORIA 1881 EVENTS (2026-09-30), căutarea lexicală limitată la 4 fragmente nu aducea aproape niciodată aceste fragmente scurte. Modelul alegea analitice fără textul care deosebește, de exemplu, 622 (comisioane și onorarii) de 628 (alte servicii executate de terți), iar validarea marca aproape fiecare decizie cu date insuficiente sau cu citare neverificabilă. Fragmentele primite de fiecare rulare rămân în `accounting_analysis_runs.retrieved_fragment_ids`.
+
 ## Schimbarea legislației
 
 O versiune legislativă existentă este imutabilă. O modificare se importă drept versiune nouă, cu perioadă nouă. Knowledge-ul păstrează lista versiunilor de care depinde. Adapterul de reutilizare care urmează trebuie să selecteze numai knowledge cu același profil aplicabil și aceleași versiuni legislative; orice diferență produce `STALE/NEEDS_REVIEW`, nu auto-match.

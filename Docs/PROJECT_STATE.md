@@ -1,5 +1,21 @@
 # Project State
 
+## Retrieval: funcțiunea conturilor OMFP ajunge la AI + metrică pe cont sintetic în harness — 2026-09-30
+
+- IMPLEMENTAT PE RAMURA `feature/victoria-iteratia-1` — AȘTEAPTĂ TESTELE UTILIZATORULUI.
+- Prima rulare a harness-ului VICTORIA a dat:
+  - TVA-ul (4426/4428) corect pe 20 din 20 de linii;
+  - contul de cheltuială exact pe 0 din 28 de linii.
+- Cauzele identificate:
+  - 628, 622 și 623 sunt nepostabile în catalogul Diana, iar contabilul folosește 628 direct;
+  - aproape nicio propunere AI nu primea textul OMFP despre conturi.
+- Schimbarea:
+  - pentru achiziții, AI-ul primește mereu funcțiunea conturilor 601–628, 231 și 471, selectate după cheia de citare exactă;
+  - `legislation.Query` are câmpul nou `CitationKeys`.
+- Fără migrări. Harness-ul (`test-data/victoria1881/compara.py`, în afara git) raportează acum separat potrivirea exactă, cea compatibilă și cea pe același cont sintetic de grad I.
+- Rămas deschis, decizie de produs: planul de conturi al clientului, adică 628 postabil pentru clienții care nu folosesc analitice.
+- Verificare: doar statică de Claude (`gofmt`, `go build`, `go vet`, inclusiv cu tag-ul de integrare). Testele și rerularea harness-ului sunt rulate de utilizator.
+
 ## Consum AI: tokeni și cost pe rulare, client și cont (D-121, D-122) — 2026-09-30
 
 - IMPLEMENTAT ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Utilizatorul a aprobat explicit extinderea aditivă a zonelor „FROZEN”: frontend-ul (item „Consum AI” în sidebar, card pe pagina clientului) și backend Module 6 (rute API) și 7 (wiring worker, metrici). Au fost refactorizate și cele trei apeluri Gemini, cu aceeași taxonomie de erori.

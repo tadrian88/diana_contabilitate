@@ -18,10 +18,31 @@ const (
 // the store; each term is a plain phrase whose words must all appear. Terms
 // avoid Romanian diacritics because the corpus mixes cedilla/comma forms.
 type RetrievalQuery struct {
-	Dimension string
-	Terms     []string
-	Kinds     []string
-	Limit     int
+	Dimension    string
+	Terms        []string
+	Kinds        []string
+	Limit        int
+	CitationKeys []string
+}
+
+// IncomingAccountFunctions are the OMFP 1802/2014 synthetic accounts whose
+// function („Cu ajutorul acestui cont se ține evidența…”) is always sent for a
+// purchase whose account is unresolved: materials and utilities (60x), services
+// (61x, 62x) and fixed assets in progress (231). A lexical lookup on the invoice
+// words alone rarely ranks these short fragments among the first results, so
+// the provider chose analytic accounts without the legal text that separates,
+// for example, 622 (fees) from 628 (other third-party services). Larger chapters
+// (assets, inventories) stay with the lexical lookup.
+var IncomingAccountFunctions = []string{
+	"601", "602", "603", "604", "605", "606", "607", "608", "609",
+	"611", "612", "613", "614",
+	"621", "622", "623", "624", "625", "626", "627", "628",
+	"231", "471",
+}
+
+// AccountFunctionCitationKey is the corpus citation key of an OMFP account function.
+func AccountFunctionCitationKey(account string) string {
+	return "OMFP 1802/2014 contul " + account
 }
 
 // RetrievalPlan returns one query per unresolved dimension. The queries only
@@ -42,6 +63,13 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 	}
 	if needed["EXPENSE_TAX_TREATMENT"] {
 		plan = append(plan, RetrievalQuery{Dimension: "EXPENSE_TAX_TREATMENT", Kinds: []string{"LAW"}, Limit: 3, Terms: []string{"cheltuieli deductibile", "cheltuieli nedeductibile", "deductibilitate limitata"}})
+	}
+	if needed["ACCOUNT"] && input.Direction == Incoming {
+		keys := make([]string, 0, len(IncomingAccountFunctions))
+		for _, account := range IncomingAccountFunctions {
+			keys = append(keys, AccountFunctionCitationKey(account))
+		}
+		plan = append(plan, RetrievalQuery{Dimension: "ACCOUNT", Kinds: []string{"ORDER"}, Limit: len(keys), CitationKeys: keys})
 	}
 	if needed["ACCOUNT"] {
 		terms := []string{"serviciile executate", "onorariile", "comisioanele"}
@@ -76,7 +104,7 @@ func RetrievalPlan(input Input) []RetrievalQuery {
 
 // Query converts a plan item to the store query for the invoice date.
 func (q RetrievalQuery) Query(input Input, allowTestOnly bool) legislation.Query {
-	return legislation.Query{Terms: q.Terms, ApplicableDate: input.IssueDate, Limit: q.Limit, AllowTestOnly: allowTestOnly, Kinds: q.Kinds}
+	return legislation.Query{Terms: q.Terms, ApplicableDate: input.IssueDate, Limit: q.Limit, AllowTestOnly: allowTestOnly, Kinds: q.Kinds, CitationKeys: q.CitationKeys}
 }
 
 // MergeFragments keeps plan order, removes duplicates and applies the size

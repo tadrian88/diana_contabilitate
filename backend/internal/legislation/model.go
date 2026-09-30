@@ -59,6 +59,9 @@ type Query struct {
 	// Kinds optionally restricts retrieval to source kinds (e.g. LAW for the
 	// Fiscal Code, ORDER for OMFP account functions). Empty means all kinds.
 	Kinds []string
+	// CitationKeys optionally selects fragments by exact citation key (e.g.
+	// "OMFP 1802/2014 contul 628"). With citation keys, Terms may be empty.
+	CitationKeys []string
 }
 
 type Store interface {

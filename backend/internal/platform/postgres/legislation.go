@@ -11,7 +11,7 @@ import (
 // authoritative, so a vector database would add operational complexity without
 // improving citation identity. Ranking never changes the effective-date guard.
 func (s *Store) Retrieve(ctx context.Context, query legislation.Query) ([]legislation.Fragment, error) {
-	if !query.ApplicableDate.Valid() || len(query.Terms) == 0 {
+	if !query.ApplicableDate.Valid() || (len(query.Terms) == 0 && len(query.CitationKeys) == 0) {
 		return nil, fmt.Errorf("invalid legislation query")
 	}
 	limit := query.Limit
@@ -24,7 +24,13 @@ func (s *Store) Retrieve(ctx context.Context, query legislation.Query) ([]legisl
 			terms = append(terms, term)
 		}
 	}
-	if len(terms) == 0 {
+	keys := make([]string, 0, len(query.CitationKeys))
+	for _, key := range query.CitationKeys {
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	if len(terms) == 0 && len(keys) == 0 {
 		return nil, fmt.Errorf("empty legislation query")
 	}
 	kinds := query.Kinds
@@ -39,9 +45,10 @@ func (s *Store) Retrieve(ctx context.Context, query legislation.Query) ([]legisl
 		WHERE $1::date BETWEEN v.effective_from AND COALESCE(v.effective_to,'infinity'::date)
 		  AND ($4::boolean OR NOT v.test_only)
 		  AND (cardinality($5::text[])=0 OR s.kind=ANY($5::text[]))
-		  AND EXISTS (SELECT 1 FROM unnest($2::text[]) q(term) WHERE f.search_vector @@ plainto_tsquery('simple',q.term))
-		ORDER BY (SELECT max(ts_rank_cd(f.search_vector,plainto_tsquery('simple',q.term))) FROM unnest($2::text[]) q(term)) DESC,v.effective_from DESC,f.ordinal
-		LIMIT $3`, string(query.ApplicableDate), terms, limit, query.AllowTestOnly, kinds)
+		  AND (cardinality($6::text[])=0 OR f.citation_key=ANY($6::text[]))
+		  AND (cardinality($2::text[])=0 OR EXISTS (SELECT 1 FROM unnest($2::text[]) q(term) WHERE f.search_vector @@ plainto_tsquery('simple',q.term)))
+		ORDER BY (SELECT max(ts_rank_cd(f.search_vector,plainto_tsquery('simple',q.term))) FROM unnest($2::text[]) q(term)) DESC NULLS LAST,v.effective_from DESC,f.ordinal
+		LIMIT $3`, string(query.ApplicableDate), terms, limit, query.AllowTestOnly, kinds, keys)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve legislation: %w", err)
 	}
