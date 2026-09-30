@@ -70,17 +70,22 @@ type ContractCandidate struct {
 }
 
 type InvoiceSummary struct {
-	ID             string
-	ClientID       string
-	SupplierName   string
-	SupplierCUI    *string
-	DocumentNumber string
-	IssueDate      time.Time
-	TotalAmount    string
-	Currency       string
-	SPVReference   string
-	PipelineStatus string
-	SagaStatus     string
+	ID           string
+	ClientID     string
+	SupplierName string
+	SupplierCUI  *string
+	// Direction and the customer let the inbox name the counterparty of an
+	// issued invoice (D-124).
+	Direction          string
+	CustomerName       *string
+	CustomerIdentifier *string
+	DocumentNumber     string
+	IssueDate          time.Time
+	TotalAmount        string
+	Currency           string
+	SPVReference       string
+	PipelineStatus     string
+	SagaStatus         string
 }
 
 type ClientSummary struct {

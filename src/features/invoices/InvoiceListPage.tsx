@@ -8,7 +8,7 @@ import type { Invoice, PipelineStatus, SagaStatus } from '../../domain/invoice'
 import { PIPELINE_LABELS } from '../../domain/invoice'
 import { AttentionBadge, PipelineBadge, SagaBadge } from './InvoiceStatusBadges'
 import { useClients, useInvoices } from './invoice-hooks'
-import { actionTab, getAttentionStatus, getInvoiceConfidence, getUnresolvedIssueCount, SAGA_LABELS } from './invoice-view'
+import { actionTab, counterparty, getAttentionStatus, getInvoiceConfidence, getUnresolvedIssueCount, isIssued, SAGA_LABELS } from './invoice-view'
 
 type SortKey = 'supplier' | 'number' | 'date' | 'value' | 'pipeline'
 type SortDirection = 'asc' | 'desc'
@@ -28,11 +28,15 @@ export function InvoiceListPage() {
   const attention = parseAttention(params.get('attention'))
   const sort = parseSort(params.get('sort'))
   const direction: SortDirection = params.get('direction') === 'asc' ? 'asc' : 'desc'
+  // D-131: „Primite” (default, unchanged) and „Emise” (?kind=issued).
+  const issuedTab = params.get('kind') === 'issued'
+  const receivedCount = useMemo(() => invoices.filter((invoice) => !isIssued(invoice)).length, [invoices])
+  const tabInvoices = useMemo(() => invoices.filter((invoice) => isIssued(invoice) === issuedTab), [invoices, issuedTab])
 
   const visibleInvoices = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('ro-RO')
-    const filtered = invoices.filter((invoice) => {
-      if (normalizedQuery && !`${invoice.supplierName} ${invoice.documentNumber}`.toLocaleLowerCase('ro-RO').includes(normalizedQuery)) return false
+    const filtered = tabInvoices.filter((invoice) => {
+      if (normalizedQuery && !`${counterparty(invoice).name} ${invoice.documentNumber}`.toLocaleLowerCase('ro-RO').includes(normalizedQuery)) return false
       if (pipeline !== 'ALL' && invoice.pipelineStatus !== pipeline) return false
       if (saga !== 'ALL' && invoice.sagaStatus !== saga) return false
       const hasAttention = getAttentionStatus(invoice) !== 'CLEAR'
@@ -41,7 +45,7 @@ export function InvoiceListPage() {
       return true
     })
     return filtered.sort((left, right) => compareInvoices(left, right, sort, direction))
-  }, [attention, direction, invoices, pipeline, query, saga, sort])
+  }, [attention, direction, tabInvoices, pipeline, query, saga, sort])
 
   const update = (key: string, value: string) => {
     const next = new URLSearchParams(params)
@@ -57,31 +61,43 @@ export function InvoiceListPage() {
   }
 
   const returnTo = `/invoices${params.toString() ? `?${params.toString()}` : ''}`
+  const selectTab = (issued: boolean) => {
+    const next = new URLSearchParams(params)
+    issued ? next.set('kind', 'issued') : next.delete('kind')
+    setParams(next)
+  }
+  const searchLabel = issuedTab ? 'Caută după client sau număr factură' : 'Caută după furnizor sau număr factură'
+  const searchPlaceholder = issuedTab ? 'Caută client sau număr factură…' : 'Caută furnizor sau număr factură…'
 
   return (
     <div className="space-y-6">
       <section className="flex items-end justify-between gap-6">
         <div><p className="eyebrow">Spațiu operațional</p><h2 className="mt-2 text-2xl font-bold tracking-tight">Facturi</h2><p className="mt-2 text-sm text-[var(--text-secondary)]">Găsește rapid o factură și înțelege starea procesării fără revizuire inutilă.</p></div>
-        <div className="text-right"><div className="text-2xl font-bold tabular-nums">{visibleInvoices.length}</div><div className="text-xs text-[var(--text-muted)]">din {invoices.length} facturi în context</div></div>
+        <div className="text-right"><div className="text-2xl font-bold tabular-nums">{visibleInvoices.length}</div><div className="text-xs text-[var(--text-muted)]">din {tabInvoices.length} facturi în context</div></div>
       </section>
+
+      <div role="tablist" aria-label="Direcția facturilor" className="flex gap-2">
+        <DirectionTab label="Primite" count={receivedCount} selected={!issuedTab} onSelect={() => selectTab(false)} />
+        <DirectionTab label="Emise" count={invoices.length - receivedCount} selected={issuedTab} onSelect={() => selectTab(true)} />
+      </div>
 
       <section className="card overflow-hidden">
         <div className="flex items-center gap-3 border-b border-[var(--border)] p-4" aria-label="Filtre facturi">
-          <label className="relative min-w-[300px] flex-1"><span className="sr-only">Caută după furnizor sau număr factură</span><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" /><input value={query} onChange={(event) => update('q', event.target.value)} placeholder="Caută furnizor sau număr factură…" className="h-10 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-[var(--focus)]" /></label>
+          <label className="relative min-w-[300px] flex-1"><span className="sr-only">{searchLabel}</span><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" /><input value={query} onChange={(event) => update('q', event.target.value)} placeholder={searchPlaceholder} className="h-10 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-[var(--focus)]" /></label>
           <FilterSelect label="Status pipeline" value={pipeline} onChange={(value) => update('pipeline', value)}><option value="ALL">Toate stările</option>{pipelineOptions.map((value) => <option key={value} value={value}>{pipelineLabel(value)}</option>)}</FilterSelect>
           <FilterSelect label="Atenție" value={attention} onChange={(value) => update('attention', value)}><option value="ALL">Orice atenție</option><option value="REQUIRED">Necesită atenție</option><option value="CLEAR">Fără intervenție</option></FilterSelect>
           <FilterSelect label="Status SAGA" value={saga} onChange={(value) => update('saga', value)}><option value="ALL">Orice status SAGA</option>{sagaOptions.map((value) => <option key={value} value={value}>{sagaLabel(value)}</option>)}</FilterSelect>
         </div>
 
-        {isLoading ? <LoadingState /> : isError ? <ErrorState /> : invoices.length === 0 ? <EmptyState /> : visibleInvoices.length === 0 ? <NoResults onReset={() => setParams({})} /> : (
+        {isLoading ? <LoadingState /> : isError ? <ErrorState /> : tabInvoices.length === 0 ? <EmptyState issued={issuedTab} /> : visibleInvoices.length === 0 ? <NoResults onReset={() => setParams({})} /> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1380px] border-collapse text-left text-xs">
               <caption className="sr-only">Lista facturilor din contextul de client activ.</caption>
               <thead className="bg-[var(--surface-subtle)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
                 <tr>
-                  <SortableHeader label="Furnizor" sortKey="supplier" current={sort} direction={direction} onSort={updateSort} />
+                  <SortableHeader label={issuedTab ? 'Client' : 'Furnizor'} sortKey="supplier" current={sort} direction={direction} onSort={updateSort} />
                   <SortableHeader label="Număr factură" sortKey="number" current={sort} direction={direction} onSort={updateSort} />
-                  <th className="px-3 py-3">Client</th>
+                  <th className="px-3 py-3">{issuedTab ? 'Emitent' : 'Client'}</th>
                   <SortableHeader label="Valoare" sortKey="value" current={sort} direction={direction} onSort={updateSort} />
                   <SortableHeader label="Dată" sortKey="date" current={sort} direction={direction} onSort={updateSort} />
                   <th className="px-3 py-3">Contract</th>
@@ -97,9 +113,10 @@ export function InvoiceListPage() {
                   const issueCount = getUnresolvedIssueCount(invoice)
                   const confidence = getInvoiceConfidence(invoice)
                   const href = `/invoices/${invoice.id}?tab=${actionTab(invoice)}&returnTo=${encodeURIComponent(returnTo)}`
+                  const party = counterparty(invoice)
                   return (
                     <tr key={invoice.id} className="align-middle hover:bg-[var(--surface-subtle)]" data-invoice-id={invoice.id}>
-                      <td className="max-w-[190px] px-3 py-4"><div className="truncate font-semibold text-sm">{invoice.supplierName}</div><div className="mt-1 truncate text-[var(--text-muted)]">{invoice.supplierCui ?? 'CUI indisponibil'}</div></td>
+                      <td className="max-w-[190px] px-3 py-4"><div className="truncate font-semibold text-sm">{party.name}</div><div className="mt-1 truncate text-[var(--text-muted)]">{party.identifier ?? (isIssued(invoice) ? 'Identificator indisponibil' : 'CUI indisponibil')}</div></td>
                       <td className="px-3 py-4"><Link to={href} className="font-bold text-[var(--accent)] outline-none hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{invoice.documentNumber}</Link></td>
                       <td className="max-w-[170px] px-3 py-4"><span className="line-clamp-2 font-medium">{client?.name ?? 'Client indisponibil'}</span></td>
                       <td className="whitespace-nowrap px-3 py-4 font-semibold tabular-nums">{formatMoney(invoice.total.amount, invoice.total.currency)}</td>
@@ -128,6 +145,10 @@ function ContractCell({ invoice }: { invoice: Invoice }) {
   return <span className="text-[var(--text-muted)]">Nu se aplică</span>
 }
 
+function DirectionTab({ label, count, selected, onSelect }: { label: string; count: number; selected: boolean; onSelect: () => void }) {
+  return <button type="button" role="tab" aria-selected={selected} onClick={onSelect} className={`rounded-lg border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${selected ? 'border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text)]'}`}>{label} <span className="tabular-nums">({count})</span></button>
+}
+
 function SortableHeader({ label, sortKey, current, direction, onSort }: { label: string; sortKey: SortKey; current: SortKey; direction: SortDirection; onSort: (key: SortKey) => void }) {
   const Icon = current !== sortKey ? ArrowUpDown : direction === 'asc' ? ArrowUp : ArrowDown
   return <th className="px-3 py-3"><button onClick={() => onSort(sortKey)} className="inline-flex items-center gap-1 rounded outline-none hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{label}<Icon className="size-3" aria-hidden="true" /></button></th>
@@ -139,12 +160,12 @@ function FilterSelect({ label, value, onChange, children }: { label: string; val
 
 function LoadingState() { return <div className="space-y-2 p-4" aria-label="Se încarcă lista facturilor">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-[var(--surface-subtle)]" />)}</div> }
 function ErrorState() { return <div className="p-12 text-center"><TriangleAlert className="mx-auto size-8 text-[var(--danger)]" /><h3 className="mt-3 font-bold">Facturile nu au putut fi încărcate</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Serviciul de date nu este disponibil. Verifică starea API-ului.</p></div> }
-function EmptyState() { return <div className="p-12 text-center"><CheckCircle2 className="mx-auto size-8 text-[var(--success)]" /><h3 className="mt-3 font-bold">Nu există facturi în acest context</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Nu au fost găsite facturi pentru clientul selectat.</p></div> }
+function EmptyState({ issued }: { issued: boolean }) { return <div className="p-12 text-center"><CheckCircle2 className="mx-auto size-8 text-[var(--success)]" /><h3 className="mt-3 font-bold">{issued ? 'Nu există facturi emise în acest context' : 'Nu există facturi în acest context'}</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">{issued ? 'Facturile emise de client apar aici după sincronizarea SPV.' : 'Nu au fost găsite facturi pentru clientul selectat.'}</p></div> }
 function NoResults({ onReset }: { onReset: () => void }) { return <div className="p-12 text-center"><SearchX className="mx-auto size-8 text-[var(--text-muted)]" /><h3 className="mt-3 font-bold">Niciun rezultat</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Căutarea sau filtrele curente nu corespund niciunei facturi.</p><button onClick={onReset} className="mt-4 rounded-lg border border-[var(--border-strong)] px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">Resetează filtrele</button></div> }
 
 function compareInvoices(left: Invoice, right: Invoice, key: SortKey, direction: SortDirection) {
   const values: Record<SortKey, [string | number, string | number]> = {
-    supplier: [left.supplierName, right.supplierName], number: [left.documentNumber, right.documentNumber], date: [left.issueDate, right.issueDate], value: [left.total.amount, right.total.amount], pipeline: [left.pipelineStatus, right.pipelineStatus],
+    supplier: [counterparty(left).name, counterparty(right).name], number: [left.documentNumber, right.documentNumber], date: [left.issueDate, right.issueDate], value: [left.total.amount, right.total.amount], pipeline: [left.pipelineStatus, right.pipelineStatus],
   }
   const [leftValue, rightValue] = values[key]
   const result = typeof leftValue === 'number' && typeof rightValue === 'number' ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue), 'ro')

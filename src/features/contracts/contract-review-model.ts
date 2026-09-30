@@ -107,6 +107,7 @@ export const reviewFieldConfigs: FieldConfig[] = [
   { key: 'supplierName', label: 'Furnizor', group: 'parties' },
   { key: 'supplierCui', label: 'CUI furnizor', group: 'parties' },
   { key: 'buyerCui', label: 'CUI cumpărător', group: 'parties' },
+  { key: 'buyerName', label: 'Cumpărător (locatar)', group: 'parties' },
   { key: 'documentRole', label: 'Rol document', group: 'contract', format: (value) => documentRoleLabels[value as ReviewedContract['documentRole']] ?? value },
   { key: 'relatedReference', label: 'Referință document părinte', group: 'contract' },
   { key: 'reference', label: 'Referință contract', group: 'contract' },
@@ -158,6 +159,7 @@ export function buildConfirmedItems(document: ContractDocument): ReviewItem[] {
   const items: ReviewItem[] = []
   for (const config of reviewFieldConfigs) {
     if (config.key === 'relatedReference' && confirmed.documentRole === 'BASE_CONTRACT') continue
+    if (config.key === 'buyerName' && !confirmed.buyerName) continue
     const raw = String(confirmed[config.key] ?? '')
     const extracted = proposalField(proposal, String(config.key)).value ?? ''
     const corrected = config.key !== 'periodType' && raw !== extracted

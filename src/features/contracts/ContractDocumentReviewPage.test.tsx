@@ -310,3 +310,34 @@ describe('Contract ingestion human review boundary', () => {
     expect(screen.queryByLabelText('Referință contract')).not.toBeInTheDocument()
   })
 })
+
+describe('lease where the client is the Locator (D-126)', () => {
+  function leaseFixture() {
+    const document = fixture()
+    const proposal = document.extraction!.proposal!
+    document.clientCui = 'RO10000000'
+    proposal.supplierCui = { ...proposal.supplierCui, value: 'RO10000000' }
+    proposal.buyerCui = { ...proposal.buyerCui, value: 'RO40138380' }
+    proposal.buyerName = { ...proposal.supplierName, value: 'Chiriaș Test SRL' }
+    return document
+  }
+  it('confirms with the client as supplier and explains the role', () => {
+    review(leaseFixture())
+    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeEnabled()
+    expect(screen.getByRole('note')).toHaveTextContent('Clientul este furnizorul')
+    expect(screen.getByRole('note')).toHaveTextContent('Chiriaș Test SRL')
+  })
+  it('requires the tenant name when the client is the supplier', async () => {
+    review(leaseFixture())
+    await userEvent.setup().clear(screen.getByLabelText('Denumire cumpărător (locatar)'))
+    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Denumirea cumpărătorului (locatarului)')
+  })
+  it('accepts a natural-person tenant identified by CNP', async () => {
+    review(leaseFixture())
+    const input = screen.getByLabelText('CUI cumpărător')
+    await userEvent.setup().clear(input)
+    await userEvent.setup().type(input, '1800101420010')
+    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeEnabled()
+  })
+})

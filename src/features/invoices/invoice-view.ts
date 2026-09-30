@@ -41,3 +41,27 @@ export const SAGA_LABELS: Record<SagaStatus, string> = {
   EXPORTED: 'Exportată în SAGA',
   FAILED: 'Export eșuat',
 }
+
+/** An invoice issued by the accounting client (Vânzări V1, D-124). */
+export function isIssued(invoice: Pick<Invoice, 'direction'>) {
+  return invoice.direction === 'OUTGOING'
+}
+
+export interface Counterparty { role: 'Furnizor' | 'Client'; name: string; identifier?: string }
+
+/** The other party: the supplier of a received invoice, the customer of an issued one. */
+export function counterparty(invoice: Pick<Invoice, 'direction' | 'supplierName' | 'supplierCui' | 'customerName' | 'customerIdentifier'>): Counterparty {
+  if (isIssued(invoice)) return { role: 'Client', name: invoice.customerName ?? 'Client indisponibil', identifier: invoice.customerIdentifier }
+  return { role: 'Furnizor', name: invoice.supplierName, identifier: invoice.supplierCui }
+}
+
+/**
+ * D-128: an issued invoice follows the client profile for VAT chargeability.
+ * A „TVA la încasare” note printed on it that contradicts the profile is only
+ * a warning to check with the accountant.
+ */
+export function vatCashNoteWarning(invoice: Pick<Invoice, 'direction' | 'sourceFacts' | 'accountingSnapshot'>): string | undefined {
+  if (!isIssued(invoice) || invoice.sourceFacts?.cashAccounting !== 'YES') return undefined
+  if (invoice.accountingSnapshot?.profile?.cashAccounting !== 'NO') return undefined
+  return 'Factura emisă poartă mențiunea „TVA la încasare”, dar profilul clientului nu aplică TVA la încasare. Diana urmează profilul (TVA exigibil la emitere, 4427); verifică mențiunea cu contabilul.'
+}

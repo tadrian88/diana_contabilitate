@@ -7,7 +7,7 @@ import type { TaskStatus, TaskType } from '../../domain/invoice'
 import { PIPELINE_LABELS, TASK_STATUS_LABELS, TASK_TYPE_LABELS } from '../../domain/invoice'
 import { useRequestContract } from '../invoices/invoice-mutations'
 import { ContinueWithoutContractDialog } from '../invoices/ContinueWithoutContractDialog'
-import { taskTab } from '../invoices/invoice-view'
+import { counterparty, taskTab } from '../invoices/invoice-view'
 import { useTaskInbox, type TaskInboxItem } from './task-inbox-hooks'
 
 type TypeFilter = 'ALL' | TaskType
@@ -99,7 +99,7 @@ function TaskRow({ item, returnTo, onRequested, onContinued }: { item: TaskInbox
       </td>
       <td className="px-4 py-4 text-sm">
         <div className="font-semibold">{invoice.documentNumber}</div>
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">{invoice.supplierName}</div>
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">{counterparty(invoice).name}</div>
         <div className="mt-2 text-xs"><span className="font-semibold">{formatMoney(invoice.total.amount, invoice.total.currency)}</span><span className="text-[var(--text-muted)]"> · {formatDate(invoice.issueDate)}</span></div>
       </td>
       <td className="px-4 py-4"><div className="max-w-[180px] text-sm font-medium">{client?.name}</div><div className="mt-1 text-[11px] text-[var(--text-muted)]">{client?.cui}</div></td>

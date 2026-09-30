@@ -73,7 +73,7 @@ func (s *Store) ListValidationTasks(ctx context.Context, filter validationtasks.
 			Task: task,
 			Invoice: validationtasks.InvoiceSummary{
 				ID: invoiceRow.ID, ClientID: invoiceRow.ClientID, SupplierName: invoiceRow.SupplierName,
-				SupplierCUI: invoiceRow.SupplierCui, DocumentNumber: invoiceRow.DocumentNumber,
+				SupplierCUI: invoiceRow.SupplierCui, Direction: string(invoiceRow.Direction), CustomerName: invoiceRow.CustomerName, CustomerIdentifier: invoiceRow.CustomerIdentifier, DocumentNumber: invoiceRow.DocumentNumber,
 				IssueDate: invoiceRow.IssueDate, TotalAmount: invoiceRow.TotalAmount, Currency: invoiceRow.Currency,
 				SPVReference: invoiceRow.SpvReference, PipelineStatus: string(invoiceRow.PipelineStatus), SagaStatus: string(invoiceRow.SagaStatus),
 			},

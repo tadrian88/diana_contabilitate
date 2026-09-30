@@ -399,16 +399,19 @@ type validationTaskInboxDTO struct {
 }
 
 type taskInvoiceDTO struct {
-	ID             string   `json:"id"`
-	ClientID       string   `json:"clientId"`
-	SupplierName   string   `json:"supplierName"`
-	SupplierCUI    *string  `json:"supplierCui,omitempty"`
-	DocumentNumber string   `json:"documentNumber"`
-	IssueDate      string   `json:"issueDate"`
-	Total          moneyDTO `json:"total"`
-	SPVReference   string   `json:"spvReference"`
-	PipelineStatus string   `json:"pipelineStatus"`
-	SagaStatus     string   `json:"sagaStatus"`
+	ID                 string   `json:"id"`
+	ClientID           string   `json:"clientId"`
+	SupplierName       string   `json:"supplierName"`
+	SupplierCUI        *string  `json:"supplierCui,omitempty"`
+	Direction          string   `json:"direction,omitempty"`
+	CustomerName       *string  `json:"customerName,omitempty"`
+	CustomerIdentifier *string  `json:"customerIdentifier,omitempty"`
+	DocumentNumber     string   `json:"documentNumber"`
+	IssueDate          string   `json:"issueDate"`
+	Total              moneyDTO `json:"total"`
+	SPVReference       string   `json:"spvReference"`
+	PipelineStatus     string   `json:"pipelineStatus"`
+	SagaStatus         string   `json:"sagaStatus"`
 }
 
 func invoiceDirection(item *invoicing.Invoice) invoicing.Direction {
@@ -700,7 +703,7 @@ func validationTaskInboxResponse(item validationtasks.InboxItem) (validationTask
 		Task: validationTaskResponse(&item.Task),
 		Invoice: taskInvoiceDTO{
 			ID: item.Invoice.ID, ClientID: item.Invoice.ClientID, SupplierName: item.Invoice.SupplierName,
-			SupplierCUI: item.Invoice.SupplierCUI, DocumentNumber: item.Invoice.DocumentNumber,
+			SupplierCUI: item.Invoice.SupplierCUI, Direction: item.Invoice.Direction, CustomerName: item.Invoice.CustomerName, CustomerIdentifier: maskedOptional(item.Invoice.CustomerIdentifier), DocumentNumber: item.Invoice.DocumentNumber,
 			IssueDate:    item.Invoice.IssueDate.Format(time.RFC3339),
 			Total:        moneyDTO{Amount: json.RawMessage(amount.String()), Currency: item.Invoice.Currency},
 			SPVReference: item.Invoice.SPVReference, PipelineStatus: item.Invoice.PipelineStatus, SagaStatus: item.Invoice.SagaStatus,

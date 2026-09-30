@@ -51,6 +51,7 @@ const titles: Array<[RegExp, string]> = [
   [/^CONTRACT_COVERAGE_INCOMPLETE$/, 'Unele condiții contractuale nu pot fi încă verificate'],
   [/^CONTRACT_NOT_EFFECTIVE$/, 'Contractul nu este valabil la data facturii'],
   [/^CONTRACT_WAIVED$/, 'Continuat fără contract'],
+  [/^NOT_APPLICABLE_OUTGOING$/, 'Nu se aplică facturilor emise'],
   [/^ORIGINAL_INVOICE_UNAVAILABLE$/, 'Factura inițială pentru storno nu este disponibilă'],
   [/^RULE_INPUT_MISSING$/, 'Lipsesc date necesare calculului'],
   [/^RULE_INPUT_OUTSIDE_VALIDITY$/, 'Informația este salvată, dar nu este valabilă la data facturii'],
@@ -63,6 +64,7 @@ const titles: Array<[RegExp, string]> = [
 const explanations: Record<string, string> = {
   CONTRACT_COVERAGE_INCOMPLETE: 'Unele clauze nu au o valoare verificabilă din contract. Tarifele confirmate sunt totuși comparate separat.',
   CONTRACT_WAIVED: 'Contabilul a decis, cu motiv, continuarea fără contract. Factura nu este verificată față de un contract.',
+  NOT_APPLICABLE_OUTGOING: 'Factura este emisă de client. Contractul, dacă există, este doar context; prețul nu este verificat în această versiune.',
   SERVICE_LINE_AMBIGUOUS: 'Mai multe servicii din contract folosesc aceeași formulare. Clarifică denumirile serviciilor în contract.',
   RULE_DATE_BASIS_MISSING: 'Contractul stabilește termenul de plată de la transmiterea, primirea sau acceptarea facturii. Completează data evenimentului cerut și dovada ei; data importului nu o înlocuiește.',
   RULE_INPUT_OUTSIDE_VALIDITY: 'Valoarea completată anterior a fost salvată, însă intervalul ales nu include data acestei facturi. Corectează perioada de valabilitate, fără să schimbi valoarea sau sursa dacă acestea sunt corecte.',

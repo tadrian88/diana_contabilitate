@@ -10,7 +10,7 @@ import { PipelineStepper } from './PipelineStepper'
 import { ContractTask } from './ContractTask'
 import { ClassificationWorkspace } from './ClassificationWorkspace'
 import { AttentionBadge, PipelineBadge, SagaBadge } from './InvoiceStatusBadges'
-import { actionTab, getUnresolvedIssueCount, invoiceTabs, SAGA_LABELS, type InvoiceTab } from './invoice-view'
+import { actionTab, counterparty, getUnresolvedIssueCount, invoiceTabs, isIssued, SAGA_LABELS, type InvoiceTab } from './invoice-view'
 import { NextStepsCard, useActionCount } from './NextStepsCard'
 import { SagaExportCard } from './SagaExportCard'
 import { CommercialValidationCard } from './CommercialValidationCard'
@@ -61,12 +61,12 @@ export function InvoiceDetailPage() {
       <Link to={returnPath} className="inline-flex items-center gap-2 rounded text-sm font-semibold text-[var(--text-secondary)] outline-none hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><ArrowLeft className="size-4" />{returnLabel}</Link>
       <section className="flex items-start justify-between gap-8">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><Badge tone="neutral">Factură demonstrativă</Badge><PipelineBadge status={invoice.pipelineStatus} /><AttentionBadge invoice={invoice} /><SagaBadge status={invoice.sagaStatus} /></div>
+          <div className="flex flex-wrap items-center gap-2"><Badge tone="neutral">Factură demonstrativă</Badge><PipelineBadge status={invoice.pipelineStatus} /><AttentionBadge invoice={invoice} /><SagaBadge status={invoice.sagaStatus} />{isIssued(invoice) && <Badge tone="info">Emisă</Badge>}</div>
           <h2 className="mt-3 text-2xl font-bold tracking-tight">{invoice.documentNumber}</h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">{invoice.supplierName}{invoice.supplierCui ? ` · ${invoice.supplierCui}` : ''}</p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">{isIssued(invoice) ? 'Client: ' : ''}{counterparty(invoice).name}{counterparty(invoice).identifier ? ` · ${counterparty(invoice).identifier}` : ''}</p>
         </div>
         <div className="grid grid-cols-3 divide-x divide-[var(--border)] rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-          <div className="px-4 py-3"><div className="eyebrow">Client</div><div className="mt-1 flex items-center gap-2 whitespace-nowrap text-sm font-semibold"><Building2 className="size-4 text-[var(--accent)]" />{client?.name}</div></div>
+          <div className="px-4 py-3"><div className="eyebrow">{isIssued(invoice) ? 'Emitent' : 'Client'}</div><div className="mt-1 flex items-center gap-2 whitespace-nowrap text-sm font-semibold"><Building2 className="size-4 text-[var(--accent)]" />{client?.name}</div></div>
           <div className="px-4 py-3"><div className="eyebrow">Valoare</div><div className="mt-1 whitespace-nowrap text-sm font-semibold">{formatMoney(invoice.total.amount, invoice.total.currency)}</div></div>
           <div className="px-4 py-3"><div className="eyebrow">Data facturii</div><div className="mt-1 whitespace-nowrap text-sm font-semibold">{formatDate(invoice.issueDate)}</div></div>
         </div>

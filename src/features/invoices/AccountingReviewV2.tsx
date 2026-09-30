@@ -11,6 +11,7 @@ import { DomainCorrectionDialog } from './DomainCorrectionDialog'
 import { displayDomainValue } from './domain-decision-view'
 import { useApproveAllClassifications, useReviewClassification } from './invoice-mutations'
 import { useReanalyzeClassification } from './invoice-hooks'
+import { vatCashNoteWarning } from './invoice-view'
 
 const dimensions: RuleCategory[] = ['ACCOUNT', 'VAT_TREATMENT', 'VAT_DEDUCTIBILITY', 'EXPENSE_TAX_TREATMENT']
 
@@ -25,8 +26,11 @@ export function AccountingReviewV2({ invoice }: { invoice: Invoice }) {
   const [attentionOnly, setAttentionOnly] = useState(false)
   const visibleLines = attentionOnly ? invoice.lines.filter(line => attentionLineIds.has(line.id)) : invoice.lines
 
+  const cashNote = vatCashNoteWarning(invoice)
+
   return <div className="space-y-4">
     <WorkflowBanner invoice={invoice} validProposalCount={counts.valid} />
+    {cashNote && <div role="note" className="card flex gap-3 border-[var(--warning-border)] bg-[var(--warning-soft)] p-4 text-sm text-[var(--warning)]"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true"/><span>{cashNote}</span></div>}
     <section className="card p-5" aria-labelledby="accounting-review-summary">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="eyebrow">Review contabil</p><h3 id="accounting-review-summary" className="mt-1 text-lg font-bold">Deciziile contabile ale facturii</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Verifică propunerile și corectează numai câmpurile care necesită atenție.</p></div>
@@ -193,7 +197,7 @@ function decisionFor(finals: LineClassification[], reviews: ClassificationReview
 
 function countDecisions(decisions: Decision[]) { return decisions.reduce((result, decision) => { if (decision.state === 'FINAL') result.final++; else if (decision.state === 'VALID_PROPOSAL') result.valid++; else result.problem++; return result }, {final:0,valid:0,problem:0}) }
 function SummaryBadge({ tone, value, label }: { tone:'success'|'warning'|'danger';value:number;label:string }) { return <Badge tone={tone}>{value} {label}</Badge> }
-function sourceLabel(source?: string) { return ({RULE:'Regulă verificată',DETERMINISTIC_RULE:'Regulă verificată',LEARNED_MAPPING:'Decizie aprobată anterior',AI_PROPOSAL:'Propunere automată',PROFILE:'Profil fiscal aprobat',MANUAL:'Selectat manual',NO_MATCH:'Nicio regulă aplicabilă',AMBIGUOUS:'Mai multe variante posibile'} as Record<string,string>)[source ?? ''] ?? 'Sursă contabilă' }
+function sourceLabel(source?: string) { return ({RULE:'Regulă verificată',DETERMINISTIC_RULE:'Regulă verificată',LEARNED_MAPPING:'Decizie aprobată anterior',AI_PROPOSAL:'Propunere automată',PROFILE:'Profil fiscal aprobat',DIRECTION:'Direcția facturii (emisă)',MANUAL:'Selectat manual',NO_MATCH:'Nicio regulă aplicabilă',AMBIGUOUS:'Mai multe variante posibile'} as Record<string,string>)[source ?? ''] ?? 'Sursă contabilă' }
 function validationMessage(code: string, fallback: string) { return ({ACCOUNT_NOT_FOUND:'Contul propus nu există în planul de conturi.',ACCOUNT_INACTIVE:'Contul există, dar este inactiv.',ACCOUNT_NOT_POSTABLE:'Contul este sintetic și nu poate fi utilizat direct. Selectează un cont analitic.',ACCOUNT_NOT_ALLOWED_BY_PROFILE:'Contul nu este disponibil în configurația contabilă a acestui client.'} as Record<string,string>)[code] ?? fallback }
 function staleReasons(reasons:string[]) { const labels:Record<string,string>={FISCAL_PROFILE_CHANGED:'Profilul fiscal s-a modificat.',ACCOUNT_CATALOG_CHANGED:'Planul de conturi s-a modificat.',ACCOUNTING_POLICY_CHANGED:'Politica contabilă s-a modificat.',CONTRACT_CONTEXT_CHANGED:'Contextul contractual s-a modificat.'};return reasons.length ? reasons.map(reason=>labels[reason]??'Contextul contabil s-a modificat.').join(' ') : 'Reanalizează factura pentru a folosi configurația curentă.' }
 function profileLabel(value?:string){return ({PROFIT_TAX:'Impozit pe profit',MICROENTERPRISE:'Microîntreprindere'} as Record<string,string>)[value??'']??'Regim fiscal configurat'}

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Invoice } from '../../domain/invoice'
 import { lineItemDescription, unitLabel, type InvoiceFocus } from './commercial-view'
+import { counterparty } from './invoice-view'
 
 const mark = 'rounded-[3px] bg-[var(--evidence-mark)] px-1 ring-2 ring-[var(--evidence-ring)] [box-decoration-break:clone]'
 
@@ -27,7 +28,7 @@ export function InvoiceSourceExcerpt({ invoice, focus }: { invoice: Invoice; foc
   const lines = [...invoice.lines].sort((left, right) => left.position - right.position)
   const period = invoice.sourceFacts?.periodStart || invoice.sourceFacts?.periodEnd ? `${date(invoice.sourceFacts?.periodStart)} – ${date(invoice.sourceFacts?.periodEnd)}` : undefined
   const facts: Array<[string, ReactNode]> = [
-    ['Furnizor', <>{invoice.supplierName}{invoice.supplierCui ? <span className="font-normal text-[var(--text-muted)]"> · {invoice.supplierCui}</span> : null}</>],
+    [counterparty(invoice).role, <>{counterparty(invoice).name}{counterparty(invoice).identifier ? <span className="font-normal text-[var(--text-muted)]"> · {counterparty(invoice).identifier}</span> : null}</>],
     ['Număr factură', invoice.documentNumber],
     ['Data emiterii', <Marked on={focus.header === 'dueDate'}>{date(invoice.issueDate)}</Marked>],
     ['Scadența', <Marked on={focus.header === 'dueDate'}>{date(invoice.dueDate)}</Marked>],

@@ -20,16 +20,17 @@ export type PipelineStatus =
   | 'DUPLICATE'
 
 export type SagaStatus = 'NOT_READY' | 'READY' | 'EXPORTING' | 'EXPORTED' | 'FAILED'
+export type InvoiceDirection = 'INCOMING' | 'OUTGOING'
 export type TaskType = 'CONTRACT_MATCH' | 'MISSING_CONTRACT' | 'COMMERCIAL_REVIEW' | 'CLASSIFICATION'
 export type TaskStatus = 'OPEN' | 'WAITING' | 'RESOLVED'
 export type ReviewStatus = 'PENDING' | 'ACCEPTED' | 'CORRECTED' | 'REJECTED'
 export type ClassificationReviewAction = 'APPROVE' | 'EDIT' | 'REJECT'
-export type ClassificationSource = 'RULE' | 'NO_MATCH' | 'AMBIGUOUS' | 'LEARNED_MAPPING' | 'AI_PROPOSAL' | 'PROFILE'
+export type ClassificationSource = 'RULE' | 'NO_MATCH' | 'AMBIGUOUS' | 'LEARNED_MAPPING' | 'AI_PROPOSAL' | 'PROFILE' | 'DIRECTION'
 export type AccountMappingAction = 'NONE' | 'CREATE' | 'VALIDATE' | 'OCCURRENCE_ONLY' | 'CORRECT' | 'POLICY_CHANGE'
 export interface AccountMappingReference { mappingId: string; version: number; accountCode: string; serviceIdentityKind: string; serviceIdentityValue: string; normalizerVersion: string; revision: number }
 export interface AccountMappingScopePreview { clientDisplay:string; supplierDisplay:string; serviceIdentityKind:string; serviceIdentityValue:string; normalizerVersion:string }
 export interface KnowledgeReference { id:string;version:number;sourceInvoiceId:string;sourceInvoiceLineId:string;sourceClassificationId:string;promotedBy:string;promotedAt:string }
-export interface KnowledgeScope {clientId:string;clientDisplay:string;supplierDisplay:string;normalizedSupplierId:string;serviceIdentityKind:string;serviceIdentityValue:string;normalizerVersion:string;currency:string;documentType:string;vatRate:string;profileId?:string;profileVersion?:number}
+export interface KnowledgeScope {clientId:string;clientDisplay:string;supplierDisplay:string;normalizedSupplierId:string;serviceIdentityKind:string;serviceIdentityValue:string;normalizerVersion:string;currency:string;documentType:string;vatRate:string;profileId?:string;profileVersion?:number;direction?:InvoiceDirection}
 export interface PromotionPreview {classificationId:string;classificationRevision:number;classificationRunId:string;dimension:RuleCategory;value:DomainValue;scope:KnowledgeScope}
 export interface ApprovedKnowledge {id:string;version:number;dimension:RuleCategory;value:DomainValue;scope:KnowledgeScope;status:'ACTIVE'|'STALE'|'REVOKED';staleReason?:string;sourceInvoiceId:string;sourceInvoiceLineId:string;sourceClassificationId:string;sourceClassificationRunId:string;originalSource:string;promotedBy:string;promotedAt:string;revision:number;legislationVersionIds?:string[]}
 export interface LegislationSourceView {id:string;kind:string;title:string;issuer:string;officialUrl:string;versionId:string;versionLabel:string;effectiveFrom:string;effectiveTo?:string;status:'ACTIVE'|'EXPIRED'|'FUTURE';fragmentCount:number;testOnly?:boolean}
@@ -287,6 +288,12 @@ export interface Invoice {
   clientId: string
   supplierName: string
   supplierCui?: string
+  /** INCOMING (primită) or OUTGOING (emisă de client); absent means INCOMING. */
+  direction?: InvoiceDirection
+  /** Customer of an issued invoice; a CNP arrives already masked. */
+  customerName?: string
+  customerIdentifier?: string
+  customerIdentifierKind?: 'CUI' | 'CNP' | 'OTHER'
   documentNumber: string
   issueDate: string
   dueDate?: string
