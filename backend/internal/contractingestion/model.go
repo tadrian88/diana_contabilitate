@@ -174,6 +174,51 @@ type ReviewedServiceTerm struct {
 	QuantityDriver     string   `json:"quantityDriver"`
 	BillingFrequency   string   `json:"billingFrequency"`
 	Evidence           Evidence `json:"evidence"`
+	// SourceIndex is the proposal row (0-based) the service was read from, or
+	// ManualServiceTerm for a service the reviewer added. It is absent on every
+	// service of a contract confirmed before it existed: those pair by position.
+	SourceIndex *int `json:"sourceIndex,omitempty"`
+}
+
+// ManualServiceTerm marks a reviewed service that has no proposal row, and
+// so no cited evidence.
+const ManualServiceTerm = -1
+
+// ServiceTermSource returns the proposal row a reviewed service was read
+// from. A service removed from the middle of the list at review must not hand
+// its evidence to the one after it, so the row is the explicit SourceIndex;
+// only services confirmed before it existed fall back to their position.
+func ServiceTermSource(term ReviewedServiceTerm, index int, proposed []ProposedServiceTerm) (ProposedServiceTerm, bool) {
+	source := index
+	if term.SourceIndex != nil {
+		source = *term.SourceIndex
+	}
+	if source < 0 || source >= len(proposed) {
+		return ProposedServiceTerm{}, false
+	}
+	return proposed[source], true
+}
+
+// ValidServiceTermSources accepts either no SourceIndex at all (positional
+// pairing) or one on every service, each proposal row used at most once.
+func ValidServiceTermSources(terms []ReviewedServiceTerm, proposedCount int) bool {
+	explicit := 0
+	seen := make(map[int]bool, len(terms))
+	for _, term := range terms {
+		if term.SourceIndex == nil {
+			continue
+		}
+		explicit++
+		source := *term.SourceIndex
+		if source == ManualServiceTerm {
+			continue
+		}
+		if source < 0 || source >= proposedCount || seen[source] {
+			return false
+		}
+		seen[source] = true
+	}
+	return explicit == 0 || explicit == len(terms)
 }
 
 type ConfirmationBlocker struct {

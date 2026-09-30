@@ -1,15 +1,17 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import type { ContractDocument } from '../../repositories/invoiceRepository'
 import { ContractProposalReview } from './ContractDocumentReviewPage'
 
-const handlers = vi.hoisted(() => ({ confirm: vi.fn(), confirmRule: vi.fn(), revise: vi.fn(), activatePrices: vi.fn(), retry: vi.fn(), discard: vi.fn(), dismiss: vi.fn() }))
+const handlers = vi.hoisted(() => ({ confirm: vi.fn(() => Promise.resolve({ contractId: 'contract-1', changed: true })), confirmRule: vi.fn(), revise: vi.fn(), activatePrices: vi.fn(), retry: vi.fn(), discard: vi.fn(), dismiss: vi.fn() }))
+// The PDF text index: every snippet found exactly, unless a test scans the PDF.
+const pdfText = vi.hoisted(() => ({ scanned: false, location: 'EXACT' as 'EXACT' | 'PARTIAL' | 'NONE' }))
 vi.mock('./ContractPDFPreview', () => ({ ContractPDFPreview: ({page,highlights}:{page:number;highlights?:string[]}) => <div data-testid="contract-pdf">Private PDF preview · pagina {page} · {(highlights??[]).join(' | ')}</div> }))
-vi.mock('./useContractPdf', () => ({ useContractPdf: () => ({ pdf: null, error: '', retry: vi.fn(), ready: true, scanned: false, locate: () => ({ location: 'EXACT', page: 1 }) }) }))
+vi.mock('./useContractPdf', () => ({ useContractPdf: () => ({ pdf: null, error: '', retry: vi.fn(), ready: true, scanned: pdfText.scanned, locate: () => ({ location: pdfText.location, page: 1 }) }) }))
 vi.mock('./contract-ingestion-hooks', () => ({
-  useConfirmContractDocument: () => ({ mutate: handlers.confirm, isPending: false, isError: false }),
+  useConfirmContractDocument: () => ({ mutateAsync: handlers.confirm, isPending: false, isError: false }),
   useRetryContractExtraction: () => ({ mutate: handlers.retry, isPending: false, isError: false }),
   useDiscardContractDocument: () => ({ mutate: handlers.discard, isPending: false, isError: false }),
   useContractDocument: vi.fn(),
@@ -26,45 +28,54 @@ function fixture(): ContractDocument {
       promptVersion: 'CONTRACT_EXTRACTION_PROMPT_V1', status: 'SUCCEEDED', startedAt: '2026-09-15T12:00:01Z',
       proposal: { supplierName: field('Supplier SRL'), supplierCui: field('RO12345678'), reference: field('AI-REFERENCE'),
         effectiveFrom: field('2026-01-01'), effectiveTo: field('2027-12-31'), totalValue: field('125000.00'), currency: field('RON'),
-        unitType: field('servicii'), paymentTerms: field('30 zile'), buyerCui: field('RO10000000'), periodType:field('FIXED_TERM'),serviceTerms:[] } },
+        unitType: field('servicii'), paymentTerms: field('30 zile'), buyerCui: field('RO10000000'), periodType:field('FIXED_TERM'), documentRole:field('BASE_CONTRACT'),serviceTerms:[] } },
   }
 }
-function review(document = fixture(), onEvidence = vi.fn(), path = '/') {
-  render(<MemoryRouter initialEntries={[path]}><ContractProposalReview document={document} onEvidence={onEvidence} onStale={vi.fn()} /></MemoryRouter>)
+function review(document = fixture(), path = '/') {
+  render(<MemoryRouter initialEntries={[path]}><ContractProposalReview document={document} onStale={vi.fn()} /></MemoryRouter>)
 }
+const row = (name: RegExp) => screen.getByRole('button', { name })
+const active = (name: RegExp) => expect(row(name)).toHaveAttribute('aria-current', 'true')
 const confirmedValues=(values:Partial<NonNullable<ContractDocument['confirmedValues']>>={}):NonNullable<ContractDocument['confirmedValues']>=>({supplierName:'Supplier SRL',supplierCui:'RO12345678',buyerCui:'RO10000000',reference:'AI-REFERENCE',effectiveFrom:'2026-01-01',effectiveTo:'2027-12-31',totalValue:'125000',currency:'RON',unitType:'servicii',paymentTerms:'30 zile',periodType:'FIXED_TERM',documentRole:'BASE_CONTRACT',relatedReference:'',coverage:'PARTIAL',serviceTerms:[],commercialRules:[],...values})
 function confirmedFixture(values:Partial<NonNullable<ContractDocument['confirmedValues']>>={}){const document=fixture();document.status='CONFIRMED';document.confirmedContractId='contract-1';document.confirmedAt='2026-09-16T10:00:00Z';document.confirmedValues=confirmedValues(values);return document}
 const clause=(id:string,kind:string,text:string,expression:NonNullable<ContractDocument['confirmedValues']>['commercialRules'][number]['expression']=null)=>({kind:{value:kind,status:'PRESENT' as const,confidence:'HIGH' as const,evidence:{page:1,snippet:text},alternatives:[]},narrative:{value:text,status:'PRESENT' as const,confidence:'HIGH' as const,evidence:{page:1,snippet:text},alternatives:[]},evidence:{page:1,snippet:text},confidence:'HIGH' as const,rule:{id,kind,narrative:text,applicability:{},dateBasis:'',expression,evidence:[{documentId:'',page:1,snippet:text}],blocking:false}})
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => { vi.clearAllMocks(); pdfText.scanned = false; pdfText.location = 'EXACT' })
 
 describe('Contract ingestion human review boundary', () => {
   it('shows the proposal without creating a contract automatically', () => {
     review()
-    expect(screen.getByLabelText('Referință contract')).toHaveValue('AI-REFERENCE')
+    expect(row(/Referință contract.*AI-REFERENCE/)).toBeInTheDocument()
     expect(screen.getByText('Valorile editate sunt candidatele autoritative', { exact: false })).toBeInTheDocument()
     expect(handlers.confirm).not.toHaveBeenCalled()
   })
   it('submits edited values and the exact extraction revision only on explicit confirmation', async () => {
     const user = userEvent.setup(); const document = fixture(); review(document)
+    await user.click(row(/Referință contract/))
+    await user.click(screen.getByRole('button', { name: 'Corectează' }))
     await user.clear(screen.getByLabelText('Referință contract'))
     await user.type(screen.getByLabelText('Referință contract'), 'USER-CORRECTION')
     expect(handlers.confirm).not.toHaveBeenCalled()
+    expect(row(/Referință contract/)).toHaveTextContent('Corectat de tine')
     await user.click(screen.getByRole('button', { name: 'Confirmă contractul' }))
-    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ document, key: expect.any(String), contract: expect.objectContaining({ reference: 'USER-CORRECTION' }) }),expect.any(Object))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ document, key: expect.any(String), contract: expect.objectContaining({ reference: 'USER-CORRECTION' }) }))
     expect(document.extraction?.proposal?.reference.value).toBe('AI-REFERENCE')
   })
-  it('retains evidence page navigation independently of confirmation', async () => {
-    const evidence = vi.fn(); review(fixture(), evidence)
-    await userEvent.setup().click(screen.getAllByRole('button', { name: 'Pagina 1' })[0])
-    expect(evidence).toHaveBeenCalledWith(1)
+  it('opens the PDF at the words of the selected item independently of confirmation', async () => {
+    const document = fixture(); document.extraction!.proposal!.effectiveFrom = { ...document.extraction!.proposal!.effectiveFrom, evidence: { page: 2, snippet: 'începând cu 01.01.2026' } }
+    review(document)
+    await userEvent.setup().click(row(/Data de început/))
+    expect(await screen.findByTestId('contract-pdf')).toHaveTextContent('pagina 2 · începând cu 01.01.2026')
+    expect(row(/Data de început/)).toHaveTextContent('Verificat automat')
     expect(handlers.confirm).not.toHaveBeenCalled()
   })
-  it('does not invent a missing currency and native validation blocks confirmation', async () => {
+  it('does not invent a missing currency and blocks confirmation on its row', async () => {
     const document = fixture(); document.extraction!.proposal!.currency = { value: null, status: 'MISSING', confidence: 'UNKNOWN', evidence: { page: null, snippet: '' }, alternatives: [] }
     review(document)
+    active(/Monedă/)
     expect(screen.getByLabelText('Monedă ISO')).toHaveValue('')
-    expect(screen.getByText('Moneda ISO este obligatorie.')).toBeInTheDocument()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Confirmă contractul' }))
+    expect(within(screen.getByRole('alert')).getByText('Moneda ISO este obligatorie.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmă contractul' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Mai ai 1 de verificat' }))
     expect(handlers.confirm).not.toHaveBeenCalled()
   })
   it('blocks confirmation when authoritative unit type or payment terms are missing', () => {
@@ -72,43 +83,49 @@ describe('Contract ingestion human review boundary', () => {
     review(document)
     expect(screen.getByRole('alert')).toHaveTextContent('Tipul unității / baza comercială este obligatoriu.')
     expect(screen.getByRole('alert')).toHaveTextContent('Termenii de plată sunt obligatorii.')
-    expect(screen.getByRole('button',{name:'Confirmă contractul'})).toBeDisabled()
+    expect(screen.getByRole('button',{name:'Mai ai 2 de verificat'})).toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'Confirmă contractul'})).not.toBeInTheDocument()
   })
   it('keeps incomplete service pricing empty for human review',()=>{
     const document=fixture();const missing={value:null,status:'MISSING' as const,confidence:'UNKNOWN' as const,evidence:{page:null,snippet:''},alternatives:[]}
     document.extraction!.proposal!.serviceTerms=[{serviceDescription:{...missing,value:'Contabilitate',status:'PRESENT',confidence:'HIGH',evidence:{page:2,snippet:'Contabilitate'}},pricingModel:missing,unitPrice:missing,currency:missing,unit:missing,quantitySource:missing,quantityValue:missing,quantityDriver:missing,billingFrequency:missing}]
     review(document)
+    active(/Contabilitate/)
     expect(screen.getByLabelText('Model tarifare 1')).toHaveValue('')
     expect(screen.getByLabelText('Preț 1')).toHaveValue('')
-    expect(screen.getByText('Serviciul 1: modelul de tarifare este obligatoriu.')).toBeInTheDocument()
+    expect(within(screen.getByRole('alert')).getByText('Serviciul 1: modelul de tarifare este obligatoriu.')).toBeInTheDocument()
   })
   it('retains a clause without an expression as partial review, not an executable price rule',async()=>{
     const document=fixture();const extracted={value:'Tarif după grila de documente',status:'PRESENT' as const,confidence:'HIGH' as const,evidence:{page:2,snippet:'Tarif după grila de documente'},alternatives:[]}
     document.extraction!.proposal!.commercialClauses=[{kind:{...extracted,value:'TIERED_PRICE'},narrative:extracted,evidence:{page:2,snippet:'Tarif după grila de documente'},confidence:'HIGH',rule:{id:'pending-grid',kind:'TIERED_PRICE',narrative:'Tarif după grila de documente',applicability:{},dateBasis:'INVOICE_ISSUE_DATE',expression:null,evidence:[{documentId:'document-1',page:2,snippet:'Tarif după grila de documente'}],blocking:true}}]
-    review(document)
-    expect(screen.getByRole('heading',{name:'Clauze extrase fără formulă executabilă'})).toBeInTheDocument()
+    const user=userEvent.setup();review(document)
+    expect(row(/Tarif după grila de documente/)).toHaveTextContent('Se rezolvă după confirmare')
+    await user.click(row(/Acoperire comercială/))
     expect(screen.getByLabelText('Acoperire comercială')).toBeDisabled()
-    await userEvent.setup().click(screen.getByRole('button',{name:'Confirmă contractul'}))
-    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({contract:expect.objectContaining({coverage:'PARTIAL',commercialRules:[]})}),expect.any(Object))
+    await user.click(screen.getByRole('button',{name:'Confirmă contractul'}))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({contract:expect.objectContaining({coverage:'PARTIAL',commercialRules:[]})}))
   })
   it('requires explicit human confirmation for a normalized AI rule',async()=>{
     const document=fixture();const extracted={value:'Tarif fix de 500 RON',status:'PRESENT' as const,confidence:'HIGH' as const,evidence:{page:2,snippet:'Tarif fix de 500 RON'},alternatives:[]}
     document.extraction!.proposal!.commercialClauses=[{kind:{...extracted,value:'FIXED_PRICE'},narrative:extracted,evidence:{page:2,snippet:'Tarif fix de 500 RON'},confidence:'HIGH',rule:{id:'fixed-500',kind:'FIXED_PRICE',narrative:'Tarif fix de 500 RON',applicability:{},dateBasis:'INVOICE_ISSUE_DATE',expression:{op:'literal',value:'500'},evidence:[{documentId:'document-1',page:2,snippet:'Tarif fix de 500 RON'}],blocking:true}}]
     const user=userEvent.setup();review(document)
-    expect(screen.getByRole('heading',{name:'Reguli propuse de AI, neconfirmate'})).toBeInTheDocument()
-    expect(screen.getByText('Preț fix · Tarif fix de 500 RON')).toBeInTheDocument()
+    active(/Tarif fix de 500 RON/)
+    expect(row(/Tarif fix de 500 RON/)).toHaveTextContent('De verificat: regulă propusă de AI')
     expect(screen.getByText('Prețul unitar de pe factură trebuie să fie 500.')).toBeInTheDocument()
     expect(screen.getByText(/"op"/)).not.toBeVisible()
-    expect(screen.getByLabelText('Acoperire comercială')).toBeDisabled()
+    expect(screen.queryByRole('button',{name:'Confirmă contractul'})).not.toBeInTheDocument()
+    // Leaving it for after confirmation keeps today's behaviour: the contract is confirmed without it.
+    await user.click(screen.getByRole('button',{name:'Lasă pentru după confirmare'}))
     await user.click(screen.getByRole('button',{name:'Confirmă contractul'}))
-    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({contract:expect.objectContaining({coverage:'PARTIAL',commercialRules:[]})}),expect.any(Object))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({contract:expect.objectContaining({coverage:'PARTIAL',commercialRules:[]})}))
     handlers.confirm.mockClear()
     await user.click(screen.getByRole('button',{name:'Confirmă regula'}))
-    expect(screen.getByRole('heading',{name:'Clauze comerciale executabile confirmate'}).parentElement).toHaveTextContent('Prețul unitar de pe factură trebuie să fie 500.')
+    expect(row(/Tarif fix de 500 RON/)).toHaveTextContent('Inclusă în confirmare')
+    await user.click(row(/Acoperire comercială/))
     expect(screen.getByLabelText('Acoperire comercială')).toBeEnabled()
     await user.selectOptions(screen.getByLabelText('Acoperire comercială'),'COMPLETE')
     await user.click(screen.getByRole('button',{name:'Confirmă contractul'}))
-    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({contract:expect.objectContaining({coverage:'COMPLETE',commercialRules:[expect.objectContaining({id:'fixed-500',expression:{op:'literal',value:'500'}})]})}),expect.any(Object))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({contract:expect.objectContaining({coverage:'COMPLETE',commercialRules:[expect.objectContaining({id:'fixed-500',expression:{op:'literal',value:'500'}})]})}))
   })
   it('allows an executable proposal to be confirmed after the contract was already confirmed',async()=>{
     const document=fixture();const extracted={value:'Tarif fix de 500 RON',status:'PRESENT' as const,confidence:'HIGH' as const,evidence:{page:2,snippet:'Tarif fix de 500 RON'},alternatives:[]}
@@ -175,9 +192,10 @@ describe('Contract ingestion human review boundary', () => {
     const rule={id:'payment-10',kind:'PAYMENT_DUE',narrative:text,applicability:{},dateBasis:'',expression:null,evidence:[{documentId:'',page:2,snippet:text}],blocking:false}
     document.extraction!.proposal!.commercialClauses=[{kind:{...extracted,value:'PAYMENT_DUE'},narrative:extracted,evidence:{page:2,snippet:text},confidence:'HIGH',rule,recognizedRule:{...rule,dateBasis:'INVOICE_ISSUE_DATE',expression:{op:'literal',value:'10',scale:2},blocking:true,origin:'SOURCE_TEXT'}}]
     review(document)
-    expect(screen.getByText('Clauze recunoscute automat din text')).toBeInTheDocument()
+    expect(screen.getByText(/Recunoscută automat din text/)).toBeInTheDocument()
     expect(screen.getByText('Scadența facturii trebuie să fie la 10 zile de la data emiterii facturii.')).toBeInTheDocument()
-    expect(screen.queryByText('Clauze extrase fără formulă executabilă')).not.toBeInTheDocument()
+    expect(screen.queryByText('Se rezolvă după confirmare')).not.toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Confirmă contractul'})).toBeEnabled()
   })
   it('lets the reviewer edit a rule confirmed automatically from source text',async()=>{
     const document=fixture();const text='în termen de 10 zile calendaristice de la data emiterii facturii';const extracted={value:text,status:'PRESENT' as const,confidence:'HIGH' as const,evidence:{page:2,snippet:text},alternatives:[]}
@@ -263,7 +281,7 @@ describe('Contract ingestion human review boundary', () => {
   it('opens the element an invoice check links to and moves with the arrow keys',async()=>{
     const base={applicability:{},evidence:[{documentId:'document-1',page:2,snippet:'Plata în 15 zile'}],blocking:true}
     const document=confirmedFixture({commercialRules:[{...base,id:'due',kind:'PAYMENT_DUE',narrative:'Plata în 15 zile',dateBasis:'INVOICE_ISSUE_DATE',expression:{op:'literal',value:'15',scale:2}}]})
-    review(document,vi.fn(),'/?element=rule:due')
+    review(document,'/?element=rule:due')
     expect(screen.getByRole('button',{name:/Termen de plată/})).toHaveAttribute('aria-current','true')
     expect(await screen.findByTestId('contract-pdf')).toHaveTextContent('pagina 2 · Plata în 15 zile')
     await userEvent.setup().keyboard('{ArrowUp}')
@@ -271,8 +289,9 @@ describe('Contract ingestion human review boundary', () => {
   })
   it('blocks buyer mismatch rather than silently moving the document to another client', () => {
     const document=fixture();document.clientCui='RO10000000';document.extraction!.proposal!.buyerCui= {...document.extraction!.proposal!.buyerCui,value:'RO99999999'};review(document)
-    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Confirmă contractul' })).not.toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('CUI-ul cumpărătorului')
+    active(/CUI cumpărător/)
   })
   it('recomputes buyer blocker from the edited reviewed value', async()=>{
     const document=fixture();document.clientCui='RO21592770';document.extraction!.proposal!.buyerCui={...document.extraction!.proposal!.buyerCui,value:'RO99999999'};review(document)
@@ -280,7 +299,8 @@ describe('Contract ingestion human review boundary', () => {
     expect(screen.getByRole('button',{name:'Confirmă contractul'})).toBeEnabled()
   })
   it('models indefinite term without an end date',async()=>{
-    review();await userEvent.setup().click(screen.getByLabelText('Nedeterminată'))
+    const user=userEvent.setup();review()
+    await user.click(row(/Durata/));await user.click(screen.getByRole('button',{name:'Corectează'}));await user.click(screen.getByLabelText('Nedeterminată'))
     expect(screen.queryByLabelText('Data de sfârșit')).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'Confirmă contractul'})).toBeEnabled()
   })
   it('keeps failure recovery out of the manual-from-zero form', async () => {
@@ -311,33 +331,114 @@ describe('Contract ingestion human review boundary', () => {
   })
 })
 
+describe('Contract review with pre-verified items', () => {
+  const medium = (document: ContractDocument, key: 'unitType' | 'paymentTerms') => { document.extraction!.proposal![key] = { ...document.extraction!.proposal![key], confidence: 'MEDIUM' } }
+  const service = (description: string, price: string, snippet: string) => {
+    const read = (value: string, evidence: string) => ({ value, status: 'PRESENT' as const, confidence: 'HIGH' as const, evidence: { page: 1, snippet: evidence }, alternatives: [] })
+    const missing = { value: null, status: 'MISSING' as const, confidence: 'UNKNOWN' as const, evidence: { page: null }, alternatives: [] }
+    return { serviceDescription: read(description, description), pricingModel: read('FIXED_FEE', snippet), unitPrice: read(price, snippet), currency: read('RON', snippet), unit: missing, quantitySource: missing, quantityValue: missing, quantityDriver: missing, billingFrequency: read('MONTHLY', snippet) }
+  }
+
+  it('leaves a medium-confidence value to check and confirms only after the reviewer ticks it', async () => {
+    const document = fixture(); medium(document, 'unitType'); const user = userEvent.setup(); review(document)
+    active(/Tip unitate/)
+    expect(row(/Tip unitate/)).toHaveTextContent('De verificat: încredere medie')
+    expect(row(/Furnizor/)).toHaveTextContent('Verificat automat: găsit exact în PDF')
+    expect(screen.getByText('10 din 11 verificate · 1 de verificat')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmă contractul' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Corect\s*↵$/ }))
+    expect(row(/Tip unitate/)).toHaveTextContent('Verificat de tine')
+    await user.click(screen.getByRole('button', { name: 'Confirmă contractul' }))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ contract: expect.objectContaining({ unitType: 'servicii' }) }))
+  })
+
+  it('ticks the item with Enter and moves to the next one to check', async () => {
+    const document = fixture(); medium(document, 'unitType'); medium(document, 'paymentTerms'); review(document)
+    active(/Tip unitate/)
+    await userEvent.setup().keyboard('{Enter}')
+    expect(row(/Tip unitate/)).toHaveTextContent('Verificat de tine')
+    active(/Termeni de plată/)
+    expect(screen.getByRole('button', { name: 'Mai ai 1 de verificat' })).toBeInTheDocument()
+  })
+
+  it('restores a value with Escape while correcting it', async () => {
+    const user = userEvent.setup(); review()
+    await user.click(row(/Referință contract/))
+    await user.keyboard('e')
+    const input = screen.getByLabelText('Referință contract')
+    await user.clear(input); await user.type(input, 'GREȘIT{Escape}')
+    expect(screen.queryByLabelText('Referință contract')).not.toBeInTheDocument()
+    expect(row(/Referință contract/)).toHaveTextContent('AI-REFERENCE')
+    expect(row(/Referință contract/)).toHaveTextContent('Verificat automat')
+  })
+
+  it('shows one banner for a scanned PDF and leaves every item to the reviewer', () => {
+    pdfText.scanned = true; pdfText.location = 'NONE'
+    review()
+    expect(screen.getAllByText(/PDF-ul nu are text/)).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Mai ai 11 de verificat' })).toBeInTheDocument()
+    expect(screen.queryByText('Verificat automat: găsit exact în PDF')).not.toBeInTheDocument()
+  })
+
+  it('does not tick a value the cited words do not state', () => {
+    const document = fixture(); document.extraction!.proposal!.totalValue = { ...document.extraction!.proposal!.totalValue, evidence: { page: 1, snippet: 'Valoarea totală a contractului este 12.500,00 lei' } }
+    review(document)
+    expect(row(/Valoare contractuală totală/)).toHaveTextContent('De verificat: valoarea nu apare în fragment')
+  })
+
+  it('opens the element a link names', () => {
+    const document = fixture(); medium(document, 'unitType')
+    review(document, '/?element=field:currency')
+    active(/Monedă/)
+  })
+
+  it('keeps each service paired with its own proposal row when one is removed', async () => {
+    const document = fixture(); document.extraction!.proposal!.serviceTerms = [service('Mentenanță IT', '1800.00', 'Mentenanță IT 1.800,00 lei / lună'), service('Hosting cloud', '650.00', 'Hosting cloud 650,00 lei / lună')]
+    const user = userEvent.setup(); review(document)
+    expect(row(/Hosting cloud/)).toHaveTextContent('Verificat automat')
+    await user.click(row(/Mentenanță IT/))
+    await user.click(screen.getByRole('button', { name: 'Elimină' }))
+    expect(row(/Hosting cloud/)).toHaveTextContent('Verificat automat')
+    await user.click(screen.getByRole('button', { name: 'Confirmă contractul' }))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ contract: expect.objectContaining({ serviceTerms: [expect.objectContaining({ serviceDescription: 'Hosting cloud', sourceIndex: 1 })] }) }))
+  })
+
+  it('adds a service the extraction missed, without evidence', async () => {
+    const user = userEvent.setup(); review()
+    await user.click(screen.getByRole('button', { name: 'Adaugă serviciu' }))
+    expect(screen.getByLabelText('Serviciu 1')).toHaveFocus()
+    await user.type(screen.getByLabelText('Serviciu 1'), 'Backup')
+    await user.selectOptions(screen.getByLabelText('Model tarifare 1'), 'FIXED_FEE')
+    await user.type(screen.getByLabelText('Preț 1'), '100')
+    await user.click(screen.getByRole('button', { name: 'Confirmă contractul' }))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ contract: expect.objectContaining({ serviceTerms: [expect.objectContaining({ serviceDescription: 'Backup', unitPrice: '100', currency: 'RON', sourceIndex: -1 })] }) }))
+  })
+})
+
 describe('lease where the client is the Locator (D-126)', () => {
-  function leaseFixture() {
+  function leaseFixture(withTenantName = true) {
     const document = fixture()
     const proposal = document.extraction!.proposal!
     document.clientCui = 'RO10000000'
-    proposal.supplierCui = { ...proposal.supplierCui, value: 'RO10000000' }
-    proposal.buyerCui = { ...proposal.buyerCui, value: 'RO40138380' }
-    proposal.buyerName = { ...proposal.supplierName, value: 'Chiriaș Test SRL' }
+    proposal.supplierCui = { ...proposal.supplierCui, value: 'RO10000000', evidence: { page: 1, snippet: 'RO10000000' } }
+    proposal.buyerCui = { ...proposal.buyerCui, value: 'RO40138380', evidence: { page: 1, snippet: 'RO40138380' } }
+    if (withTenantName) proposal.buyerName = { ...proposal.supplierName, value: 'Chiriaș Test SRL', evidence: { page: 1, snippet: 'Chiriaș Test SRL' } }
     return document
   }
-  it('confirms with the client as supplier and explains the role', () => {
-    review(leaseFixture())
-    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeEnabled()
-    expect(screen.getByRole('note')).toHaveTextContent('Clientul este furnizorul')
-    expect(screen.getByRole('note')).toHaveTextContent('Chiriaș Test SRL')
+  it('confirms with the client as supplier and the tenant as buyer', async () => {
+    const document = leaseFixture(); review(document)
+    expect(row(/Cumpărător \(locatar\)/)).toHaveTextContent('Chiriaș Test SRL')
+    expect(screen.queryByText(/nu corespunde clientului selectat/)).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Confirmă contractul' }))
+    expect(handlers.confirm).toHaveBeenCalledWith(expect.objectContaining({ contract: expect.objectContaining({ supplierCui: 'RO10000000', buyerCui: 'RO40138380', buyerName: 'Chiriaș Test SRL' }) }))
   })
-  it('requires the tenant name when the client is the supplier', async () => {
-    review(leaseFixture())
-    await userEvent.setup().clear(screen.getByLabelText('Denumire cumpărător (locatar)'))
-    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Denumirea cumpărătorului (locatarului)')
+  it('requires the tenant name when the client is the supplier', () => {
+    review(leaseFixture(false))
+    expect(row(/Cumpărător \(locatar\)/)).toHaveTextContent('Denumirea cumpărătorului (locatarului) este obligatorie')
+    expect(screen.queryByRole('button', { name: 'Confirmă contractul' })).not.toBeInTheDocument()
   })
-  it('accepts a natural-person tenant identified by CNP', async () => {
-    review(leaseFixture())
-    const input = screen.getByLabelText('CUI cumpărător')
-    await userEvent.setup().clear(input)
-    await userEvent.setup().type(input, '1800101420010')
-    expect(screen.getByRole('button', { name: 'Confirmă contractul' })).toBeEnabled()
+  it('does not ask for a buyer name on a purchase contract', () => {
+    const document = fixture(); document.clientCui = 'RO10000000'; review(document)
+    expect(screen.queryByRole('button', { name: /Cumpărător \(locatar\)/ })).not.toBeInTheDocument()
   })
 })

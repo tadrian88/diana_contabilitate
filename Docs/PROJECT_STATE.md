@@ -17,6 +17,18 @@
 - Verificare: doar statică de Claude (`go build`, `go vet` inclusiv cu tag-ul de integrare, `atlas migrate validate`,
   `tsc`, `py_compile`). Testele Go unit/integration, vitest, E2E și harness-ul urmează să fie rulate de utilizator.
 
+## Revizuirea contractului cu pre-validare (faza 2 din D-117) — 2026-09-30
+
+- IMPLEMENTAT PE RAMURA `feature/contract-review-prevalidation` (worktree `diana_worktrees/contract-review-prevalidation`) — AȘTEAPTĂ TESTELE UTILIZATORULUI. Extinderea paginii contractului („FROZEN”) a fost aprobată explicit de utilizator în planul D-117.
+- Un document în revizuire se deschide acum în același spațiu de lucru ca unul confirmat: lista grupată în stânga, PDF-ul evidențiat în dreapta.
+  - Vin bifate doar valorile cu încredere mare, găsite exact în PDF, al căror fragment conține valoarea; restul (și tot, la un PDF scanat) rămân „de verificat”.
+  - Acțiuni pe rând: Corect (Enter), Corectează (E), Lipsă; Esc renunță la corectare. Blocajele apar pe rândul lor și în lista de deasupra.
+  - Regulile AI executabile se confirmă sau se lasă pentru după confirmare; clauzele fără formulă nu blochează.
+  - Butonul devine „Mai ai n de verificat” până nu mai rămâne nimic; după confirmare pagina se deschide pe prima clauză de rezolvat.
+- Bug reparat: eliminarea unui serviciu din mijlocul listei muta evidența tuturor serviciilor de după el. Serviciile revizuite poartă acum `sourceIndex` (D-132). Fără migrări.
+- E2E `contract-ingestion.spec.ts` adaptat la noul flux (rânduri + „Corect”).
+- Verificare: doar statică de Claude (`gofmt`). `tsc`, `go vet`, testele Go, vitest și E2E urmează să fie rulate de utilizator.
+
 ## Retrieval Cod fiscal + linii neimpozabile (categoria O) — 2026-09-30
 
 - IMPLEMENTAT PE RAMURA `feature/victoria-iteratia-2`, pornită din `feature/victoria-iteratia-1` — AȘTEAPTĂ TESTELE UTILIZATORULUI.
@@ -89,7 +101,7 @@
 
 ## Pagina documentului de contract ca spațiu de lucru față în față — 2026-09-29
 
-- FAZA 1 IMPLEMENTATĂ ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Faza 2 (pre-validarea revizuirii înainte de confirmare, împerecherea serviciu ↔ evidență după `sourceIndex`) urmează după verificarea fazei 1.
+- FAZA 1 IMPLEMENTATĂ ÎN WORKSPACE — AȘTEAPTĂ TESTELE UTILIZATORULUI. Faza 2 (pre-validarea revizuirii înainte de confirmare, împerecherea serviciu ↔ evidență după `sourceIndex`): vezi intrarea din 2026-09-30.
 - Pagina unui contract confirmat arată acum fiecare valoare lângă PDF-ul evidențiat la textul citat și ce folosește fiecare tarif sau clauză la verificarea facturilor, din snapshot-ul activ.
 - Clauzele se pot închide fără să devină regulă:
   - identitate acoperită de CUI-ul furnizorului: automat după confirmare sau cu un click;

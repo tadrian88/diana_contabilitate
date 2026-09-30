@@ -373,6 +373,13 @@ func reviewedDiffers(p contractingestion.Proposal, v contractingestion.ReviewedC
 	if len(contractingestion.UnconfirmedCommercialClauses(p, v.CommercialRules)) > 0 {
 		return true
 	}
+	// A service removed or added keeps the count only by coincidence; the
+	// proposal row each one came from tells.
+	for index, term := range v.ServiceTerms {
+		if term.SourceIndex != nil && *term.SourceIndex != index {
+			return true
+		}
+	}
 	return len(p.ServiceTerms) != len(v.ServiceTerms)
 }
 

@@ -4,13 +4,13 @@ import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/button'
 import type { ContractDocument } from '../../repositories/invoiceRepository'
 import type { HighlightResult } from './ContractPDFPreview'
-import { findItem, reviewGroups, type ReviewItem, type ReviewTone } from './contract-review-model'
+import { findItem, reviewGroups, type ReviewGroup, type ReviewItem, type ReviewTone } from './contract-review-model'
 import type { ContractPdf } from './useContractPdf'
 
 // pdf.js is loaded with the first contract page shown, not with the route.
 const ContractPDFPreview = lazy(() => import('./ContractPDFPreview').then((module) => ({ default: module.ContractPDFPreview })))
 
-const Kbd = ({ children }: { children: string }) => <kbd className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-md border border-b-2 border-[var(--border-strong)] bg-[var(--surface)] px-1.5 font-sans text-[11px] font-semibold text-[var(--text-secondary)]">{children}</kbd>
+export const Kbd = ({ children }: { children: string }) => <kbd className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-md border border-b-2 border-[var(--border-strong)] bg-[var(--surface)] px-1.5 font-sans text-[11px] font-semibold text-[var(--text-secondary)]">{children}</kbd>
 
 // Shortcuts never fire while the reviewer is typing or choosing a value.
 const editable = (target: EventTarget | null) => target instanceof HTMLElement && (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable)
@@ -29,7 +29,7 @@ function ToneIcon({ tone }: { tone: ReviewTone }) {
 // contract, and the original PDF on the right, highlighted at the words the
 // active item was read from, so each value is checked without searching.
 // ↑/↓ move between items; the page keeps the active item in `?element=`.
-export function ContractReviewWorkspace({ document, items, pdf, eyebrow, title, subtitle, badges, actions, nextLabel, renderDetail, onShortcut, afterList, footer }: {
+export function ContractReviewWorkspace({ document, items, pdf, eyebrow, title, subtitle, badges, actions, nextLabel, renderDetail, onShortcut, keyHints, notice, groupActions, afterList, footer }: {
   document: ContractDocument
   items: ReviewItem[]
   pdf: ContractPdf
@@ -42,6 +42,13 @@ export function ContractReviewWorkspace({ document, items, pdf, eyebrow, title, 
   nextLabel: (count: number) => string
   renderDetail: (item: ReviewItem) => ReactNode
   onShortcut?: (event: KeyboardEvent, item: ReviewItem) => void
+  // The shortcuts onShortcut handles, next to the ↑/↓ hint.
+  keyHints?: ReactNode
+  // Shown between the header and the two panes (blockers, errors).
+  notice?: ReactNode
+  // An action in a group's heading, e.g. adding a service; the group is shown
+  // even while it has no item.
+  groupActions?: Partial<Record<ReviewGroup, ReactNode>>
   afterList?: ReactNode
   footer?: ReactNode
 }) {
@@ -114,23 +121,25 @@ export function ContractReviewWorkspace({ document, items, pdf, eyebrow, title, 
           {actions}
         </div>
       </header>
+      {notice}
       {pdf.scanned && <p role="status" className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-soft)] px-4 py-2.5 text-sm">PDF-ul nu are text (este scanat): Diana nu poate evidenția valorile. Verifică fiecare element vizual, pe pagina indicată.</p>}
       <div className="grid gap-4 lg:h-[calc(100vh-15rem)] lg:min-h-[560px] lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <section aria-label="Ce a extras Diana" className="card flex min-h-0 flex-col overflow-hidden">
-          <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--border)] px-4"><span className="eyebrow">Ce a extras Diana</span><span className="hidden items-center gap-1 text-xs text-[var(--text-secondary)] md:flex"><Kbd>↑</Kbd><Kbd>↓</Kbd> elementul</span></div>
+          <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--border)] px-4"><span className="eyebrow">Ce a extras Diana</span><span className="hidden items-center gap-1 text-xs text-[var(--text-secondary)] md:flex"><Kbd>↑</Kbd><Kbd>↓</Kbd> elementul{keyHints}</span></div>
           <div className="min-h-0 flex-1 overflow-auto">
             {reviewGroups.map((group) => {
               const members = items.filter((item) => item.group === group.id)
-              if (!members.length) return null
+              const action = groupActions?.[group.id]
+              if (!members.length && !action) return null
               return (
                 <section key={group.id} aria-label={group.label} className="border-b border-[var(--border)] last:border-b-0">
-                  <h3 className="eyebrow bg-[var(--surface-subtle)] px-4 py-2">{group.label} <span className="text-[var(--text-muted)]">({members.length})</span></h3>
+                  <div className="flex items-center justify-between gap-2 bg-[var(--surface-subtle)] px-4 py-2"><h3 className="eyebrow">{group.label} <span className="text-[var(--text-muted)]">({members.length})</span></h3>{action}</div>
                   <ul>
                     {members.map((item) => {
                       const isActive = item.id === active?.id
                       return (
                         <li key={item.id} className={isActive ? 'bg-[var(--info-soft)] shadow-[inset_3px_0_0_var(--accent)]' : 'border-t border-[var(--border)] first:border-t-0'}>
-                          <button type="button" ref={(element) => { if (element) rows.current.set(item.id, element); else rows.current.delete(item.id) }} aria-current={isActive ? 'true' : undefined} onClick={() => select(item, 'pointer')} className="flex w-full items-start gap-3 px-4 py-3 text-left outline-none hover:bg-[var(--surface-subtle)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]">
+                          <button type="button" data-review-row="" ref={(element) => { if (element) rows.current.set(item.id, element); else rows.current.delete(item.id) }} aria-current={isActive ? 'true' : undefined} onClick={() => select(item, 'pointer')} className="flex w-full items-start gap-3 px-4 py-3 text-left outline-none hover:bg-[var(--surface-subtle)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]">
                             <ToneIcon tone={item.tone} />
                             <span className="min-w-0 flex-1">
                               <span className="flex items-baseline justify-between gap-3"><span className="text-xs font-semibold text-[var(--text-secondary)]">{item.label}</span>{item.page && <span className="shrink-0 text-xs text-[var(--text-muted)]">p. {item.page}</span>}</span>

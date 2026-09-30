@@ -434,9 +434,12 @@ func (s *Service) Confirm(ctx context.Context, command ConfirmCommand) (string, 
 		if command.Contract.PendingCommercialClauses > 0 {
 			command.Contract.Coverage = commercialvalidation.CoveragePartial
 		}
-		for index := range command.Contract.ServiceTerms {
-			if index < len(doc.LatestAttempt.Proposal.ServiceTerms) {
-				command.Contract.ServiceTerms[index].Evidence = doc.LatestAttempt.Proposal.ServiceTerms[index].ServiceDescription.Evidence
+		if !ValidServiceTermSources(command.Contract.ServiceTerms, len(doc.LatestAttempt.Proposal.ServiceTerms)) {
+			return "", false, apperrors.ErrValidation
+		}
+		for index, term := range command.Contract.ServiceTerms {
+			if source, ok := ServiceTermSource(term, index, doc.LatestAttempt.Proposal.ServiceTerms); ok {
+				command.Contract.ServiceTerms[index].Evidence = source.ServiceDescription.Evidence
 			} else {
 				command.Contract.ServiceTerms[index].Evidence = Evidence{}
 			}

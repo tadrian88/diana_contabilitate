@@ -608,11 +608,12 @@ func fixedQuantitySeeds(contractID, reference string, rules []commercialvalidati
 	seeds := []quantitySeed{}
 	for index, term := range terms {
 		ruleID := stableID("service", fmt.Sprintf("%s:%d", contractID, index))
-		if !unitRates[ruleID] || term.QuantitySource != "CONTRACT_FIXED_QUANTITY" || index >= len(proposed) || proposed[index].QuantityValue.Value == nil {
+		source, sourced := contractingestion.ServiceTermSource(term, index, proposed)
+		if !unitRates[ruleID] || term.QuantitySource != "CONTRACT_FIXED_QUANTITY" || !sourced || source.QuantityValue.Value == nil {
 			continue
 		}
 		reviewed, ok := new(big.Rat).SetString(strings.TrimSpace(term.QuantityValue))
-		cited, citedOK := new(big.Rat).SetString(strings.TrimSpace(*proposed[index].QuantityValue.Value))
+		cited, citedOK := new(big.Rat).SetString(strings.TrimSpace(*source.QuantityValue.Value))
 		if !ok || !citedOK || reviewed.Cmp(cited) != 0 || reviewed.Sign() <= 0 {
 			continue
 		}
@@ -884,12 +885,13 @@ func reviewedServicePriceRules(documentID, contractID string, terms []contractin
 			skip(index, term, commercialvalidation.SkipPricingModelUnsupported)
 			continue
 		}
-		if index >= len(proposed) || proposed[index].UnitPrice.Evidence.Snippet == "" || proposed[index].UnitPrice.Value == nil || proposed[index].Currency.Value == nil {
+		source, sourced := contractingestion.ServiceTermSource(term, index, proposed)
+		if !sourced || source.UnitPrice.Evidence.Snippet == "" || source.UnitPrice.Value == nil || source.Currency.Value == nil {
 			skip(index, term, commercialvalidation.SkipSourceMissing)
 			continue
 		}
-		priceEvidence := proposed[index].UnitPrice.Evidence
-		if strings.TrimSpace(*proposed[index].UnitPrice.Value) != strings.TrimSpace(term.UnitPrice) || !strings.EqualFold(strings.TrimSpace(*proposed[index].Currency.Value), strings.TrimSpace(term.Currency)) {
+		priceEvidence := source.UnitPrice.Evidence
+		if strings.TrimSpace(*source.UnitPrice.Value) != strings.TrimSpace(term.UnitPrice) || !strings.EqualFold(strings.TrimSpace(*source.Currency.Value), strings.TrimSpace(term.Currency)) {
 			skip(index, term, commercialvalidation.SkipPriceChangedFromSource)
 			continue
 		}
@@ -907,7 +909,7 @@ func reviewedServicePriceRules(documentID, contractID string, terms []contractin
 		// The service description follows so a reviewer can see the whole
 		// tariff row, not an amount out of context.
 		evidence := []commercialvalidation.Evidence{{DocumentID: documentID, Page: priceEvidence.Page, Snippet: priceEvidence.Snippet}}
-		if description := proposed[index].ServiceDescription.Evidence; strings.TrimSpace(description.Snippet) != "" && description.Snippet != priceEvidence.Snippet {
+		if description := source.ServiceDescription.Evidence; strings.TrimSpace(description.Snippet) != "" && description.Snippet != priceEvidence.Snippet {
 			evidence = append(evidence, commercialvalidation.Evidence{DocumentID: documentID, Page: description.Page, Snippet: description.Snippet})
 		}
 		rule := commercialvalidation.Rule{ID: serviceID, Kind: kind, Narrative: narrative, Applicability: commercialvalidation.Applicability{ServiceID: serviceID, Aliases: []string{term.ServiceDescription}, BillingFrequency: term.BillingFrequency}, DateBasis: commercialvalidation.DateInvoiceIssue, Currency: strings.ToUpper(term.Currency), Unit: strings.TrimSpace(term.Unit), Expression: expression, Evidence: evidence, Blocking: true}

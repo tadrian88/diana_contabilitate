@@ -155,6 +155,11 @@ Asocierea autoritativă se face după client/CUI, nu după textul liber al linie
   - Versiunea nouă este prima liberă din dosar.
   - Nu se scrie nimic dacă regulile și acoperirea nu se schimbă.
 
+- **Împerecherea serviciu ↔ evidență** (D-132): fiecare serviciu revizuit poartă `sourceIndex`, rândul din propunere din care a fost citit (`-1` pentru un serviciu adăugat de revizor, fără evidență).
+  - Serverul acceptă `sourceIndex` pe toate serviciile sau pe niciunul, fiecare rând cel mult o dată; altfel confirmarea întoarce 400.
+  - Evidența la confirmare, activarea tarifelor (`reviewedServicePriceRules`), starea tarifelor din `commercialState` și cantitățile fixe (`fixedQuantitySeeds`) folosesc rândul indicat (`contractingestion.ServiceTermSource`).
+  - Contractele confirmate înainte nu au `sourceIndex` și se împerechează în continuare după poziție.
+
 ## Limitări explicite V1
 
 - Nu s-a executat Gemini live și calitatea V4 pe PDF-urile reale nu este revendicată.

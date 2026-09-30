@@ -484,3 +484,47 @@ func TestSupplementCanConfirmOnlyCommercialClausesAndExplicitParent(t *testing.T
 		t.Fatal("supplement without explicit parent accepted")
 	}
 }
+
+func TestServiceTermSourcesAreExplicitOnEveryServiceOrOnNone(t *testing.T) {
+	index := func(value int) *int { return &value }
+	term := func(source *int) ci.ReviewedServiceTerm { return ci.ReviewedServiceTerm{SourceIndex: source} }
+	for _, tc := range []struct {
+		name  string
+		terms []ci.ReviewedServiceTerm
+		valid bool
+	}{
+		{"positional", []ci.ReviewedServiceTerm{term(nil), term(nil)}, true},
+		{"explicit with a manual service", []ci.ReviewedServiceTerm{term(index(1)), term(index(ci.ManualServiceTerm)), term(index(ci.ManualServiceTerm))}, true},
+		{"only manual services", []ci.ReviewedServiceTerm{term(index(ci.ManualServiceTerm))}, true},
+		{"mixed", []ci.ReviewedServiceTerm{term(index(0)), term(nil)}, false},
+		{"duplicate row", []ci.ReviewedServiceTerm{term(index(0)), term(index(0))}, false},
+		{"row out of range", []ci.ReviewedServiceTerm{term(index(2))}, false},
+		{"negative row", []ci.ReviewedServiceTerm{term(index(-2))}, false},
+	} {
+		if got := ci.ValidServiceTermSources(tc.terms, 2); got != tc.valid {
+			t.Errorf("%s: valid=%v, want %v", tc.name, got, tc.valid)
+		}
+	}
+	proposed := []ci.ProposedServiceTerm{{Unit: ci.Field{Status: "first"}}, {Unit: ci.Field{Status: "second"}}}
+	if source, ok := ci.ServiceTermSource(term(index(1)), 0, proposed); !ok || source.Unit.Status != "second" {
+		t.Fatalf("explicit row ignored: %+v", source)
+	}
+	if source, ok := ci.ServiceTermSource(term(nil), 1, proposed); !ok || source.Unit.Status != "second" {
+		t.Fatalf("positional fallback lost: %+v", source)
+	}
+	if _, ok := ci.ServiceTermSource(term(index(ci.ManualServiceTerm)), 0, proposed); ok {
+		t.Fatal("a manual service was paired with a proposal row")
+	}
+}
+
+func TestContractConfirmationRejectsAServiceRowUsedTwice(t *testing.T) {
+	proposal := fixtures.Proposal("service-indefinite")
+	store := &memoryStore{doc: ci.Document{ID: "doc", ClientID: "client", LatestAttempt: &ci.Attempt{ID: "attempt", Proposal: &proposal, Status: "SUCCEEDED"}}}
+	service := ci.NewService(store, nil, &availability{}, 0, nil)
+	value := reviewed(proposal)
+	first := 0
+	value.ServiceTerms[0].SourceIndex, value.ServiceTerms[1].SourceIndex = &first, &first
+	if _, _, err := service.Confirm(context.Background(), ci.ConfirmCommand{ClientID: "client", DocumentID: "doc", Contract: value, ExpectedDocumentRevision: 1, CommandID: "key", Actor: ci.Actor{AllClients: true}}); !errors.Is(err, apperrors.ErrValidation) {
+		t.Fatalf("a proposal row paired with two services: %v", err)
+	}
+}
