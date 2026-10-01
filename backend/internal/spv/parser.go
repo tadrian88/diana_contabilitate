@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -347,7 +348,121 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 		}
 		input.Lines = append(input.Lines, invoicing.Line{SourceFacts: lineFacts, Position: index + 1, Description: description, Unit: q.Unit, VATRate: rate, VATValue: vat, Quantity: quantityValue, UnitPrice: unitPrice, NetValue: net, TotalValue: lineTotal, AdditionalInfo: additional})
 	}
+	alignCalculatedVAT(input.Lines, facts.Subtotals, currency)
 	return ParsedDocument{Invoice: input, BuyerCUI: buyerCUI, SupplierCUI: supplierCUI, Format: ParserTypeUBL, Version: facts.ParserVersion}, nil
+}
+
+// alignCalculatedVAT makes line VAT that Diana had to calculate (the e-Factura
+// line carries no VAT amount) agree with the VAT the invoice declares for its
+// category and rate (D-132). The issuer rounds VAT per category, so net × rate
+// per line can differ by a fraction of a cent. Lines are rounded to two
+// decimals and the remaining difference is spread one cent per line, largest
+// net first. A group is left untouched when it has no single declared subtotal
+// in the document currency or when the difference exceeds one cent per line:
+// that is a real discrepancy, not rounding. Declared line VAT is never changed.
+func alignCalculatedVAT(lines []invoicing.Line, subtotals []accounting.TaxSubtotal, currency string) {
+	cent := big.NewRat(1, 100)
+	key := func(code string, rate *money.Amount) (string, bool) {
+		if rate == nil {
+			return "", false
+		}
+		value, ok := new(big.Rat).SetString(rate.String())
+		if !ok {
+			return "", false
+		}
+		return code + ":" + value.RatString(), true
+	}
+	declared := map[string]*big.Rat{}
+	ambiguous := map[string]bool{}
+	for _, subtotal := range subtotals {
+		group, ok := key(subtotal.Code, subtotal.Rate)
+		amount, valid := new(big.Rat).SetString(subtotal.VAT.Amount.String())
+		if !ok || !valid || subtotal.VAT.Currency != currency {
+			continue
+		}
+		if _, exists := declared[group]; exists {
+			ambiguous[group] = true
+		}
+		declared[group] = amount
+	}
+	groups := map[string][]int{}
+	for index, line := range lines {
+		if line.SourceFacts == nil {
+			continue
+		}
+		if group, ok := key(line.SourceFacts.Code, line.SourceFacts.Rate); ok {
+			groups[group] = append(groups[group], index)
+		}
+	}
+	for group, indexes := range groups {
+		target, ok := declared[group]
+		if !ok || ambiguous[group] {
+			continue
+		}
+		rounded := map[int]*big.Rat{}
+		calculated := []int{}
+		sum := new(big.Rat)
+		for _, index := range indexes {
+			value, valid := new(big.Rat).SetString(lines[index].VATValue.String())
+			if !valid {
+				calculated = nil
+				break
+			}
+			if lines[index].SourceFacts.VATOrigin == accounting.Calculated {
+				value, _ = new(big.Rat).SetString(roundHalfUp(value, 2))
+				rounded[index] = value
+				calculated = append(calculated, index)
+			}
+			sum.Add(sum, value)
+		}
+		if len(calculated) == 0 {
+			continue
+		}
+		difference := new(big.Rat).Sub(target, sum)
+		steps := new(big.Rat).Quo(difference, cent)
+		if !steps.IsInt() || new(big.Rat).Abs(steps).Cmp(big.NewRat(int64(len(calculated)), 1)) > 0 {
+			continue
+		}
+		sort.SliceStable(calculated, func(left, right int) bool {
+			a, _ := new(big.Rat).SetString(lines[calculated[left]].NetValue.String())
+			b, _ := new(big.Rat).SetString(lines[calculated[right]].NetValue.String())
+			return a.Cmp(b) > 0
+		})
+		step := new(big.Rat).Set(cent)
+		if difference.Sign() < 0 {
+			step.Neg(step)
+		}
+		for position := 0; position < int(new(big.Rat).Abs(steps).Num().Int64()); position++ {
+			rounded[calculated[position]].Add(rounded[calculated[position]], step)
+		}
+		for _, index := range calculated {
+			vat, err := parseAmount(rounded[index].FloatString(2))
+			if err != nil {
+				continue
+			}
+			total, err := parseAmount(addDecimal(lines[index].NetValue.String(), vat.String()))
+			if err != nil {
+				continue
+			}
+			lines[index].VATValue, lines[index].TotalValue = vat, total
+			if lines[index].SourceFacts.VATAmount != nil {
+				lines[index].SourceFacts.VATAmount.Amount = vat
+			}
+		}
+	}
+}
+
+// roundHalfUp rounds a decimal away from zero at the given number of decimals.
+func roundHalfUp(value *big.Rat, decimals int) string {
+	scale := new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	scaled := new(big.Rat).Mul(value, scale)
+	half := big.NewRat(1, 2)
+	if scaled.Sign() < 0 {
+		half.Neg(half)
+	}
+	scaled.Add(scaled, half)
+	integer := new(big.Int).Quo(scaled.Num(), scaled.Denom())
+	return new(big.Rat).Quo(new(big.Rat).SetInt(integer), scale).FloatString(decimals)
 }
 
 func nonemptyTrimmed(values []string) []string {

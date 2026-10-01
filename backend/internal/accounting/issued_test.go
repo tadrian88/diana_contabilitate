@@ -39,3 +39,26 @@ func TestDirectionDerivedValuesAreNotApplicable(t *testing.T) {
 		}
 	}
 }
+
+// D-132: a line may differ from net × rate by one cent of category rounding;
+// more than that is still refused, and totals stay exact.
+func TestReconciliationAllowsOneCentOfLineVATRounding(t *testing.T) {
+	reconcile := func(net, vat, total string) error {
+		f, l, _, _ := accountingtest.Fixture("A")
+		amount := func(value string) *accounting.AmountFact {
+			return &accounting.AmountFact{Amount: money.MustParse(value), Currency: "RON", Origin: accounting.Declared}
+		}
+		l.NetAmount, l.VATAmount, l.PriceAmount = nil, nil, nil
+		f.LineExtension, f.TaxExclusive, f.TaxInclusive = amount(net), amount(net), amount(total)
+		f.VATTotals = []accounting.AmountFact{*amount(vat)}
+		f.Subtotals[0].Base, f.Subtotals[0].VAT = *amount(net), *amount(vat)
+		lines := []accounting.SourceLine{{Facts: l, Net: money.MustParse(net), VAT: money.MustParse(vat), Total: money.MustParse(total), Rate: money.MustParse("21")}}
+		return accounting.Reconcile(f, lines, money.MustParse(total), "RON")
+	}
+	if err := reconcile("19866.17", "4171.89", "24038.06"); err != nil {
+		t.Fatalf("one cent of rounding rejected: %v", err)
+	}
+	if err := reconcile("19866.17", "4171.87", "24038.04"); err == nil {
+		t.Fatal("three cents accepted as rounding")
+	}
+}

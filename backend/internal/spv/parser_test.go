@@ -3,6 +3,7 @@ package spv
 import (
 	"archive/zip"
 	"bytes"
+	"diana-contabilitate/backend/internal/money"
 	"strings"
 	"testing"
 
@@ -101,5 +102,47 @@ func TestUBLParserKeepsCustomerOfIssuedInvoice(t *testing.T) {
 	}
 	if direction, err := ResolveDirection(parsed, "RO11111111"); err != nil || direction != "OUTGOING" {
 		t.Fatalf("direction=%s err=%v", direction, err)
+	}
+}
+
+func vatAlignmentXML(declaredVAT, total string, lines ...string) string {
+	body := ""
+	for index, net := range lines {
+		body += `<InvoiceLine><ID>` + string(rune('1'+index)) + `</ID><InvoicedQuantity unitCode="H87">1</InvoicedQuantity><LineExtensionAmount currencyID="RON">` + net + `</LineExtensionAmount><Item><Name>chirie</Name><ClassifiedTaxCategory><ID>S</ID><Percent>21</Percent><TaxScheme><ID>VAT</ID></TaxScheme></ClassifiedTaxCategory></Item><Price><PriceAmount currencyID="RON">` + net + `</PriceAmount></Price></InvoiceLine>`
+	}
+	return `<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>VE-ROUND</ID><IssueDate>2026-06-03</IssueDate><DocumentCurrencyCode>RON</DocumentCurrencyCode><AccountingSupplierParty><Party><PartyLegalEntity><RegistrationName>Emitent Sintetic SRL</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>RO11111111</CompanyID></PartyTaxScheme></Party></AccountingSupplierParty><AccountingCustomerParty><Party><PartyLegalEntity><RegistrationName>Client Sintetic SRL</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>RO22222222</CompanyID></PartyTaxScheme></Party></AccountingCustomerParty><TaxTotal><TaxAmount currencyID="RON">` + declaredVAT + `</TaxAmount><TaxSubtotal><TaxableAmount currencyID="RON">1</TaxableAmount><TaxAmount currencyID="RON">` + declaredVAT + `</TaxAmount><TaxCategory><ID>S</ID><Percent>21</Percent><TaxScheme><ID>VAT</ID></TaxScheme></TaxCategory></TaxSubtotal></TaxTotal><LegalMonetaryTotal><TaxInclusiveAmount currencyID="RON">` + total + `</TaxInclusiveAmount></LegalMonetaryTotal>` + body + `</Invoice>`
+}
+
+// D-132: VAT Diana has to calculate per line follows the VAT the invoice
+// declares for the category; net × rate alone gives 4171.8957, the issuer
+// declared 4171.89.
+func TestCalculatedLineVATFollowsDeclaredCategoryVAT(t *testing.T) {
+	parsed, err := (UBLParser{}).Parse(testZIP(t, map[string]string{"invoice.xml": vatAlignmentXML("4171.89", "24038.06", "19866.17")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := parsed.Invoice.Lines[0]
+	if !line.VATValue.Equal(money.MustParse("4171.89")) || !line.TotalValue.Equal(money.MustParse("24038.06")) || !line.SourceFacts.VATAmount.Amount.Equal(money.MustParse("4171.89")) {
+		t.Fatalf("line VAT=%s total=%s fact=%s", line.VATValue, line.TotalValue, line.SourceFacts.VATAmount.Amount)
+	}
+
+	// Two lines of 0.03 at 21% each calculate 0.0063 and round to 0.01; the
+	// invoice declares 0.01 for the category, so one line gives up its cent.
+	parsed, err = (UBLParser{}).Parse(testZIP(t, map[string]string{"invoice.xml": vatAlignmentXML("0.01", "0.07", "0.03", "0.03")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first, second := parsed.Invoice.Lines[0].VATValue, parsed.Invoice.Lines[1].VATValue; !first.Equal(money.MustParse("0")) || !second.Equal(money.MustParse("0.01")) {
+		t.Fatalf("distributed VAT = %s, %s", first, second)
+	}
+}
+
+func TestCalculatedLineVATIsKeptWhenDeclaredVATIsNotARoundingDifference(t *testing.T) {
+	parsed, err := (UBLParser{}).Parse(testZIP(t, map[string]string{"invoice.xml": vatAlignmentXML("4000.00", "23866.17", "19866.17")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parsed.Invoice.Lines[0].VATValue; !got.Equal(money.MustParse("4171.8957")) {
+		t.Fatalf("a real discrepancy must stay visible, got %s", got)
 	}
 }

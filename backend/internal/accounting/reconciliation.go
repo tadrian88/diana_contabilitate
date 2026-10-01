@@ -78,8 +78,11 @@ func reconcile(f *SourceFacts, lines []SourceLine, gross money.Amount, currency 
 		if l.Facts.NetAmount != nil && !l.Facts.NetAmount.Amount.Equal(l.Net) || l.Facts.VATAmount != nil && (!l.Facts.VATAmount.Amount.Equal(l.VAT) || l.Facts.VATAmount.Origin != l.Facts.VATOrigin) {
 			return fail("valorile monetare ale liniei diferă de faptele sursă")
 		}
+		// The issuer rounds VAT per category, so a line may differ from
+		// net × rate by at most one cent (D-132); invoice and category totals
+		// below are still reconciled exactly.
 		expectedVAT := new(big.Rat).Quo(new(big.Rat).Mul(rat(l.Net.String()), rat(l.Rate.String())), rat("100"))
-		if !l.VAT.Equal(money.Amount(expectedVAT.FloatString(2))) && !l.VAT.Equal(money.Amount(expectedVAT.FloatString(4))) {
+		if new(big.Rat).Abs(new(big.Rat).Sub(rat(l.VAT.String()), expectedVAT)).Cmp(big.NewRat(1, 100)) > 0 {
 			return fail("TVA liniei diferă de baza/cota sursă")
 		}
 		if len(l.Facts.Adjustments) > 0 || l.Facts.PriceBase != nil && (!l.Facts.PriceBase.Valid() || !l.Facts.PriceBase.Equal(money.MustParse("1"))) {
