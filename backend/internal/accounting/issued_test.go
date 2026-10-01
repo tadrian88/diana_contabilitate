@@ -40,7 +40,7 @@ func TestDirectionDerivedValuesAreNotApplicable(t *testing.T) {
 	}
 }
 
-// D-132: a line may differ from net × rate by one cent of category rounding;
+// D-133: a line may differ from net × rate by one cent of category rounding;
 // more than that is still refused, and totals stay exact.
 func TestReconciliationAllowsOneCentOfLineVATRounding(t *testing.T) {
 	reconcile := func(net, vat, total string) error {

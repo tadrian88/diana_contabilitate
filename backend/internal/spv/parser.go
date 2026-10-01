@@ -354,7 +354,7 @@ func (p UBLParser) Parse(rawZIP []byte) (ParsedDocument, error) {
 
 // alignCalculatedVAT makes line VAT that Diana had to calculate (the e-Factura
 // line carries no VAT amount) agree with the VAT the invoice declares for its
-// category and rate (D-132). The issuer rounds VAT per category, so net × rate
+// category and rate (D-133). The issuer rounds VAT per category, so net × rate
 // per line can differ by a fraction of a cent. Lines are rounded to two
 // decimals and the remaining difference is spread one cent per line, largest
 // net first. A group is left untouched when it has no single declared subtotal

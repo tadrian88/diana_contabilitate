@@ -113,7 +113,7 @@ func vatAlignmentXML(declaredVAT, total string, lines ...string) string {
 	return `<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>VE-ROUND</ID><IssueDate>2026-06-03</IssueDate><DocumentCurrencyCode>RON</DocumentCurrencyCode><AccountingSupplierParty><Party><PartyLegalEntity><RegistrationName>Emitent Sintetic SRL</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>RO11111111</CompanyID></PartyTaxScheme></Party></AccountingSupplierParty><AccountingCustomerParty><Party><PartyLegalEntity><RegistrationName>Client Sintetic SRL</RegistrationName></PartyLegalEntity><PartyTaxScheme><CompanyID>RO22222222</CompanyID></PartyTaxScheme></Party></AccountingCustomerParty><TaxTotal><TaxAmount currencyID="RON">` + declaredVAT + `</TaxAmount><TaxSubtotal><TaxableAmount currencyID="RON">1</TaxableAmount><TaxAmount currencyID="RON">` + declaredVAT + `</TaxAmount><TaxCategory><ID>S</ID><Percent>21</Percent><TaxScheme><ID>VAT</ID></TaxScheme></TaxCategory></TaxSubtotal></TaxTotal><LegalMonetaryTotal><TaxInclusiveAmount currencyID="RON">` + total + `</TaxInclusiveAmount></LegalMonetaryTotal>` + body + `</Invoice>`
 }
 
-// D-132: VAT Diana has to calculate per line follows the VAT the invoice
+// D-133: VAT Diana has to calculate per line follows the VAT the invoice
 // declares for the category; net × rate alone gives 4171.8957, the issuer
 // declared 4171.89.
 func TestCalculatedLineVATFollowsDeclaredCategoryVAT(t *testing.T) {

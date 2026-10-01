@@ -79,7 +79,7 @@ func reconcile(f *SourceFacts, lines []SourceLine, gross money.Amount, currency 
 			return fail("valorile monetare ale liniei diferă de faptele sursă")
 		}
 		// The issuer rounds VAT per category, so a line may differ from
-		// net × rate by at most one cent (D-132); invoice and category totals
+		// net × rate by at most one cent (D-133); invoice and category totals
 		// below are still reconciled exactly.
 		expectedVAT := new(big.Rat).Quo(new(big.Rat).Mul(rat(l.Net.String()), rat(l.Rate.String())), rat("100"))
 		if new(big.Rat).Abs(new(big.Rat).Sub(rat(l.VAT.String()), expectedVAT)).Cmp(big.NewRat(1, 100)) > 0 {
