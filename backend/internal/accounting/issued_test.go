@@ -49,7 +49,7 @@ func TestReconciliationAllowsOneCentOfLineVATRounding(t *testing.T) {
 			return &accounting.AmountFact{Amount: money.MustParse(value), Currency: "RON", Origin: accounting.Declared}
 		}
 		l.NetAmount, l.VATAmount, l.PriceAmount = nil, nil, nil
-		f.LineExtension, f.TaxExclusive, f.TaxInclusive = amount(net), amount(net), amount(total)
+		f.LineExtension, f.TaxExclusive, f.TaxInclusive, f.Payable = amount(net), amount(net), amount(total), amount(total)
 		f.VATTotals = []accounting.AmountFact{*amount(vat)}
 		f.Subtotals[0].Base, f.Subtotals[0].VAT = *amount(net), *amount(vat)
 		lines := []accounting.SourceLine{{Facts: l, Net: money.MustParse(net), VAT: money.MustParse(vat), Total: money.MustParse(total), Rate: money.MustParse("21")}}
